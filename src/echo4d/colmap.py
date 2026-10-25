@@ -146,6 +146,8 @@ def import_colmap(args: argparse.Namespace) -> dict:
         raise DataError("--scale-evidence is required and cannot be empty")
     if not math.isfinite(args.depth_scale) or args.depth_scale <= 0:
         raise DataError("--depth-scale must be positive and finite")
+    if not math.isfinite(args.meters_per_colmap_unit) or args.meters_per_colmap_unit <= 0:
+        raise DataError("--meters-per-colmap-unit must be positive and finite")
     root = args.dataset.resolve()
     if not root.is_dir():
         raise DataError("dataset must be an existing directory")
@@ -212,11 +214,14 @@ def import_colmap(args: argparse.Namespace) -> dict:
 
             np.save(output / "depth" / f"{i:05d}.npy", depth, allow_pickle=False)
             Image.fromarray(rgb).save(output / "color" / f"{i:05d}.png")
+            camera_to_world = row["camera_to_world"].copy()
+            camera_to_world[:3, 3] *= args.meters_per_colmap_unit
+            rigid_matrix(camera_to_world.flatten(order="F"), "scaled cameraToWorld")
             frames.append({
                 "t": row["timestamp"] - start,
                 "depth": f"depth/{i:05d}.npy",
                 "color": f"color/{i:05d}.png",
-                "cameraToWorld": row["camera_to_world"].flatten(order="F").tolist(),
+                "cameraToWorld": camera_to_world.flatten(order="F").tolist(),
             })
             provenance.append({
                 "index": i,
@@ -236,12 +241,13 @@ def import_colmap(args: argparse.Namespace) -> dict:
             "depth_scale": 1,
             "intrinsics": camera.to_dict(),
             "frames": frames,
-            "notes": "COLMAP world->camera converted to camera->world; external metric depth required.",
+            "notes": "COLMAP world->camera converted to camera->world; camera centers scaled by --meters-per-colmap-unit.",
         })
         write_json(output / "import-provenance.json", {
             "version": "echo-colmap-import-1",
             "colmap_text": str(colmap_text),
             "camera_model": camera_model,
+            "meters_per_colmap_unit": args.meters_per_colmap_unit,
             "scale_evidence": args.scale_evidence.strip(),
             "frames": provenance,
             "cameras_sha256": file_sha256(safe_path(colmap_text, "cameras.txt")),

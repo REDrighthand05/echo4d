@@ -108,6 +108,8 @@ def build_parser() -> argparse.ArgumentParser:
     colmap.add_argument("--depth-index", required=True, help="Two-column file: image_name depth_path")
     colmap.add_argument("--timestamps", required=True, help="Two-column file: image_name timestamp_seconds")
     colmap.add_argument("--depth-scale", type=float, default=1.0, help="Raw depth divider to convert values to metres")
+    colmap.add_argument("--meters-per-colmap-unit", type=float, required=True,
+                        help="Metric scale for COLMAP camera centers (meters per COLMAP unit)")
     colmap.add_argument("--scale-evidence", required=True,
                         help="Human-readable independent metric-scale source (required)")
     return parser

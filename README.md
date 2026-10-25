@@ -62,7 +62,7 @@ echo4d reconstruct outputs/tum-input/recording.json --output outputs/tum-result 
 若你已有 COLMAP TEXT 位姿与外部米制深度（非 TUM 索引格式），可用：
 
 ```bash
-echo4d import-colmap datasets/my-seq --colmap-text datasets/my-seq/colmap_text --timestamps timestamps.txt --depth-index depth-index.txt --scale-evidence "independent sensor depth anchors" --output outputs/colmap-input
+echo4d import-colmap datasets/my-seq --colmap-text datasets/my-seq/colmap_text --timestamps timestamps.txt --depth-index depth-index.txt --meters-per-colmap-unit 0.42 --scale-evidence "independent sensor depth anchors" --output outputs/colmap-input
 ```
 
 详细约束见 [COLMAP 导入说明](docs/COLMAP_IMPORT.md)。
