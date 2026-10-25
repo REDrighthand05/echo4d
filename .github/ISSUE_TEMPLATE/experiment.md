@@ -2,8 +2,8 @@
 name: 可复现实验 / Reproducible experiment
 about: 把假设、输入、验收阈值与失败条件先记录，再动手实验
 title: "[实验] "
-labels: []
-assignees: []
+labels: ''
+assignees: ''
 ---
 
 ## 要回答的一个问题
