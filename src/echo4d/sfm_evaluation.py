@@ -122,7 +122,7 @@ def score_pairs(estimated: list, reference: list) -> dict:
                       "rotation_row_major": r.tolist(),
                       "translation_m": t.tolist()},
         "metric_scale_estimated_by_sfm": False,
-        "warning": "Sim(3) uses held-out GT only for scoring; scale is not deployable."
+        "warning": "This in-sample Sim(3) fits on the same GT pairs being scored; optimistic error, evaluation-only scale. See separate interleaved_holdout."
     }
 
 
