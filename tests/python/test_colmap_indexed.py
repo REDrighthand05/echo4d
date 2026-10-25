@@ -72,7 +72,9 @@ def test_indexed_png_success_known_pose_scale_no_double_scaled_depth(tmp_path, c
     indexed = provenance["indexed_depth"]
     assert indexed["raw_units_per_metre"] == 1000
     assert len(indexed["frames"]) == 2
+    assert [item["timestamp_seconds"] for item in indexed["frames"]] == [9, 9.25]
     assert all(len(item["raw_depth_sha256"]) == 64 and
+               len(item["color_sha256"]) == 64 and
                len(item["metric_depth_sha256"]) == 64 for item in indexed["frames"])
 
 
