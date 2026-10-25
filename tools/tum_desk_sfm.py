@@ -31,10 +31,10 @@ FRAME_COUNT = 75  # 613-frame desk sequence: indices 0,8,...,592
 
 URL = 'https://cvg.cit.tum.de/rgbd/dataset/freiburg1/rgbd_dataset_freiburg1_desk.tgz'
 ROOT = 'rgbd_dataset_freiburg1_desk'
-# Run 1 observes source bytes. Once observed they MUST be pinned and used
-# for run 2: never silently treat the first observed source as upstream-signed.
-PINNED_SHA256: str | None = None
-PINNED_BYTES: int | None = None
+# Run #40203647194 observed these bytes from official TUM HTTPS and recorded SHA.
+# This is a self-observed reproducibility pin, NOT a vendor-signed checksum.
+PINNED_SHA256: str | None = "e983d6830916e66dc4a46a71368046b149b283de87769690e7aa4e0b9483530c"
+PINNED_BYTES: int | None = 344011403
 MAX_ARCHIVE_BYTES = 700 * 1024**2
 MAX_UNPACKED_BYTES = 3 * 1024**3
 ALLOWED_HOSTS = frozenset({'cvg.cit.tum.de', 'webshare.cvg.cit.tum.de'})
@@ -249,7 +249,7 @@ def main() -> int:
                     'SfM gets only RGB with assumed calibration, no depth, no ground truth.',
                     'True poses are loaded only after SfM; Sim3 is fit AND evaluated on the same poses, thus optimistic.',
                     'Even success gives neither actual metric scale nor dense depth, mesh or scene accuracy.',
-                    'Initial download checksum is recorded but not pre-pinned until a second independent run.']}
+                    'Archive pinned to the first independently observed official TUM HTTPS run; NOT upstream-signed.']}
     start = time.perf_counter()
     exit_code = 0
     try:

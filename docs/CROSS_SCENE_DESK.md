@@ -16,7 +16,7 @@ GitHub 工作流 `.github/workflows/tum-cross-scene-desk.yml` 真实运行 CPU C
 
 ### 数据校验
 
-本新数据源初次运行时不知道压缩包SHA-256，故先记录实际文件字节数和哈希；**然后将它固定到程序常量里，再从头运行一次验证字节相同**。这与上轮已经有固定哈希的 `freiburg1_xyz` 严格区分。不能把首次下载称作已验证原始档案。
+首次 GitHub Actions #40203647194 真正观察到 **344,011,403 字节**和 SHA-256 `e983d6830916e66dc4a46a71368046b149b283de87769690e7aa4e0b9483530c`。此值已在下一次运行之前写入程序常量；**第二次运行必须从官方HTTPS重新下载且字节与SHA同时匹配**。这是自主记录的可复现性校验，不是TUM颁发的签名，也不能把第一次下载称作提前验证。
 
 ### 这些数字能说明什么？
 
@@ -29,3 +29,7 @@ python tools/tum_desk_sfm.py --work /tmp/desk-work --report-dir /tmp/desk-result
 ```
 
 仓库安装要求见 `docs/VIDEO_SFM.md`。必须先有 Python、COLMAP、FFmpeg；输出工作目录需不存在，避免覆盖旧结果。若失败，先打开 `report.json`、`nested-sfm-failure.json` 和 GitHub Actions 日志，不改变既定场景/内参挑更好看的数字。
+
+## 首次实测（未提前固定源哈希）
+
+[Run #40203647194](https://github.com/REDrighthand05/echo4d/actions/runs/40203647194)：**75/75** 张真实RGB成功注册，COLMAP生成 **7,015** 个稀疏点；与TUM真实相机路线事后最佳Sim(3)对齐后，位置ATE RMSE **2.600厘米**，朝向误差中位数 **3.103°**。这些是相机运动评价，不是整个房间的真实几何精度。

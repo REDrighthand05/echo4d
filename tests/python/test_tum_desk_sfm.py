@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from echo4d.model import DataError
+import tum_desk_sfm as bench
 from tum_desk_sfm import (ROOT, validate_archive_name, extract_selected,
                           get_archive, MAX_ARCHIVE_BYTES)
 
@@ -73,17 +74,30 @@ def test_too_few_frames_fails(tmp_path):
         extract_selected(path,tmp_path/'out')
 
 
-def test_offline_source_sha_recorded_but_not_misrepresented(tmp_path):
+def test_offline_source_pin_is_checked_against_known_bytes(monkeypatch,tmp_path):
     path=tmp_path/'sample.tgz'
     _tar(path,count=600)
+    from hashlib import sha256
+    actual_sha = sha256(path.read_bytes()).hexdigest()
+    monkeypatch.setattr(bench,'PINNED_SHA256',actual_sha)
+    monkeypatch.setattr(bench,'PINNED_BYTES',path.stat().st_size)
     rec={}
     get_archive(tmp_path/'saved.tgz',rec,path)
     assert rec['archive']['bytes']==(tmp_path/'saved.tgz').stat().st_size
-    assert len(rec['archive']['sha256'])==64
-    assert rec['archive']['sha256_pinned_before_run'] is False
-    assert 'first SHA-256 observation' in rec['archive']['source_integrity_claim']
+    assert rec['archive']['sha256']==actual_sha
+    assert rec['archive']['sha256_pinned_before_run'] is True
+    assert 'matched independently pre-observed' in rec['archive']['source_integrity_claim']
 
 
 def test_offline_missing_file_fails(tmp_path):
     with pytest.raises(DataError):
         get_archive(tmp_path/'saved.tgz',{},tmp_path/'not-there.tgz')
+
+
+def test_pinned_archive_sha_mismatch_fails(monkeypatch,tmp_path):
+    path=tmp_path/'different.tgz'
+    _tar(path,count=600)
+    monkeypatch.setattr(bench,'PINNED_SHA256','0'*64)
+    monkeypatch.setattr(bench,'PINNED_BYTES',path.stat().st_size)
+    with pytest.raises(DataError,match='differs from previously observed'):
+        get_archive(tmp_path/'out.tgz',{},path)
