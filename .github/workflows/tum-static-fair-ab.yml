@@ -8,6 +8,7 @@ on:
       - 'src/echo4d/metric_holdout.py'
       - 'tests/python/test_tum_static_ab.py'
       - '.github/workflows/tum-static-fair-ab.yml'
+      - 'docs/evidence/tum-static-ab-v2/**'
   workflow_dispatch:
 
 permissions:
