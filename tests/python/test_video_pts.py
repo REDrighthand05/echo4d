@@ -40,9 +40,10 @@ def test_decoded_pts_rejects_missing_fields_and_oversize():
 
 
 def test_pts_budget_fails_closed_without_three_frames():
-    with pytest.raises(DataError, match='fewer than 3'):
-        select_pts_frames(list(range(3)), 3) if False else select_pts_frames(
-            list(range(100_000)), 3)
+    with pytest.raises(DataError, match='3-100000 decoded frames'):
+        select_pts_frames([0, 1], 3)
+    with pytest.raises(DataError, match='max_frames'):
+        select_pts_frames([0, 1, 2], 2)
 
 
 def test_ffmpeg_output_mismatch_is_rejected(tmp_path):
