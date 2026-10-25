@@ -18,6 +18,7 @@ import numpy as np
 
 from echo4d.cli import reconstruct_command
 from echo4d.metric_rgbd import convert_metric_sensor
+from echo4d.metric_holdout import evaluate_sensor_metric_holdouts
 from echo4d.model import DataError, file_sha256, load_recording
 from echo4d.tum import nearest_timestamp, read_rows
 from tum_metric_anchor import experiment as run_sensor_metric_anchor
@@ -171,6 +172,21 @@ def experiment(args: argparse.Namespace, report: dict) -> None:
     if result["frames"] != 48 or result["vertices"] <= 0 or result["triangles"] <= 0:
         raise DataError("First B-path real mesh is empty or frame count differs from frozen train set")
     report["mesh_report_sha256"] = file_sha256(output/"report.json")
+    # Evaluation-only stage. The held-out sensor depth is first accessed here,
+    # AFTER scale anchoring, strict conversion, bounds and Mesh have finished.
+    heldout = evaluate_sensor_metric_holdouts(
+        output/"mesh.ply", input_dir/"recording.json",
+        json.loads(metric_path.read_text(encoding="utf-8")), split, source, tum,
+        model, downsample=DOWNSAMPLE, max_gap_s=MAX_RGB_DEPTH_GAP_S,
+        max_depth_m=MAX_DEPTH_M)
+    heldout_path = target/"mesh-heldout-depth.json"
+    heldout_path.write_text(
+        json.dumps(heldout, indent=2, ensure_ascii=False, allow_nan=False)+"\n",
+        encoding="utf-8")
+    report["mesh_heldout"] = {
+        key: value for key, value in heldout.items() if key != "per_frame"
+    }
+    report["mesh_heldout_report_sha256"] = file_sha256(heldout_path)
     report["input_kind"] = "estimated RGB SfM poses + independent measured sensor scale and per-frame measured dense depth"
     report["no_heldout_depth_used_in_mesh"] = True
     report["mesh_geometry_independently_validated"] = False
@@ -195,7 +211,7 @@ def main() -> int:
             "TUM real RGB re-encoded to test MP4; not native phone footage.",
             "GT used only after scale calibration in reused anchor-stage analysis, not by SfM or fusion.",
             "No holdout frame depth read during dataset conversion, bounding or fusion.",
-            "This stage does not compute heldout mesh projection accuracy or independent scanned-surface truth.",
+            "This stage computes withheld measured-depth projection scores only; it is NOT independent scanned-surface truth.",
             "Original #9 48/12 was a different source-frame selection; scores not comparable."
         ]
     }
@@ -222,8 +238,12 @@ def main() -> int:
             f"- Mesh vertices: {receipt.get('mesh_result',{}).get('vertices','not computed')}",
             f"- Mesh triangles: {receipt.get('mesh_result',{}).get('triangles','not computed')}",
             f"- Mesh SHA256: {receipt.get('mesh_result',{}).get('mesh_sha256','none')}",
+            f"- Holdout observed pixel coverage: {receipt.get('mesh_heldout',{}).get('coverage','not scored')}",
+            f"- Holdout overlap RMSE (m): {receipt.get('mesh_heldout',{}).get('rmse_m','not scored')}",
+            f"- Exploratory 80% coverage gate: {receipt.get('mesh_heldout',{}).get('screening_gate_coverage_gte_80pct','not scored')}",
+            f"- Exploratory 15cm overlap RMSE gate: {receipt.get('mesh_heldout',{}).get('screening_gate_overlap_rmse_lte_15cm','not scored')}",
             f"- Failure: {receipt.get('error',{}).get('message','none')}", "",
-            "Not RGB-only, no heldout Mesh projection score and no independent surface GT.",
+            "Not RGB-only; heldout is same-sensor measured-Z view consistency, not independent surface GT.",
         ]
         (report/"SUMMARY.md").write_text("\n".join(summary)+"\n",encoding="utf-8")
     return exit_code
