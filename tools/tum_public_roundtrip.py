@@ -30,6 +30,10 @@ from echo4d.model import DataError, file_sha256, load_recording
 URL = "https://cvg.cit.tum.de/rgbd/dataset/freiburg1/rgbd_dataset_freiburg1_xyz.tgz"
 ROOT = "rgbd_dataset_freiburg1_xyz"
 MAX_ARCHIVE = 700 * 1024**2
+# First independently observed successful Actions download: run 40189015907.
+# This is a reproducibility pin, NOT a vendor-signed upstream checksum.
+PINNED_ARCHIVE_SHA256 = "a0236d97b8c30cd93b653656d2b6c293ff7c982a4130ef2a1a8beecdb124ef98"
+PINNED_ARCHIVE_BYTES = 448204271
 MAX_UNPACKED = 3 * 1024**3
 BOUNDS = ["-2.45", "-0.25", "-2.25", "1.15", "1.45", "1.65"]
 VOXEL = "0.05"
@@ -65,6 +69,9 @@ def download(target: Path, receipt: dict) -> None:
         if record["bytes"] < 1024:
             raise DataError("Archive unexpectedly empty")
         record["sha256"] = digest.hexdigest()
+        if (record["sha256"] != PINNED_ARCHIVE_SHA256 or
+                record["bytes"] != PINNED_ARCHIVE_BYTES):
+            raise DataError("Downloaded TUM archive differs from pinned 2026-10-25 public source bytes")
         partial.replace(target)
     finally:
         partial.unlink(missing_ok=True)
@@ -196,6 +203,9 @@ def experiment(args: argparse.Namespace, receipt: dict) -> None:
         shutil.copyfile(provided, archive)
         receipt["download"] = {"method": "offline supplied archive, origin unverified",
                                "bytes": archive.stat().st_size, "sha256": file_sha256(archive)}
+        if (receipt["download"]["bytes"] != PINNED_ARCHIVE_BYTES or
+                receipt["download"]["sha256"] != PINNED_ARCHIVE_SHA256):
+            raise DataError("Offline TUM archive does not match pinned public-source bytes")
     else:
         download(archive, receipt)
     receipt["duration_download_s"] = round(time.perf_counter() - start, 3)
@@ -261,6 +271,8 @@ def main() -> int:
                          f"{os.environ.get('GITHUB_RUN_ID')}"
                          if os.environ.get("GITHUB_RUN_ID") else None),
          "status": "running", "official_dataset_url": URL,
+         "pinned_dataset_sha256": PINNED_ARCHIVE_SHA256,
+         "pinned_dataset_bytes": PINNED_ARCHIVE_BYTES,
          "parameters": {"stride": 12, "limit": 60, "downsample": 4, "voxel_m": float(VOXEL),
                         "bounds_m": [float(v) for v in BOUNDS],
                         "calibration": "TUM fr1 default PINHOLE", "world_up": "z"},
