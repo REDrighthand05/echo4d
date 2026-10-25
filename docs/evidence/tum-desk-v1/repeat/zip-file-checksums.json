@@ -1,0 +1,33 @@
+{
+  "run": 40204111307,
+  "zip_members": {
+    "SUMMARY.md": {
+      "bytes": 607,
+      "sha256": "1f5ad2482876487968efa715a9628c18de962d3c0a1f95e4ba7d072096602838"
+    },
+    "cameras.txt": {
+      "bytes": 185,
+      "sha256": "252e4096d92e109ee64c0e1199b372c4260a1cae9aae128fb21c265d97894aa6"
+    },
+    "images.txt": {
+      "bytes": 5343460,
+      "sha256": "fa9513696b256e2b5651544da3a26ca04d6aa1317eb16786c2a0324e8df9144d"
+    },
+    "points3D.txt": {
+      "bytes": 905747,
+      "sha256": "9a6cdb26a9475105147b95e99f06525c00054b50c5cfddf1e2f3ff5170b6a2c6"
+    },
+    "registered_timestamps.csv": {
+      "bytes": 1655,
+      "sha256": "9aef61ba4645e12d56fe7abc9ce8ae8e1db6a5ae8445f14c15f84934352e06cb"
+    },
+    "report.json": {
+      "bytes": 79789,
+      "sha256": "97c57126d53cd8d16d94d406780a70a70793e85fd37be66667ce5a7b466e0be8"
+    },
+    "trajectory-scale-unknown.json": {
+      "bytes": 39436,
+      "sha256": "19966e974e01e6c42f13deea3aa5041331737c49656a8aef15bd414716c9d815"
+    }
+  }
+}

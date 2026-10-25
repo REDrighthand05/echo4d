@@ -14,6 +14,9 @@ def _fixture():
     pose = np.eye(4).flatten(order="F").tolist()
     source = [{"name": n, "t_tum_rgb_s": float(i)} for i, n in enumerate(names)]
     metric = {
+        "version": "echo-sfm-metric-scale-1",
+        "units": "meters",
+        "scale_is_from_external_gt_poses": False,
         "scale_m_per_sfm_unit": .1,
         "metric_scale_estimated_from_measured_depth": True,
         "anchor_diagnostics": [{"name": names[i]} for i in (15, 45, 75)],
@@ -39,7 +42,8 @@ def test_fixed_48_12_holdout_contract():
 @pytest.mark.parametrize("mutation", [
     "overlap", "duplicate", "missing_pose", "anchor_in_holdout",
     "fake_scale", "no_external_sensor_scale", "wrong_source_kind",
-    "incomplete_holdout"
+    "incomplete_holdout", "gt_scale", "wrong_units", "wrong_depth_units",
+    "boolean_scale", "duplicate_anchor", "missing_anchor", "duplicate_train_depth"
 ])
 def test_untrustworthy_split_fails_closed(mutation):
     source, metric, split = _fixture()
@@ -59,6 +63,20 @@ def test_untrustworthy_split_fails_closed(mutation):
         split["source_kind"] = "predicted_depth"
     elif mutation == "incomplete_holdout":
         split["holdout"].pop()
+    elif mutation == "gt_scale":
+        metric["scale_is_from_external_gt_poses"] = True
+    elif mutation == "wrong_units":
+        metric["units"] = "unknown"
+    elif mutation == "wrong_depth_units":
+        split["depth_numeric_units_per_meter"] = 1000
+    elif mutation == "boolean_scale":
+        metric["scale_m_per_sfm_unit"] = True
+    elif mutation == "duplicate_anchor":
+        metric["anchor_diagnostics"][0] = metric["anchor_diagnostics"][1]
+    elif mutation == "missing_anchor":
+        metric["anchor_diagnostics"].pop()
+    elif mutation == "duplicate_train_depth":
+        split["train"][0]["depth"] = split["train"][1]["depth"]
     with pytest.raises(DataError):
         validate_holdout_split(split, source, metric)
 
@@ -99,6 +117,9 @@ def test_training_depth_reuse_is_rejected(tmp_path, monkeypatch):
     source, metric, split = _fixture()
     root = tmp_path / "tum"
     root.mkdir()
+    (root / "depth").mkdir()
+    for row in split['train']:
+        (root / row['depth']).write_bytes(b'training measurement')
     cam = Camera(4, 4, 3., 3., 1.5, 1.5)
     monkeypatch.setattr(mod, "load_recording", lambda _: SimpleNamespace(camera=cam))
     monkeypatch.setattr(mod, "_cameras", lambda _: {1:cam})

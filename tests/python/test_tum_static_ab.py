@@ -1,5 +1,6 @@
 """Checks for preregistered same-input A/B and anti-cheating guards."""
 from __future__ import annotations
+from copy import deepcopy
 import sys
 from pathlib import Path
 import numpy as np
@@ -7,6 +8,7 @@ import pytest
 
 sys.path.insert(0,str(Path(__file__).resolve().parents[2]/'tools'))
 from tum_static_ab import (verify_v2_split,strict_truth,check_gate,
+                           assert_same_holdout_inputs,
                            FAIR_AB_V2_SELECTED_INDICES, FAIR_AB_V2_HOLDOUT_INDICES)
 from echo4d.model import DataError
 
@@ -58,3 +60,60 @@ def test_gate_accounts_for_uncovered_pixels():
     assert not check_gate('A',{**good,'coverage':.79,'overlap_pixels':79})['passed']
     assert not check_gate('A',{**good,'rmse_m':.2})['passed']
     with pytest.raises(DataError):check_gate('B',{**good,'overlap_pixels':84})
+
+
+def _holdout_report():
+    names = _split()['holdout']
+    rows = [{'name': name, 'depth_filename': f'depth/{i}.png',
+             'depth_sha256': f'{i:064x}', 'source_rgb_t_s': float(i),
+             'rgb_depth_delta_s': .01,
+             'score': {'sensor_valid_pixels': i + 1, 'overlap_pixels': i + 1}}
+            for i, name in enumerate(names)]
+    return {'holdout_frames': 12, 'valid_measured_pixels': 78, 'per_frame': rows}
+
+
+def test_ab_identity_checks_sources_while_allowing_different_predictions():
+    a = _holdout_report()
+    b = deepcopy(a)
+    b['per_frame'][0]['score']['overlap_pixels'] = 0
+    result = assert_same_holdout_inputs(a, b, _split()['holdout'])
+    assert result['verified'] and result['views'] == 12
+    assert result['valid_measured_pixels'] == 78
+    assert len(result['per_frame']) == 12
+
+
+@pytest.mark.parametrize('mutation', [
+    'hash', 'filename', 'order', 'missing', 'name', 'pixel_mask', 'aggregate',
+    'timestamp', 'gap', 'duplicate_file', 'missing_hash', 'invalid_hash',
+    'boolean_pixels', 'missing_score', 'nonfinite_time',
+])
+def test_ab_identity_rejects_mismatched_or_incomplete_source_evidence(mutation):
+    a = _holdout_report()
+    b = deepcopy(a)
+    row = b['per_frame'][0]
+    if mutation == 'hash': row['depth_sha256'] = 'f' * 64
+    elif mutation == 'filename': row['depth_filename'] = 'depth/other.png'
+    elif mutation == 'order': b['per_frame'].reverse()
+    elif mutation == 'missing': b['per_frame'].pop()
+    elif mutation == 'name': row['name'] = 'other.png'
+    elif mutation == 'pixel_mask':
+        row['score']['sensor_valid_pixels'] += 1
+        b['per_frame'][1]['score']['sensor_valid_pixels'] -= 1
+    elif mutation == 'aggregate': b['valid_measured_pixels'] += 1
+    elif mutation == 'timestamp': row['source_rgb_t_s'] += .001
+    elif mutation == 'gap': row['rgb_depth_delta_s'] = .031
+    elif mutation == 'duplicate_file': row['depth_filename'] = b['per_frame'][1]['depth_filename']
+    elif mutation == 'missing_hash': row.pop('depth_sha256')
+    elif mutation == 'invalid_hash': row['depth_sha256'] = 'z' * 64
+    elif mutation == 'boolean_pixels': row['score']['sensor_valid_pixels'] = True
+    elif mutation == 'missing_score': row['score'] = None
+    elif mutation == 'nonfinite_time': row['source_rgb_t_s'] = float('nan')
+    with pytest.raises(DataError):
+        assert_same_holdout_inputs(a, b, _split()['holdout'])
+
+
+@pytest.mark.parametrize('value', [float('nan'), float('inf'), -1.0])
+def test_gate_rejects_invalid_error_statistics(value):
+    with pytest.raises(DataError):
+        check_gate('B', {'holdout_frames': 12, 'valid_measured_pixels': 100,
+                        'overlap_pixels': 90, 'coverage': .9, 'rmse_m': value})

@@ -29,22 +29,33 @@ def validate_holdout_split(split: dict, source: list[dict],
     training_names = [row.get("name") for row in train]
     if len(set(training_names)) != 48 or len(set(withheld)) != 12 or set(training_names) & set(withheld):
         raise DataError("Train and holdout names must be distinct and disjoint")
-    if split.get("source_kind") != "measured_registered_z_depth":
-        raise DataError("Holdout evaluation expects measured sensor depth")
+    paths = [row.get("depth") for row in train]
+    if any(not isinstance(p, str) or not p for p in paths) or len(set(paths)) != 48:
+        raise DataError("Training depth paths must be present and unique")
+    if (split.get("source_kind") != "measured_registered_z_depth" or
+            split.get("depth_numeric_units_per_meter") != 5000):
+        raise DataError("Holdout evaluation expects measured TUM sensor depth in raw units per meter")
     source_map = {x["name"]: x for x in source}
     metric_map = {x["name"]: x for x in metric["frames"]}
     if len(source_map) != len(source) or len(metric_map) != len(metric["frames"]):
         raise DataError("Duplicate source or metric pose names")
     if not set(withheld).issubset(source_map) or not set(withheld).issubset(metric_map):
         raise DataError("Some withheld frames have no original RGB source or registered metric pose")
-    if not isinstance(metric.get("scale_m_per_sfm_unit"), (float, int)) or not math.isfinite(
+    if isinstance(metric.get("scale_m_per_sfm_unit"), bool) or not isinstance(metric.get("scale_m_per_sfm_unit"), (float, int)) or not math.isfinite(
             metric["scale_m_per_sfm_unit"]) or metric["scale_m_per_sfm_unit"] <= 0:
         raise DataError("Holdout metric trajectory requires a previously measured scale")
-    if metric.get("metric_scale_estimated_from_measured_depth") is not True:
+    if (metric.get("version") != "echo-sfm-metric-scale-1" or
+            metric.get("units") != "meters" or
+            metric.get("metric_scale_estimated_from_measured_depth") is not True or
+            metric.get("scale_is_from_external_gt_poses") is not False):
         raise DataError("Not a measured-depth anchored metric trajectory")
-    anchors = [x.get("name") for x in metric["anchor_diagnostics"]]
-    if set(anchors) & set(withheld):
-        raise DataError("Scale anchor is also in heldout evaluation group")
+    diagnostics = metric.get("anchor_diagnostics")
+    if not isinstance(diagnostics, list) or len(diagnostics) != 3 or any(
+            not isinstance(x, dict) or not isinstance(x.get("name"), str) for x in diagnostics):
+        raise DataError("Exactly three measured scale anchors are required")
+    anchors = [x["name"] for x in diagnostics]
+    if len(set(anchors)) != 3 or set(anchors) & set(withheld) or not set(anchors).issubset(source_map):
+        raise DataError("Scale anchors must be distinct source views outside holdout")
     return {name: metric_map[name] for name in withheld}
 
 
@@ -79,7 +90,7 @@ def evaluate_sensor_metric_holdouts(
     if not 1 <= downsample <= 16:
         raise DataError("Invalid holdout downsample")
     scaled = original.scaled(downsample)
-    if any(not np.isclose(getattr(camera, key), getattr(scaled, key), atol=1e-8)
+    if any(not np.isclose(getattr(camera, key), getattr(scaled, key), atol=1e-8, rtol=0)
            for key in ("width", "height", "fx", "fy", "cx", "cy")):
         raise DataError("Holdout camera must exactly match B-path training calibration")
     vertices, faces = read_echo_ply(mesh_path)
@@ -88,7 +99,9 @@ def evaluate_sensor_metric_holdouts(
     if not np.isfinite(timestamps).all() or np.any(np.diff(timestamps) <= 0):
         raise DataError("TUM measured depth index is not strictly ordered")
     source_lookup = {x["name"]: x for x in source}
-    used_train = {x["depth"] for x in split["train"]}
+    used_train = {safe_path(dataset_root, x["depth"]).resolve() for x in split["train"]}
+    if len(used_train) != 48:
+        raise DataError("Training depths must resolve to distinct measured files")
     used_eval = set()
     per_frame, residuals = [], []
     total_valid = total_overlap = 0
@@ -100,9 +113,10 @@ def evaluate_sensor_metric_holdouts(
         if found is None:
             raise DataError(f"No measured holdout Z frame within 30ms: {name}")
         relative = index[found][1]
-        if relative in used_train or relative in used_eval:
+        depth_path = safe_path(dataset_root, relative).resolve()
+        if depth_path in used_train or depth_path in used_eval:
             raise DataError("Depth frame was used in training or twice in holdout")
-        used_eval.add(relative)
+        used_eval.add(depth_path)
         entry = metric_poses[name]
         model_id = entry.get("camera_id")
         if model_id not in cams:

@@ -101,6 +101,16 @@ def build_parser() -> argparse.ArgumentParser:
     tum.add_argument("--max-pose-gap", type=float, default=.1)
     tum.add_argument("--max-color-gap", type=float, default=.03)
     tum.add_argument("--world-up", choices=["y","z"], default="y", help="y preserves axes; z rotates input Z-up to viewer Y-up")
+    colmap = sub.add_parser("import-colmap", help="One strict COLMAP + independently measured scale + metric Z-depth input")
+    colmap.add_argument("--model", required=True, type=Path, help="COLMAP TEXT model (undistorted PINHOLE)")
+    colmap.add_argument("--images", required=True, type=Path, help="RGB image directory")
+    colmap.add_argument("--depth", required=True, type=Path, help="Pre-registered camera-Z depth NPY directory (metres)")
+    colmap.add_argument("--timestamps", required=True, type=Path, help="Exact name,t CSV matching registered images")
+    colmap.add_argument("--meters-per-colmap-unit", required=True, type=float,
+                        help="Measured metres for one COLMAP world unit; GT post-hoc alignment is forbidden")
+    colmap.add_argument("--scale-source", required=True,
+                        help="Traceable independent real-world measurement source, not evaluation GT")
+    colmap.add_argument("--output", required=True, type=Path)
     return parser
 
 
@@ -125,6 +135,11 @@ def main(argv: list[str] | None = None) -> int:
             with output_transaction(args.output) as output:
                 write_json(output / "recording.echo.json", preview_recording(recording))
             result = {"output":str(args.output.resolve())}
+        elif args.command == "import-colmap":
+            # One strict adapter. Uses #6 + #24 hardening, NOT the incompatible
+            # second converter implementation from draft PR #19.
+            from .colmap import import_colmap
+            result = import_colmap(args)
         else:
             from .tum import import_tum
             result = import_tum(args)

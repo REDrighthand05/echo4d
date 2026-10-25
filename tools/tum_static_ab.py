@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 from datetime import datetime, timezone
 import json
+import math
 import os
 from pathlib import Path
 import shutil
@@ -107,10 +108,65 @@ def check_gate(name: str, metric: dict) -> dict:
     coverage=float(metric['coverage'])
     rmse=float(metric['rmse_m'])
     if (int(metric['holdout_frames'])!=12 or valid<=0 or not 0<=overlap<=valid
+            or not math.isfinite(coverage) or not math.isfinite(rmse) or rmse < 0
             or abs(coverage-overlap/valid)>1e-12):
         raise DataError(f'{name}: incomplete or inconsistent 12-view pixel accounting')
     return {'coverage_minimum':0.80,'rmse_maximum_m':0.15,
             'passed':bool(coverage>=.80 and rmse<=.15)}
+
+
+def assert_same_holdout_inputs(a: dict, b: dict, names: list[str]) -> dict:
+    """Verify source identity, not prediction equality, before claiming fair A/B.
+
+    Adapted from PR #32's per-view identity guard to the reusable #25/#31
+    report schema. Coverage may differ; source bytes and valid masks may not.
+    """
+    if len(names) != 12 or len(set(names)) != 12:
+        raise DataError('A/B requires exactly twelve distinct frozen views')
+    rows = []
+    totals = []
+    for label, report in (('A', a), ('B', b)):
+        frames = report.get('per_frame')
+        if (report.get('holdout_frames') != 12 or not isinstance(frames, list)
+                or len(frames) != 12
+                or any(not isinstance(row, dict) for row in frames)
+                or [row.get('name') for row in frames] != names):
+            raise DataError(f'{label}: missing, reordered or changed frozen views')
+        validated = []
+        for frame in frames:
+            score = frame.get('score', {})
+            if not isinstance(score, dict):
+                raise DataError(f'{label}: missing per-view pixel accounting')
+            count = score.get('sensor_valid_pixels')
+            digest = frame.get('depth_sha256')
+            filename = frame.get('depth_filename')
+            stamp = frame.get('source_rgb_t_s')
+            gap = frame.get('rgb_depth_delta_s')
+            if (type(count) is not int or count <= 0
+                    or not isinstance(digest, str) or len(digest) != 64
+                    or any(c not in '0123456789abcdef' for c in digest)
+                    or not isinstance(filename, str) or not filename
+                    or isinstance(stamp, bool) or not isinstance(stamp, (int, float))
+                    or not math.isfinite(stamp)
+                    or isinstance(gap, bool) or not isinstance(gap, (int, float))
+                    or not math.isfinite(gap) or abs(gap) > .03):
+                raise DataError(f'{label}: incomplete measured source identity for {frame["name"]}')
+            validated.append({
+                'name': frame['name'], 'depth_filename': filename,
+                'depth_sha256': digest, 'sensor_valid_pixels': count,
+                'source_rgb_t_s': stamp, 'rgb_depth_delta_s': gap,
+            })
+        if len({row['depth_filename'] for row in validated}) != 12:
+            raise DataError(f'{label}: repeated heldout depth source')
+        total = sum(row['sensor_valid_pixels'] for row in validated)
+        if type(report.get('valid_measured_pixels')) is not int or report['valid_measured_pixels'] != total:
+            raise DataError(f'{label}: per-view valid pixels disagree with aggregate')
+        rows.append(validated)
+        totals.append(total)
+    if rows[0] != rows[1] or totals[0] != totals[1]:
+        raise DataError('A/B heldout source hashes, timestamps or valid pixels differ')
+    return {'verified': True, 'views': 12, 'valid_measured_pixels': totals[0],
+            'per_frame': rows[0]}
 
 
 def experiment(args: argparse.Namespace, receipt: dict) -> None:
@@ -170,12 +226,14 @@ def experiment(args: argparse.Namespace, receipt: dict) -> None:
         out/'mesh.ply',a_dir/'recording.json',metric,split,source,tum,
         colmap_model,downsample=DOWNSAMPLE,max_gap_s=.03,max_depth_m=MAX_DEPTH_M,
         known_poses_for_A=held_truth)
+    receipt['heldout_input_identity'] = assert_same_holdout_inputs(a_hold, b_hold, held)
     (report/'a-known-pose-holdout.json').write_text(
         json.dumps(a_hold,indent=2,ensure_ascii=False,allow_nan=False)+'\n',encoding='utf-8')
     receipt['a_heldout_report_sha256']=file_sha256(report/'a-known-pose-holdout.json')
     receipt['ab_comparison']={
         'version':'AB-V2-final','same_48_training_rgb_and_depth_files':True,
         'same_12_withheld_depth_views':True,
+        'heldout_source_identity_verified':receipt['heldout_input_identity']['verified'],
         'split_sha256':file_sha256(report/'b-48train-12holdout.json'),
         'A_known_pose':{k:v for k,v in a_hold.items() if k not in ('per_frame','limitations')},
         'B_estimated_pose_sensor_scale':{k:v for k,v in b_hold.items() if k not in ('per_frame','limitations')},
@@ -199,7 +257,10 @@ def main() -> int:
     args.report_dir.mkdir(parents=True,exist_ok=True)
     report={'version':'AB-V2-final','status':'running',
             'created_utc':datetime.now(timezone.utc).isoformat(),
-            'git_sha':os.getenv('ECHO_HEAD_SHA') or os.getenv('GITHUB_SHA'),
+            'git_sha':os.getenv('ECHO_TESTED_CHECKOUT_SHA') or os.getenv('GITHUB_SHA'),
+            'tested_checkout_sha':os.getenv('ECHO_TESTED_CHECKOUT_SHA'),
+            'pr_head_sha':os.getenv('ECHO_HEAD_SHA'),
+            'base_sha':os.getenv('ECHO_BASE_SHA'),
             'run_url':f"https://github.com/{os.getenv('GITHUB_REPOSITORY')}/actions/runs/{os.getenv('GITHUB_RUN_ID')}" if os.getenv('GITHUB_RUN_ID') else None,
             'purpose':'48 same real RGB+sensor-depth train, 12 same withheld-Z compare GT-pose A and SfM-pose B; never use GT for B',
             'limits':['First public AB trial on one TUM sequence only.',

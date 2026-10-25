@@ -24,6 +24,8 @@ jobs:
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
+      - name: Record the checkout actually tested
+        run: echo "ECHO_TESTED_CHECKOUT_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -44,6 +46,7 @@ jobs:
       - name: Full B experiment then A on exactly the same real sensor depth frames
         env:
           ECHO_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          ECHO_BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
           python tools/tum_static_ab.py \
             --work "$RUNNER_TEMP/tum-static-ab-v2" \
