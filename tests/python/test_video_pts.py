@@ -110,3 +110,25 @@ def test_real_video_pts_tracks_selected_decoded_frames(tmp_path, mode):
         assert max(gaps) - min(gaps) > .05
     else:
         assert max(gaps) - min(gaps) < 1e-8
+
+
+def test_video_sfm_pts_mode_keeps_existing_timestamp_interface(tmp_path, monkeypatch):
+    from echo4d import video_sfm
+
+    def fake_probe(video, receipt):
+        return {'width': 80, 'height': 64, 'duration_seconds': 3}
+
+    def fake_source_pts(video, images, max_frames, receipt, runner):
+        assert max_frames == 12
+        receipt['source_pts_sampling'] = {'mode': 'source-pts'}
+        return {'frame_00000.png': 0, 'frame_00001.png': .37,
+                'frame_00002.png': .84}
+
+    monkeypatch.setattr(video_sfm, 'probe_video', fake_probe)
+    monkeypatch.setattr(video_sfm, 'extract_source_pts', fake_source_pts)
+    receipt = {}
+    stamps = video_sfm.extract_video(tmp_path / 'unused.mp4', tmp_path / 'frames',
+                                    4., 12, receipt, 'source-pts')
+    assert stamps == {'frame_00000.png': 0, 'frame_00001.png': .37,
+                      'frame_00002.png': .84}
+    assert receipt['source_pts_sampling']['mode'] == 'source-pts'
