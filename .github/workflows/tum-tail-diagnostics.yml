@@ -1,0 +1,58 @@
+name: TUM withheld-depth error tail diagnostics
+
+on:
+  pull_request:
+    paths:
+      - 'src/echo4d/residual_diagnostics.py'
+      - 'tests/python/test_residual_diagnostics.py'
+      - 'tools/tum_residual_diagnostics.py'
+      - '.github/workflows/tum-tail-diagnostics.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tum-tail-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  diagnose-actual-error:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: requirements.lock
+      - name: Install reproducible dependencies
+        run: |
+          python -m pip install -r requirements.lock
+          python -m pip install --no-deps -e .
+      - name: Fail on known-wrong synthetic examples
+        run: python -m pytest tests/python/test_residual_diagnostics.py -q
+      - name: Download pinned TUM sequence; measure real held-out error sources
+        env:
+          ECHO_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          python tools/tum_residual_diagnostics.py \
+            --work "$RUNNER_TEMP/tum-residual-diagnostics" \
+            --report-dir "$GITHUB_WORKSPACE/artifacts/tum-residual-diagnostics"
+      - name: Surface findings and failures in run summary
+        if: always()
+        run: |
+          if [ -f artifacts/tum-residual-diagnostics/SUMMARY.md ]; then
+            cat artifacts/tum-residual-diagnostics/SUMMARY.md >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo 'No receipt was written. See job log.' >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Archive evidence, even on failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tum-tail-diagnostics-${{ github.run_id }}
+          path: artifacts/tum-residual-diagnostics/
+          if-no-files-found: warn
+          retention-days: 14
