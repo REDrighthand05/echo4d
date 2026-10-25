@@ -117,7 +117,7 @@ def test_missing_independent_pose_scale_source_rejected(tmp_path, capsys):
 def test_raw_depth_wrong_resolution_fails_transaction(tmp_path, capsys):
     fixture(tmp_path)
     Image.fromarray(np.full((5, 8), 1500, np.uint16)).save(tmp_path / "raw" / "first.png")
-    failure(tmp_path, capsys, "shape")
+    failure(tmp_path, capsys, "camera-sized")
 
 
 def test_archive_disguised_as_npy_rejected_without_output(tmp_path, capsys):
