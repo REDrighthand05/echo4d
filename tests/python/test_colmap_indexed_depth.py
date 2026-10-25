@@ -87,7 +87,7 @@ def _fails_cleanly(args, output, capsys, message):
 
 @pytest.mark.parametrize("changed_index,expected", [
     ("name,depth_path\na.png,unrelated-01.png\n", "match registered images"),
-    ("name,depth_path\na.png,unrelated-01.png\nb.png,unrelated-02.png\nc.png,unrelated-01.png\n", "match registered images"),
+    ("name,depth_path\na.png,unrelated-01.png\nb.png,unrelated-02.png\nc.png,new-unregistered.png\n", "match registered images"),
     ("name,depth_path\na.png,unrelated-01.png\na.png,unrelated-02.png\n", "Duplicate"),
     ("name,depth_path\na.png,../escape.png\nb.png,unrelated-02.png\n", "unsafe"),
     ("name,depth_path\na.png,unrelated-01.png\nb.png,unrelated-01.png\n", "cannot be assigned"),
