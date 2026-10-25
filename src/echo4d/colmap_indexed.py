@@ -15,7 +15,7 @@ import tempfile
 import numpy as np
 from PIL import Image
 
-from .colmap import _frame_name, _images, import_colmap
+from .colmap import _frame_name, _images, _timestamps, import_colmap
 from .model import DataError, file_sha256, safe_path
 from .output import output_transaction, write_json
 
@@ -93,6 +93,8 @@ def import_colmap_indexed(args: argparse.Namespace) -> dict:
         raise DataError("Depth index must contain exactly the registered COLMAP image names")
 
     root = Path(args.depth).resolve()
+    image_root = Path(args.images).resolve()
+    timestamps = _timestamps(Path(args.timestamps).resolve())
     evidence = []
     with tempfile.TemporaryDirectory(prefix="echo-colmap-depth-") as temporary:
         staged = Path(temporary) / "metric-depth"
@@ -100,6 +102,8 @@ def import_colmap_indexed(args: argparse.Namespace) -> dict:
         for name in sorted(names):
             raw_rel = mapping[name]
             raw_path = safe_path(root, raw_rel)
+            color_path = safe_path(image_root, name)
+            color_hash = file_sha256(color_path)
             before = file_sha256(raw_path)
             metric, dtype = _metric_array(raw_path, divisor)
             if file_sha256(raw_path) != before:
@@ -108,7 +112,8 @@ def import_colmap_indexed(args: argparse.Namespace) -> dict:
             target = staged / output_name
             target.parent.mkdir(parents=True, exist_ok=True)
             np.save(target, metric, allow_pickle=False)
-            evidence.append({"image": name, "raw_depth": raw_rel,
+            evidence.append({"image": name, "timestamp_seconds": timestamps.get(name),
+                             "color_sha256": color_hash, "raw_depth": raw_rel,
                              "raw_depth_sha256": before, "raw_dtype": dtype})
         if file_sha256(index_path) != index_hash:
             raise DataError("Depth index changed during conversion")
@@ -138,4 +143,6 @@ def import_colmap_indexed(args: argparse.Namespace) -> dict:
             for row in evidence:
                 if file_sha256(safe_path(root, row["raw_depth"])) != row["raw_depth_sha256"]:
                     raise DataError("Raw indexed depth changed before publication")
+                if file_sha256(safe_path(image_root, row["image"])) != row["color_sha256"]:
+                    raise DataError("Source RGB changed before publication")
     return {**result, "output": str(destination), "indexed_depth": True}
