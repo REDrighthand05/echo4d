@@ -32,7 +32,7 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq colmap ffmpeg
-          colmap --version
+          colmap help
           ffmpeg -version | head -n 1
       - name: Install ECHO packages and test dependencies
         run: |
