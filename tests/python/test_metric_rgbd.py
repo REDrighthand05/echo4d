@@ -133,4 +133,11 @@ def test_refuse_existing_target(tmp_path):
     args = _fixture(tmp_path)
     args[-1].mkdir()
     with pytest.raises(DataError, match="already exists"):
-        convert_metric_sensor(*args)
+        convert_metric_sensor(*args, downsample=2)
+
+
+def test_reject_downsample_too_small_for_echo_camera(tmp_path):
+    args = _fixture(tmp_path)
+    with pytest.raises(DataError, match="Camera width"):
+        convert_metric_sensor(*args, downsample=4)
+    assert not args[-1].exists()
