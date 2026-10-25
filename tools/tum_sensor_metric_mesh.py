@@ -134,6 +134,9 @@ def experiment(args: argparse.Namespace, report: dict) -> None:
         "metric_se3_heldout_rmse_m": metric_report["metric_se3_pose_evaluation"]["heldout_position_rmse_m"],
         "gt_only_for_post_calibration_evaluation": True,
     }
+    # Direct calls bypass tum_metric_anchor.main(), so finalize the nested
+    # receipt explicitly; an E3-complete run must never say status=running.
+    metric_report["status"] = "passed_sensor_metric_calibration_not_rgb_only_metric"
     (target/"metric"/"report.json").write_text(
         json.dumps(metric_report, indent=2, ensure_ascii=False, allow_nan=False)+"\n")
     if metric_report["dataset"]["sha256"] != PINNED_ARCHIVE_SHA256:
