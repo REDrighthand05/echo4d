@@ -6,6 +6,7 @@ on:
       - 'src/echo4d/metric_anchor.py'
       - 'tools/tum_metric_anchor.py'
       - 'tests/python/test_metric_anchor.py'
+      - 'docs/evidence/tum-metric-anchor-v1/**'
       - '.github/workflows/tum-metric-anchor.yml'
       - 'src/echo4d/video_sfm.py'
       - 'src/echo4d/sfm_eval.py'
