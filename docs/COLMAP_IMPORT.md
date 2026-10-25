@@ -76,3 +76,71 @@ the same `echo-dataset-1` format. It must remain protected by its own
 48/12 non-leakage and sensor-scale checks before any interface consolidation
 into the above general-purpose importer. This is a Draft integration change,
 not approval to merge it into stable main.
+
+
+## Optional indexed raw-depth convenience (PR #34 task C candidate)
+
+Use `import-colmap-indexed` **only** if your independently measured, already
+registered camera-Z depth images are stored under arbitrary file names or as
+integer PNG. The original strict `import-colmap` contract remains unchanged.
+This wrapper first writes metric floating-point `.npy` inputs and **calls the
+existing strict importer**. It does not estimate camera motion, depth, camera
+intrinsics, or physical scale. It does not prove that supplied depths are
+geometrically aligned or physically accurate.
+
+The index is a UTF-8 CSV with exactly this header, one row per COLMAP registered
+image (same names as `images.txt`), with paths relative to `--depth-root`:
+
+```csv
+name,depth_path
+frame0001.png,sensor/depth_42.png
+frame0002.png,sensor/depth_43.png
+```
+
+- `--depth-unit` describes the **original** depth measurement unit, e.g.
+  `millimeter`. `--depth-units-per-meter` is the number of raw units equal
+  to one metre (**1000 for millimetres; 1 only if raw data are already metres**).
+  Establish the actual sensor conversion from its documentation/calibration;
+  these arguments cannot verify that your claimed units are true.
+- Each input must already contain per-pixel **camera-Z** distance on the exact
+  undistorted COLMAP RGB grid. An integer single-channel PNG or numeric 2-D
+  NPY is accepted; missing data are zero. RGB PNG, NPZ, NaN, negative or
+  over-100-metre converted readings are rejected.
+- `--meters-per-colmap-unit` separately scales the **COLMAP camera centres**
+  using an **independently measured** reference, and never rescales the
+  converted metric depth. These two factors are physically different.
+- Missing/extra/duplicate index rows, filenames outside the depth root, and
+  mismatched depth dimensions are rejected; on failure the final output
+  directory is not published. Existing outputs are never overwritten.
+- `indexed-depth-provenance.json` preserves the declared raw unit/factor,
+  original index hash, raw file paths/hashes/types and converted metric hashes.
+  The strict `import-provenance.json` remains present separately.
+
+Example (the factor 2 below is **synthetic demonstration only**, not a physical
+scale for your dataset):
+
+```bash
+echo4d import-colmap-indexed \
+  --model ./colmap-text --images ./undistorted-rgb \
+  --depth-root ./sensor-depth --depth-index ./depth-index.csv \
+  --depth-unit millimeter --depth-units-per-meter 1000 \
+  --timestamps ./timestamps.csv \
+  --meters-per-colmap-unit 2 \
+  --scale-source "independently measured reference for this scene" \
+  --output ./converted-recording
+
+echo4d validate ./converted-recording/recording.json
+```
+
+The final output is a standard `echo-dataset-1` recording suitable for
+the existing `reconstruct` command. To run the focused CLI acceptance and
+rollback tests:
+
+```bash
+python -m pytest -q tests/python/test_colmap_indexed_depth.py
+```
+
+No COLMAP implementation is duplicated in `colmap_indexed_depth.py`; only a
+raw-depth/index preparation step is added, with final acceptance delegated to
+the strict #6/#24/#33 importer. It remains a Draft PR candidate until real
+CI checks complete and the integration maintainer accepts it.
