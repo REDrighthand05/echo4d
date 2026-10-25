@@ -143,6 +143,12 @@ def experiment(args, report: dict) -> None:
     work.mkdir(parents=True, exist_ok=False)
     if not (args.pr13_source / 'echo4d' / 'video_sfm.py').is_file():
         raise DataError('Missing pinned PR13 checkout src/echo4d/video_sfm.py')
+    pinned = subprocess.run(
+        ['git', '-C', str(args.pr13_source), 'rev-parse', 'HEAD'],
+        capture_output=True, text=True, check=False)
+    report['pr13_actual_checkout_sha'] = pinned.stdout.strip()
+    if pinned.returncode != 0 or pinned.stdout.strip() != PR13_SHA:
+        raise DataError('PR13 comparison source is not the frozen expected commit')
     archive = work / 'source.tgz'
     download(archive, report)
     report['archive_sha256'] = file_sha256(archive)
@@ -168,9 +174,16 @@ def experiment(args, report: dict) -> None:
                  '--colmap', str(wrapper)]
     a_ok = run_command(a_command, 'PR12-modified', report)
     b_ok = run_command(b_command, 'PR13-pinned', report, env=env)
-    for label, path in (('pr12',a),('pr13',b)):
-        if (path/'report.json').is_file():
-            shutil.copyfile(path/'report.json', args.report_dir/f'{label}_report.json')
+    for label, path in (('pr12', a), ('pr13', b)):
+        for src, dst in (
+            ('report.json', f'{label}_report.json'),
+            ('trajectory-scale-unknown.json', f'{label}_trajectory-scale-unknown.json'),
+            ('trajectory.json', f'{label}_trajectory.json'),
+            ('all_input_timestamps.csv', f'{label}_all_input_timestamps.csv'),
+            ('registered_timestamps.csv', f'{label}_registered_timestamps.csv'),
+        ):
+            if (path / src).is_file():
+                shutil.copyfile(path / src, args.report_dir / dst)
     if not (a_ok and b_ok):
         raise DataError('One or both RGB-only COLMAP runs failed; see raw reports')
     compare_inputs(a, b, report)
@@ -178,6 +191,14 @@ def experiment(args, report: dict) -> None:
     truth, excluded = gt_after_sfm(tum, source)
     report['posthoc_groundtruth_exclusions'] = excluded
     compare_poses(a, b, truth, report)
+    for label, path in (('pr12', a), ('pr13', b)):
+        record = json.loads((path / 'report.json').read_text(encoding='utf-8'))
+        model = (path / record['result']['sfm_model_dir'] if label == 'pr12'
+                 else path / ('model_txt_' + record['selected_model_id']))
+        for name in ('images.txt', 'cameras.txt', 'points3D.txt'):
+            file = model / name
+            if file.is_file() and file.stat().st_size <= 8 * 1024**2:
+                shutil.copyfile(file, args.report_dir / f'{label}_{name}')
 
 
 def main() -> int:
