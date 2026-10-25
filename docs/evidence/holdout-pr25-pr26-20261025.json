@@ -1,0 +1,70 @@
+{
+  "version": "echo-holdout-cross-run-evidence-1",
+  "captured_utc_date": "2026-10-25",
+  "source_dataset": "TUM rgbd_dataset_freiburg1_xyz",
+  "source_archive_sha256": "a0236d97b8c30cd93b653656d2b6c293ff7c982a4130ef2a1a8beecdb124ef98",
+  "split_sha256": "5280afe5fbc24ddbee04979a92cad897c2e2ba3d7bf7d7e7c3a5ea4e0e4be25d",
+  "frozen_holdout_source_indices": [
+    4,
+    5,
+    9,
+    10,
+    14,
+    19,
+    24,
+    25,
+    29,
+    34,
+    35,
+    55
+  ],
+  "sensor_valid_depth_pixels_both_runs": 177457,
+  "exploratory_gates": {
+    "coverage_min": 0.8,
+    "overlap_rmse_max_m": 0.15
+  },
+  "full_machine_artifacts_expire_after_days": 14,
+  "results": [
+    {
+      "pr": 25,
+      "commit": "072186fe7989efb300759b9e5442e2ca56d208f7",
+      "run_url": "https://github.com/REDrighthand05/echo4d/actions/runs/40206602087",
+      "artifact_id": 12603853853,
+      "artifact_name": "tum-sensor-metric-mesh-40206602087",
+      "downloaded_zip_sha256": "df856129d43d6dae12c804098d286f73bf87efce0af03154066b5c2e8da86440",
+      "metric_sensor_scale_m_per_sfm_unit": 0.04972777749216613,
+      "source_manifest_sha256": "c34dff39b15301fa65e7c16e6a13316073e4967ed4f0e89e58fd061b9a358e4a",
+      "mesh_sha256": "e2f13717c7199850b78c62015c509d0c9f4a7b78511733594ac813b776079fbe",
+      "holdout_report_sha256": "a534ace8699d474c6f8c06fdb679e868432ee2f88d1a7a16e952d030dfd87cff",
+      "mesh_vertices": 2448,
+      "mesh_triangles": 4008,
+      "total_valid_pixels": 177457,
+      "overlap_pixels": 163529,
+      "coverage": 0.921513380706312,
+      "mae_m": 0.03576980052103,
+      "rmse_m": 0.10763423127263633,
+      "p95_abs_m": 0.11005992889404301,
+      "passes_exploratory_both_gates": true
+    },
+    {
+      "pr": 26,
+      "commit": "6850af60f2142ebc702ce5c7cb2773652e6fe30c",
+      "run_url": "https://github.com/REDrighthand05/echo4d/actions/runs/40206826106",
+      "artifact_id": 12604410290,
+      "artifact_name": "tum-b-holdout-40206826106",
+      "downloaded_zip_sha256": "f70484e5df1d2b38b40600f8d96c820abefcd6604ced7cf8f9b36d73e1db93f3",
+      "source_manifest_sha256": null,
+      "mesh_sha256": "46cb962637f3ae17bd4f2558505132306e2c7ec50846c51785a8b2fa9be7872a",
+      "holdout_report_sha256": "306a2ff9bbb6a5a42c7018d72005d656dc1337b0b659bb93fe393ac0cea8f9fb",
+      "total_valid_pixels": 177457,
+      "overlap_pixels": 163010,
+      "coverage": 0.9185887285370541,
+      "mae_m": 0.03533156507586081,
+      "rmse_m": 0.10521947952071527,
+      "p95_abs_m": 0.10590690076351159,
+      "passes_exploratory_both_gates": true
+    }
+  ],
+  "comparison_warning": "Both used same frozen split but *different* measured-scale COLMAP trajectories and Mesh SHAs. Difference in RMSE is not a controlled head-to-head evaluator comparison. Same Mesh + same camera poses + same measured depth necessary.",
+  "accuracy_warning": "Heldout depth from same sensor is not external laser-scanned surface geometry truth; RGB video alone cannot supply metric Z."
+}
