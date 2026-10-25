@@ -32,9 +32,10 @@ jobs:
           cache: pip
           cache-dependency-path: requirements.lock
       - name: Install CPU COLMAP and FFmpeg
+        timeout-minutes: 8
         run: |
-          sudo apt-get update -qq
-          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq colmap ffmpeg
+          sudo apt-get -o Acquire::Retries=1 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20 update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=1 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20 install -y -qq colmap ffmpeg
           colmap help
       - name: Install pinned Python dependencies
         run: |
