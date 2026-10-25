@@ -5,6 +5,9 @@ on:
       - 'src/echo4d/metric_rgbd.py'
       - 'tests/python/test_metric_rgbd.py'
       - 'tests/python/test_tum_sensor_metric_mesh.py'
+      - 'tests/python/test_metric_holdout.py'
+      - 'src/echo4d/metric_holdout.py'
+      - 'src/echo4d/holdout.py'
       - 'tools/tum_sensor_metric_mesh.py'
       - '.github/workflows/tum-sensor-metric-mesh.yml'
   workflow_dispatch:
@@ -35,7 +38,7 @@ jobs:
           python -m pip install --no-deps -e .
       - name: Check B-path isolation and fixed split contracts
         run: |
-          PYTHONPATH="$GITHUB_WORKSPACE/tools" python -m pytest tests/python/test_metric_rgbd.py tests/python/test_tum_sensor_metric_mesh.py -q
+          PYTHONPATH="$GITHUB_WORKSPACE/tools" python -m pytest tests/python/test_metric_rgbd.py tests/python/test_tum_sensor_metric_mesh.py tests/python/test_metric_holdout.py -q
       - name: Run real pinned TUM source RGB SfM, sensor scale, 48-frame TSDF
         env:
           ECHO_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
@@ -61,6 +64,7 @@ jobs:
             artifacts/tum-sensor-metric-mesh/SUMMARY.md
             artifacts/tum-sensor-metric-mesh/b-48train-12holdout.json
             artifacts/tum-sensor-metric-mesh/metric/*.json
+            artifacts/tum-sensor-metric-mesh/mesh-heldout-depth.json
             artifacts/tum-sensor-metric-mesh/mesh/report.json
             artifacts/tum-sensor-metric-mesh/mesh/mesh.ply
             artifacts/tum-sensor-metric-mesh/mesh/scene.echo.json
