@@ -132,8 +132,11 @@ def run_experiment(args:argparse.Namespace, receipt:dict)->None:
     if b["metric_stage"]["source_sha256"]!=PINNED_ARCHIVE_SHA256:
         raise DataError("Pinned TUM source hash has changed")
 
-    # Only now GT may be opened for A: B's mesh and B's withheld score are sealed.
-    receipt["B_mesh_and_score_finalized_before_A_groundtruth_access"]=True
+    # B upstream #14 reads GT only AFTER the sensor metric scale is locked,
+    # for a separate pose-audit; it does not feed B pose/TSDF. Here the GT
+    # camera poses are applied to A ONLY after B Mesh and scores are sealed.
+    receipt["B_mesh_and_score_finalized_before_GT_poses_used_for_A"]=True
+    receipt["upstream_B_GT_was_pose_diagnostic_only_after_scale_lock"]=True
     work=args.work.resolve()
     source_json=json.loads((report/"metric"/"report.json").read_text(encoding="utf-8"))
     source=source_json["test_video"]["source_rgb_manifest"]
