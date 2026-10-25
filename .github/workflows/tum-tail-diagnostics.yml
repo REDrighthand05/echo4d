@@ -7,6 +7,7 @@ on:
       - 'tests/python/test_residual_diagnostics.py'
       - 'tools/tum_residual_diagnostics.py'
       - '.github/workflows/tum-tail-diagnostics.yml'
+      - 'docs/evidence/tum-tail-v1/**'
   workflow_dispatch:
 
 permissions:
