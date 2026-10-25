@@ -1,2 +1,3 @@
-# echo4d
-回声 / ECHO — calibrated RGB-D reconstruction, evidence-aware spatial replay, reproducible geometry tests.
+# ECHO / echo4d
+
+Development checkpoint: bounded CPU TSDF and validated RGB-D input. CLI, tests and viewer integration are being restored and verified in the next commit.

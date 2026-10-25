@@ -1,0 +1,12 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+*.egg-info/
+build/
+artifacts/
+outputs/
+datasets/
+*.tar.gz
+.openai/local*
+node_modules/
