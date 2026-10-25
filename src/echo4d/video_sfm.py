@@ -22,6 +22,7 @@ import numpy as np
 
 from .colmap import _images
 from .model import DataError, file_sha256, safe_path
+from .video_pts import extract_source_pts
 
 MAX_INPUT_BYTES = 2 * 1024**3
 SUFFIXES = ('.png', '.jpg', '.jpeg')
@@ -97,13 +98,17 @@ def probe_video(video: Path, receipt: dict) -> dict:
 
 
 def extract_video(video: Path, image_dir: Path, fps: float, max_frames: int,
-                  receipt: dict) -> dict[str, float]:
+                  receipt: dict, timestamp_mode: str = 'resampled') -> dict[str, float]:
     video_info = probe_video(video, receipt)
     receipt['video'] = video_info
     if not math.isfinite(fps) or not 1 <= fps <= 12:
         raise DataError('Sample fps must be between 1 and 12')
     if not 3 <= max_frames <= 240:
         raise DataError('max_frames must be in [3,240]')
+    if timestamp_mode == 'source-pts':
+        return extract_source_pts(video, image_dir, max_frames, receipt, run_step)
+    if timestamp_mode != 'resampled':
+        raise DataError('Unknown video timestamp mode')
     image_dir.mkdir(parents=True)
     # Preserve fixed timebase, not arbitrary input video VFR packet PTS.
     run_step(['ffmpeg','-hide_banner','-loglevel','error','-nostdin',
@@ -169,9 +174,13 @@ def run_pipeline(args: argparse.Namespace) -> dict:
     try:
         images = target/'images'
         if args.video is not None:
-            timestamps = extract_video(args.video.resolve(),images,args.fps,args.max_frames,receipt)
+            timestamps = extract_video(args.video.resolve(),images,args.fps,args.max_frames,receipt,
+                                       timestamp_mode=args.timestamp_mode)
             receipt['input_kind'] = 'video'
-            receipt['timestamp_note'] = 'Uniform FFmpeg fps-resampled relative times; original VFR camera packet times are not preserved.'
+            receipt['timestamp_note'] = (
+                'Decoded-frame source PTS shifted relative to first decoded frame; see source_pts_sampling.frame_map.'
+                if args.timestamp_mode == 'source-pts' else
+                'Uniform FFmpeg fps-resampled relative times; original VFR camera packet times are not preserved.')
         else:
             timestamps = copy_images(args.images.resolve(),images,args.timestamps.resolve(),
                                      args.max_frames,receipt)
@@ -271,6 +280,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument('--timestamps',type=Path,help='Required with --images; CSV: name,t')
     parser.add_argument('--output',type=Path,required=True)
     parser.add_argument('--fps',type=float,default=4.0)
+    parser.add_argument('--timestamp-mode',choices=['resampled','source-pts'],default='resampled',
+                        help='Video only: legacy fixed-fps resampling or decoded source PTS sampling')
     parser.add_argument('--max-frames',type=int,default=120)
     parser.add_argument('--camera-model',choices=['PINHOLE','SIMPLE_PINHOLE','SIMPLE_RADIAL'],default='SIMPLE_RADIAL')
     parser.add_argument('--camera-params',help='Optional real source intrinsics, comma-delimited in selected model order')
