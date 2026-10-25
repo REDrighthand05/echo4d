@@ -126,6 +126,45 @@ def score_pairs(estimated: list, reference: list) -> dict:
     }
 
 
+def score_interleaved_holdout(estimated: list, reference: list) -> dict:
+    """Fit Sim(3) without every fourth GT pose; score those withheld poses.
+
+    Split is fixed by chronological paired-frame order, not by residual size.
+    It measures trajectory interpolation consistency, NOT out-of-scene transfer
+    or deployment scale; neighboring fitting poses remain correlated.
+    """
+    if len(estimated) != len(reference) or len(estimated) < 8:
+        raise DataError("Interleaved GT holdout requires >=8 paired camera poses")
+    est = np.stack([_valid_pose(p) for p in estimated])
+    gt = np.stack([_valid_pose(p) for p in reference])
+    withheld = np.arange(0, len(est), 4, dtype=np.int64)
+    fitting = np.array([i for i in range(len(est)) if i % 4 != 0], dtype=np.int64)
+    scale, rotation, translation = sim3_align(
+        est[fitting, :3, 3], gt[fitting, :3, 3])
+    positions = scale * (rotation @ est[withheld, :3, 3].T).T + translation
+    errors = np.linalg.norm(positions - gt[withheld, :3, 3], axis=1)
+    angles = [
+        float(np.degrees(Rotation.from_matrix(
+            gt[i, :3, :3].T @ rotation @ est[i, :3, :3]).magnitude()))
+        for i in withheld
+    ]
+    return {
+        "status": "scored",
+        "protocol": "paired source-time order; every 4th pair withheld; 3/4 fit only",
+        "alignment_fitting_pairs": int(len(fitting)),
+        "alignment_withheld_pairs": int(len(withheld)),
+        "withheld_position_rmse_m": float(np.sqrt(np.mean(errors ** 2))),
+        "withheld_position_median_m": float(np.median(errors)),
+        "withheld_rotation_mean_deg": float(np.mean(angles)),
+        "withheld_rotation_p95_deg": float(np.percentile(angles, 95)),
+        "alignment_scale_for_evaluation_only": float(scale),
+        "withheld_gt_used_in_alignment_fit": False,
+        "limitations": ("Interleaved poses share the same video, scene and sensor; "
+                        "this is not an independent-scene generalization test, "
+                        "nor a deployable metric-scale estimate."),
+    }
+
+
 def evaluate_tum(trajectory: dict, sampling: dict, source_frames: list[dict],
                  gt_times: np.ndarray, gt_poses: np.ndarray) -> dict:
     if trajectory.get("metric_scale_known") is not False:
@@ -142,16 +181,28 @@ def evaluate_tum(trajectory: dict, sampling: dict, source_frames: list[dict],
     if len({entry["name"] for entry in entries}) != len(entries):
         raise DataError("Duplicate registered frame name")
     est, truth = [], []
+    paired = []
     for entry in entries:
         if entry["name"] not in lookup:
             raise DataError("Registered frame absent from sampled RGB manifest")
         gt = interpolate_gt(lookup[entry["name"]], gt_times, gt_poses)
         if gt is not None:
-            est.append(entry["camera_to_world_row_major"])
-            truth.append(gt)
+            paired.append((lookup[entry["name"]], entry["camera_to_world_row_major"], gt))
+    paired.sort(key=lambda item: item[0])
+    est = [item[1] for item in paired]
+    truth = [item[2] for item in paired]
     if len(est) < 3:
         raise DataError("Insufficient independent TUM ground-truth pairs")
     report = score_pairs(est, truth)
+    # Preserve historical all-paired ATE and add a strictly separate holdout
+    # metric, without allowing withheld GT into the new alignment fitting set.
+    try:
+        report["interleaved_holdout"] = score_interleaved_holdout(est, truth)
+    except DataError as exc:
+        report["interleaved_holdout"] = {
+            "status": "unavailable", "reason": str(exc),
+            "protocol": "every 4th paired frame held out from Sim(3) fitting",
+        }
     report["registered_images"] = len(entries)
     report["sampled_images"] = len(samples)
     report["registration_fraction"] = len(entries) / len(samples)
