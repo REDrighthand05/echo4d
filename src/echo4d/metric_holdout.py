@@ -59,8 +59,17 @@ def evaluate_sensor_metric_holdouts(
     downsample: int = 4,
     max_gap_s: float = .03,
     max_depth_m: float = 4.,
+    known_poses_for_A: dict[str, list[float]] | None = None,
 ) -> dict:
     metric_poses = validate_holdout_split(split, source, metric)
+    # A/B uses the identical triangle rasterizer and pixel scoring method.
+    # Ground-truth pose substitution is permitted ONLY for the explicitly
+    # labeled A arm, and never alters the estimated SfM / measured-scale B arm.
+    if known_poses_for_A is not None:
+        if set(known_poses_for_A) != set(split["holdout"]):
+            raise DataError("A reference poses must cover exactly all twelve heldout views")
+        for name in split["holdout"]:
+            rigid_matrix(known_poses_for_A[name])
     dataset_root = Path(dataset_root).resolve()
     camera = load_recording(training_recording).camera
     cams = _cameras(Path(model_path) / "cameras.txt")
@@ -98,7 +107,8 @@ def evaluate_sensor_metric_holdouts(
         model_id = entry.get("camera_id")
         if model_id not in cams:
             raise DataError("Holdout pose references an unknown camera")
-        pose = rigid_matrix(entry["camera_to_metric_sfm_world"])
+        pose = rigid_matrix(known_poses_for_A[name] if known_poses_for_A is not None
+                            else entry["camera_to_metric_sfm_world"])
         measured = read_measured_depth(safe_path(dataset_root, relative),
                                       float(split["depth_numeric_units_per_meter"]),
                                       (original.height, original.width))
@@ -128,13 +138,17 @@ def evaluate_sensor_metric_holdouts(
         "version": "echo-b-mesh-heldout-1",
         "source_kind": "measured_registered_z_depth",
         "mesh_sha256": file_sha256(mesh_path),
-        "pose_kind": "RGB COLMAP + external three-frame sensor depth scale",
-        "gt_camera_poses_loaded": False,
+        "pose_kind": ("TUM measured ground-truth camera pose (A reference arm)"
+                      if known_poses_for_A is not None else
+                      "RGB COLMAP + external three-frame sensor depth scale"),
+        "gt_camera_poses_loaded": known_poses_for_A is not None,
         "holdout_frames": 12,
         "valid_measured_pixels": total_valid,
         "overlap_pixels": total_overlap,
+        "missing_surface_pixels": total_valid - total_overlap,
         "coverage": float(coverage),
         "mae_m": float(np.mean(absolute)),
+        "bias_m": float(np.mean(errors)),
         "rmse_m": rmse,
         "median_abs_m": float(np.median(absolute)),
         "p95_abs_m": float(np.percentile(absolute, 95)),
@@ -144,11 +158,14 @@ def evaluate_sensor_metric_holdouts(
         "within_30cm": float(np.mean(absolute <= .30)),
         "screening_gate_coverage_gte_80pct": bool(coverage >= .80),
         "screening_gate_overlap_rmse_lte_15cm": bool(rmse <= .15),
+        "screening_gate_passed": bool(coverage >= .80 and rmse <= .15),
         "per_frame": per_frame,
         "limitations": [
             "Holdout sensor depths were not fused into TSDF or used to compute bounds.",
             "Scale came from 3 separate measured sensor-depth anchors, never GT Sim(3).",
-            "Holdout evaluation uses estimated metric SfM poses, not TUM ground-truth camera poses.",
+            ("A arm uses TUM ground-truth poses ONLY as explicit reference." if
+             known_poses_for_A is not None else
+             "B arm uses estimated metric SfM poses, not TUM ground-truth camera poses."),
             "Depth and scale use the same public RGB-D sensor: NOT external laser-scan surface truth.",
             "Neighboring frames and underlying sensor share errors and scene observations.",
             "MAE/RMSE are conditional on overlapping valid pixels; missing geometry is reported by coverage.",
