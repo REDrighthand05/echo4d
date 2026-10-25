@@ -1,0 +1,71 @@
+name: TUM B-path 12 withheld measured depths
+on:
+  pull_request:
+    paths:
+      - 'src/echo4d/holdout.py'
+      - 'tests/python/test_holdout.py'
+      - 'tests/python/test_tum_sensor_mesh_holdout.py'
+      - 'tools/tum_sensor_mesh_holdout.py'
+      - '.github/workflows/tum-b-mesh-holdout.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: tum-b-heldout-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  compare-12-real-unfused-measurements:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: requirements.lock
+      - name: Install CPU COLMAP and FFmpeg
+        run: |
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq colmap ffmpeg
+          colmap help
+      - name: Install pinned ECHO dependencies
+        run: |
+          python -m pip install -r requirements.lock
+          python -m pip install --no-deps -e .
+      - name: Exact mesh projection and negative controls
+        run: |
+          PYTHONPATH="$GITHUB_WORKSPACE/tools" python -m pytest tests/python/test_holdout.py tests/python/test_tum_sensor_mesh_holdout.py -q
+      - name: Execute frozen real B mesh then read only 12 unfused measured depths
+        env:
+          ECHO_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          PYTHONPATH="$GITHUB_WORKSPACE/tools" python tools/tum_sensor_mesh_holdout.py \
+            --work "$RUNNER_TEMP/b-12view-holdout" \
+            --report-dir "$GITHUB_WORKSPACE/artifacts/b-12view-holdout"
+      - name: Publish honest summary, even on failure
+        if: always()
+        run: |
+          if [ -f artifacts/b-12view-holdout/HOLDOUT_SUMMARY.md ]; then
+            cat artifacts/b-12view-holdout/HOLDOUT_SUMMARY.md >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo 'No holdout report; inspect setup failure.' >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Retain actual-depth residual evidence, or explicit FAIL
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tum-b-holdout-${{ github.run_id }}
+          path: |
+            artifacts/b-12view-holdout/holdout-run-report.json
+            artifacts/b-12view-holdout/holdout-depth-comparison.json
+            artifacts/b-12view-holdout/HOLDOUT_SUMMARY.md
+            artifacts/b-12view-holdout/report.json
+            artifacts/b-12view-holdout/b-48train-12holdout.json
+            artifacts/b-12view-holdout/metric/metric-trajectory-from-sensor.json
+            artifacts/b-12view-holdout/metric/report.json
+            artifacts/b-12view-holdout/mesh/report.json
+            artifacts/b-12view-holdout/mesh/mesh.ply
+            artifacts/b-12view-holdout/mesh/scene.echo.json
+          if-no-files-found: warn
+          retention-days: 14
