@@ -46,4 +46,12 @@ python tools/tum_video_sfm.py --work outputs/tum-real-work --report-dir outputs/
 
 Both destinations must not exist. The process downloads roughly 448 MB of official TUM data, extracts frames locally and can consume substantial CPU time. The pipeline may fail on a particular COLMAP build; review actual Actions logs instead of assuming success from the presence of code. GT-derived Sim(3) scale must never be copied into the unknown-scale SfM output or passed as a separately measured physical scale to the reconstruction adapter.
 
+## Two separately labeled trajectory scores
+
+The historical `ate_rmse_m_after_sim3` fits the Sim(3) transform using **all** paired ground-truth poses, then scores on those same frames. It is an optimistic *in-sample* metric, retained for reproducible comparison with prior runs.
+
+The new `metrics.json.interleaved_holdout` uses the **chronological list of paired frames**, excludes pair indices 0, 4, 8, ... from alignment fitting, then scores those excluded pairs without allowing their ground-truth coordinates to influence the fit. It reports fit and withheld counts, withheld position RMSE, and withheld rotation mean/P95. If there are insufficient or degenerate fit samples it says `status=unavailable` with a reason; it does not fabricate a number or modify the original score. Synthetic negative tests perturb a withheld ground-truth position to verify that the fitting scale stays unchanged while the withheld error rises.
+
+This is a deliberately *interleaved same-video holdout*, not a time-disjoint test, new camera, new scene or true independent physical geometry standard. Neighboring frames remain correlated. Both scores still use ground truth for **evaluation** and neither conveys deployable metric scale. Do not compare the new withheld-only result to the older full-fit RMSE as if they used the same protocol.
+
 Limitations: a single sequence is not an independent evaluation of true dense geometry; scale- and rigid-aligned camera positions are not a validated mesh. ATE after Sim(3) uses the **evaluation GT** and is not an online positioning error guarantee. A genuine phone video with independently measured scale and depth remains a separate validation task.
