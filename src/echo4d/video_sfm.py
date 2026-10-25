@@ -20,7 +20,7 @@ import time
 
 import numpy as np
 
-from .colmap import _images
+from .colmap import _cameras, _images
 from .model import DataError, file_sha256, safe_path
 
 MAX_INPUT_BYTES = 2 * 1024**3
@@ -146,6 +146,11 @@ def _estimated_track(text_model: Path, timestamps: dict[str,float]) -> tuple[lis
     for name, camera_id, pose in poses:
         if name not in timestamps or name in registered:
             raise DataError('COLMAP registered a missing or duplicated extracted frame')
+        if (pose.shape != (4, 4) or not np.isfinite(pose).all() or
+                not np.allclose(pose[:3, :3].T @ pose[:3, :3], np.eye(3), atol=1e-5) or
+                not np.isclose(np.linalg.det(pose[:3, :3]), 1.0, atol=1e-5) or
+                not np.allclose(pose[3], [0, 0, 0, 1], atol=1e-8)):
+            raise DataError('COLMAP camera pose is not a finite, proper rigid transform')
         registered.add(name)
         frames.append({'name':name,'t_s':timestamps[name],
                        'camera_id':camera_id,
@@ -154,6 +159,50 @@ def _estimated_track(text_model: Path, timestamps: dict[str,float]) -> tuple[lis
         raise DataError('COLMAP SfM registered fewer than three frames')
     frames.sort(key=lambda x:x['t_s'])
     return frames,len(registered)
+
+
+def select_sparse_model(sparse: Path, target: Path, timestamps: dict[str, float],
+                        receipt: dict) -> tuple[Path, list[dict], int]:
+    """Select the most registered *valid* COLMAP model; preserve all failed candidates.
+
+    Taken from the useful multi-model/failure idea in PR #13, while retaining
+    PR #12's trajectory layout and downstream metric-sensor contract.
+    Different disconnected models are NEVER stitched into one trajectory.
+    """
+    candidates = sorted(
+        (p for p in sparse.iterdir()
+         if p.is_dir() and not p.is_symlink() and p.name.isascii() and p.name.isdigit()
+         and (p / 'images.bin').is_file()),
+        key=lambda p: (int(p.name), p.name))
+    receipt['model_candidates'] = []
+    if not candidates:
+        raise DataError('COLMAP mapper produced no numbered registered sparse model')
+    if len(candidates) > 32:
+        raise DataError('COLMAP produced more than 32 sparse models; manual review required')
+    selected: tuple[Path, list[dict], int] | None = None
+    for candidate in candidates:
+        entry = {'model_id': candidate.name, 'status': 'rejected'}
+        receipt['model_candidates'].append(entry)
+        try:
+            output = target / f'text-model-{candidate.name}'
+            output.mkdir()
+            run_step(['colmap', 'model_converter', '--input_path', str(candidate),
+                      '--output_path', str(output), '--output_type', 'TXT'],
+                     receipt, f'colmap-text-{candidate.name}', 90)
+            cameras = _cameras(output / 'cameras.txt')
+            frames, count = _estimated_track(output, timestamps)
+            if any(frame['camera_id'] not in cameras for frame in frames):
+                raise DataError('COLMAP model references a missing camera calibration')
+            entry.update({'registered_images': count, 'status': 'valid'})
+            if (selected is None or count > selected[2]):
+                selected = (output, frames, count)
+                receipt['selected_model_id'] = candidate.name
+        except (DataError, OSError, ValueError) as error:
+            entry['reason'] = f'{type(error).__name__}: {str(error)[:400]}'
+    if selected is None:
+        raise DataError('No valid COLMAP model with >=3 registered frames; '
+                        'see report.json model_candidates')
+    return selected
 
 
 def run_pipeline(args: argparse.Namespace) -> dict:
@@ -200,32 +249,7 @@ def run_pipeline(args: argparse.Namespace) -> dict:
         run_step(['colmap','mapper','--database_path',str(database),
                   '--image_path',str(images),'--output_path',str(sparse)],
                  receipt,'colmap-sparse-mapper',1000)
-        models = sorted((p for p in sparse.iterdir() if p.is_dir() and (p/'images.bin').is_file()),
-                        key=lambda p:int(p.name) if p.name.isdigit() else 10**9)
-        if not models:
-            raise DataError('COLMAP mapper produced no registered sparse model')
-        # Evaluate every model, take most registered images. Never substitute GT or fabricated trajectory.
-        selected = None
-        for model in models:
-            output = target/f'text-model-{model.name}'
-            output.mkdir()
-            run_step(['colmap','model_converter','--input_path',str(model),
-                      '--output_path',str(output),'--output_type','TXT'],
-                     receipt,f'colmap-text-{model.name}',90)
-            try:
-                frames,count = _estimated_track(output,timestamps)
-            except DataError as error:
-                if 'registered fewer than three frames' not in str(error):
-                    raise
-                receipt.setdefault('small_sparse_models', []).append(
-                    {'model':model.name,'error':str(error)})
-                continue
-            if selected is None or count > selected[2]:
-                selected = (output,frames,count)
-        if selected is None:
-            raise DataError('COLMAP produced sparse models, but none had three registered cameras; '
-                            f'candidates={receipt.get("small_sparse_models", [])}')
-        model,frames,registered_count = selected
+        model, frames, registered_count = select_sparse_model(sparse, target, timestamps, receipt)
         with (target/'registered_timestamps.csv').open('w',newline='',encoding='utf-8') as fh:
             writer = csv.writer(fh)
             writer.writerow(['name','t'])
