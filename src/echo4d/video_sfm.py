@@ -185,7 +185,7 @@ def run_pipeline(args: argparse.Namespace) -> dict:
                        '--ImageReader.single_camera','1']
         if args.camera_params:
             camera_args += ['--ImageReader.camera_params',args.camera_params]
-        run_step(['colmap','--version'],receipt,'colmap-version',30)
+        run_step(['colmap','help'],receipt,'colmap-help-version-compatible',30)
         run_step(['colmap','feature_extractor','--database_path',str(database),
                   '--image_path',str(images),*camera_args,
                   '--SiftExtraction.use_gpu','0',
