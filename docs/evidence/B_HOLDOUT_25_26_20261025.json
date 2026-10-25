@@ -63,6 +63,25 @@
       "rmse_m": 0.10521947952071527,
       "p95_abs_m": 0.10590690076351159,
       "gate_80pct_15cm": true
+    },
+    {
+      "pr": 26,
+      "kind": "post-migration regression result (strict #25 safety checks adopted)",
+      "head_sha": "454eaaa8d2d99d19adbeb40210930b360d6d219a",
+      "run": "https://github.com/REDrighthand05/echo4d/actions/runs/40208122868",
+      "artifact_id": 12604712708,
+      "artifact_zip_sha256": "09773041d55fcd9887d999adc3f60d026cb63860c8652b10745ca2ccab647853",
+      "metric_json_sha256": "2bbda33241519927820569670315b75c83c0898c950f499b79dc752bda3964b6",
+      "machine_report_sha256": "b20c30496df998ceaa28974b4eec0a7f2669218566842bcda3f02d1eff4e0f41",
+      "command": "PYTHONPATH=tools python tools/tum_sensor_mesh_holdout.py --work /tmp/echo4d-b26-regression --report-dir artifacts/b-12view-holdout",
+      "mesh_sha256": "ff478f9052eb9717f0da8b34f8c25a64248142f5a9efa2e56125e0ccf0aeb205",
+      "sensor_valid_pixels": 177457,
+      "overlap_pixels": 162891,
+      "coverage": 0.9179181435502685,
+      "mae_m": 0.035484169466639494,
+      "rmse_m": 0.10626323239531928,
+      "p95_abs_m": 0.10179999470710754,
+      "gate_80pct_15cm": true
     }
   ],
   "limitations": [
@@ -70,14 +89,15 @@
     "All measured holdout depths are from the same TUM RGB-D sensor; not independent laser-scan ground truth.",
     "Evaluation camera poses are COLMAP estimated and scale anchored with measured depth, not the GT pose.",
     "Some sparse sensor depths from the same sequence were inspected earlier in Issue #14; holdout only means not fused into this Mesh.",
-    "These are historical confirmed results for recorded head commits, not claims about patches submitted later."
+    "These are historical confirmed results for recorded head commits, not claims about patches submitted later.",
+    "Patch-regression mesh hash differs from older #26 baseline, so scoring changes cannot be inferred from raw RMSE differences. Source code validation gates changed but reconstruction uses nondeterministic CPU COLMAP."
   ],
   "integration_plan": {
     "canonical_evaluator_pr": 26,
     "supplementary_checks_migrated_from_pr": 25,
     "patch_sha": "454eaaa8d2d99d19adbeb40210930b360d6d219a",
     "patch_real_CI": "https://github.com/REDrighthand05/echo4d/actions/runs/40208122868",
-    "patch_status_as_of_record": "running; do not claim regression PASS before completed",
+    "patch_status_as_of_record": "completed success: new source 454eaaa8; all fixed 12 withheld views; screening gate PASS; review/merge pending",
     "approver": "main branch maintainer / reviewer (not yet approved)",
     "fair_A_B": "not run; same frozen input/train/holdout and same measured depth required before attribution"
   }
