@@ -212,10 +212,19 @@ def run_pipeline(args: argparse.Namespace) -> dict:
             run_step(['colmap','model_converter','--input_path',str(model),
                       '--output_path',str(output),'--output_type','TXT'],
                      receipt,f'colmap-text-{model.name}',90)
-            frames,count = _estimated_track(output,timestamps)
+            try:
+                frames,count = _estimated_track(output,timestamps)
+            except DataError as error:
+                if 'registered fewer than three frames' not in str(error):
+                    raise
+                receipt.setdefault('small_sparse_models', []).append(
+                    {'model':model.name,'error':str(error)})
+                continue
             if selected is None or count > selected[2]:
                 selected = (output,frames,count)
-        assert selected is not None
+        if selected is None:
+            raise DataError('COLMAP produced sparse models, but none had three registered cameras; '
+                            f'candidates={receipt.get("small_sparse_models", [])}')
         model,frames,registered_count = selected
         with (target/'registered_timestamps.csv').open('w',newline='',encoding='utf-8') as fh:
             writer = csv.writer(fh)
