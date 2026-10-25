@@ -95,7 +95,18 @@ def experiment(args: argparse.Namespace, receipt: dict) -> None:
          '--camera-model','PINHOLE',
          '--camera-params','525,525,319.5,239.5']
     # Entire image/video reconstruction runs before the TUM pose file is accessed.
-    invoke('run-real-colmap-rgb-only-SfM',cmd,receipt,timeout=1800)
+    try:
+        invoke('run-real-colmap-rgb-only-SfM',cmd,receipt,timeout=1800)
+    except RuntimeError as failed:
+        # The nested CLI deliberately emits structured JSON on stdout. Our
+        # subprocess helper's generic stderr summary can otherwise be empty.
+        nested = sfm/'report.json'
+        if nested.is_file():
+            receipt['failed_sfm'] = json.loads(nested.read_text(encoding='utf-8'))
+            shutil.copyfile(nested,report/'nested-colmap-failure.json')
+            message=receipt['failed_sfm'].get('error',{}).get('message','unknown nested failure')
+            raise DataError('Real COLMAP SfM failed: '+message) from failed
+        raise DataError('COLMAP failed without emitting a nested report') from failed
     sfm_report=json.loads((sfm/'report.json').read_text())
     if not sfm_report['status'].startswith('passed'):
         raise DataError('COLMAP workflow did not return a real registered camera track')
