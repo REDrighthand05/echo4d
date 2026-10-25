@@ -101,3 +101,69 @@ def test_unmapped_registered_image_rejected():
 def test_unknown_scale_is_required():
     with pytest.raises(DataError, match="unknown-scale"):
         evaluate_tum({"metric_scale_known": True}, {}, [], np.array([]), np.array([]))
+
+
+def _twelve_pose_pairs():
+    """Twelve non-collinear camera stations with a known global similarity."""
+    est, gt = [], []
+    r = Rotation.from_euler("xyz", [10, 25, -15], degrees=True).as_matrix()
+    scale = 2.5
+    shift = np.array([3., -1., 2.])
+    for i in range(12):
+        point = np.array([np.sin(i*.7), np.cos(i*.4), .1*i + np.sin(i*.3)])
+        local = Rotation.from_euler("xyz", [i*2, -i*3, i], degrees=True).as_matrix()
+        pose = np.eye(4)
+        truth = np.eye(4)
+        pose[:3, :3] = local
+        pose[:3, 3] = point
+        truth[:3, :3] = r @ local
+        truth[:3, 3] = scale*(r @ point) + shift
+        est.append(pose)
+        gt.append(truth)
+    return est, gt
+
+
+def test_interleaved_holdout_known_similarity():
+    from echo4d.sfm_evaluation import score_interleaved_holdout
+    est, gt = _twelve_pose_pairs()
+    result = score_interleaved_holdout(est, gt)
+    assert result["alignment_fitting_pairs"] == 9
+    assert result["alignment_withheld_pairs"] == 3
+    assert result["withheld_position_rmse_m"] < 1e-10
+    assert result["withheld_rotation_mean_deg"] < 1e-8
+    assert result["alignment_scale_for_evaluation_only"] == pytest.approx(2.5)
+    assert result["withheld_gt_used_in_alignment_fit"] is False
+
+
+def test_changing_only_withheld_gt_does_not_change_fitted_scale():
+    from echo4d.sfm_evaluation import score_interleaved_holdout
+    est, gt = _twelve_pose_pairs()
+    first = score_interleaved_holdout(est, gt)
+    gt[4][:3, 3] += [0.6, 0, 0]  # index 4 is pre-frozen withheld set
+    changed = score_interleaved_holdout(est, gt)
+    assert changed["alignment_scale_for_evaluation_only"] == pytest.approx(
+        first["alignment_scale_for_evaluation_only"], abs=1e-12)
+    assert changed["withheld_position_rmse_m"] > 0.3
+
+
+def test_gt_holdout_requires_eight_pairs():
+    from echo4d.sfm_evaluation import score_interleaved_holdout
+    est, gt = _twelve_pose_pairs()
+    with pytest.raises(DataError, match=">=8"):
+        score_interleaved_holdout(est[:7], gt[:7])
+
+
+def test_evaluate_tum_chronological_pair_sort_before_holdout_split():
+    est, gt = _twelve_pose_pairs()
+    samples = [{"name": f"{i:06d}.png", "decoded_frame_index": i}
+               for i in range(12)]
+    sources = [{"t": float(i)} for i in range(12)]
+    trajectory = {"metric_scale_known": False, "poses": [
+        {"name": f"{i:06d}.png", "camera_to_world_row_major": est[i].tolist()}
+        for i in reversed(range(12))
+    ]}
+    result = evaluate_tum(trajectory, {"samples": samples}, sources,
+                          np.arange(12, dtype=float), np.stack(gt))
+    assert result["interleaved_holdout"]["status"] == "scored"
+    assert result["interleaved_holdout"]["withheld_position_rmse_m"] < 1e-10
+    assert result["interleaved_holdout"]["alignment_fitting_pairs"] == 9
