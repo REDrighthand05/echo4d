@@ -1,0 +1,65 @@
+name: TUM static room same-48-12 GT-vs-estimated pose A-B
+
+on:
+  pull_request:
+    paths:
+      - 'tools/tum_static_ab.py'
+      - 'tools/tum_sensor_metric_mesh.py'
+      - 'src/echo4d/metric_holdout.py'
+      - 'tests/python/test_tum_static_ab.py'
+      - '.github/workflows/tum-static-fair-ab.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tum-static-ab-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  same-measured-depth-A-B:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: requirements.lock
+      - name: Install CPU COLMAP and FFmpeg
+        run: |
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq colmap ffmpeg
+          colmap help
+      - name: Install pinned Python dependencies
+        run: |
+          python -m pip install -r requirements.lock
+          python -m pip install --no-deps -e .
+      - name: Check frozen 48/12 and failure contracts
+        run: |
+          python -m pytest -q tests/python/test_tum_static_ab.py tests/python/test_metric_holdout.py tests/python/test_tum_sensor_metric_mesh.py
+      - name: Full B experiment then A on exactly the same real sensor depth frames
+        env:
+          ECHO_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          python tools/tum_static_ab.py \
+            --work "$RUNNER_TEMP/tum-static-ab-v2" \
+            --report-dir "$GITHUB_WORKSPACE/artifacts/tum-static-ab-v2"
+      - name: Report actual PASS or FAIL
+        if: always()
+        run: |
+          if [ -f artifacts/tum-static-ab-v2/AB_SUMMARY.md ]; then
+            cat artifacts/tum-static-ab-v2/AB_SUMMARY.md >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo 'No AB_SUMMARY.md, see real error logs' >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Preserve true A and B mesh, 12-frame depths and failure evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tum-static-fair-ab-${{ github.run_id }}
+          path: artifacts/tum-static-ab-v2/
+          if-no-files-found: warn
+          retention-days: 14
