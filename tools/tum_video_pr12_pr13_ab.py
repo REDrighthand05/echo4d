@@ -214,6 +214,7 @@ def main() -> int:
         'source': 'TUM Freiburg1 XYZ, RGB ONLY for SfM',
         'groundtruth_used_in_sfm': False,
         'physical_scale_obtained': False,
+        'commands': [],
         'status': 'running',
         'locked': {'frame_count': FRAME_COUNT, 'fps': VIDEO_FPS,
                    'camera_model': 'PINHOLE', 'camera_params': CAMERA_PARAMS,
@@ -230,6 +231,7 @@ def main() -> int:
     except Exception as exc:
         report['status'] = 'failed'
         report['failure'] = {'type': type(exc).__name__, 'message': str(exc)[:1000]}
+        print(f"FROZEN_PR12_PR13_AB_FAILED: {type(exc).__name__}: {exc}", file=sys.stderr)
         code = 1
     finally:
         report['elapsed_seconds'] = round(time.monotonic()-start,3)
