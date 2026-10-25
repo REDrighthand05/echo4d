@@ -35,3 +35,44 @@ COLMAP 的 qvec / tvec 为 world-to-camera 刚体；echo4d 需要 camera-to-worl
 
 总档案：https://github.com/REDrighthand05/echo4d/issues/1
 上游开发任务：https://github.com/REDrighthand05/echo4d/issues/2
+
+
+## Unified top-level ECHO command (staged for maintainer review)
+
+The canonical adapter is the strict `src/echo4d/colmap.py` implementation
+from PR #6 **with** PR #24's missing-POINTS2D-row and disguised-NPZ rejection
+fixes. The ordinary `echo4d` command now exposes the **same adapter**:
+
+```bash
+python -m echo4d import-colmap \
+  --model ./colmap-text --images ./undistorted-rgb \
+  --depth ./registered-camera-z-npy \
+  --timestamps ./timestamps.csv \
+  --meters-per-colmap-unit 0.0509981667 \
+  --scale-source "three independent measured camera-Z depth anchor frames" \
+  --output ./echo-recording
+```
+
+The numerical value above is **only a demonstration from a specific documented
+TUM experiment**, not a scale to copy into another video. A new recording
+must have its own actual, independently measured scale.
+
+The `--timestamps` file has the precise CSV header `name,t` and one
+registered image name per row. The `--depth` directory must contain a
+matching, already-registered float32/float64 `.npy` camera-Z depth map for
+every COLMAP image, expressed in **metres**. For each camera transform
+COLMAP world-to-camera is inverted and its translation multiplied by
+`--meters-per-colmap-unit` exactly once; **rotation matrices and the
+already-metric sensor Z values are not multiplied**.
+
+Draft PR #19 uses a different two-column depth-index format, extra flags, and
+a competing implementation of the same `colmap.py`. This staging PR does
+NOT silently accept those incompatible arguments. Indexed-depth convenience
+is future explicitly tested migration, not a second hidden input contract.
+
+The separate measured-sensor bridge `src/echo4d/metric_rgbd.py` from PR #23
+still exists for the real SfM→scale→48-frame scene experiment and produces
+the same `echo-dataset-1` format. It must remain protected by its own
+48/12 non-leakage and sensor-scale checks before any interface consolidation
+into the above general-purpose importer. This is a Draft integration change,
+not approval to merge it into stable main.
