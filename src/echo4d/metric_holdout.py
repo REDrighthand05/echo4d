@@ -59,8 +59,17 @@ def evaluate_sensor_metric_holdouts(
     downsample: int = 4,
     max_gap_s: float = .03,
     max_depth_m: float = 4.,
+    *,
+    evaluation_poses: dict[str, list[float]] | None = None,
 ) -> dict:
     metric_poses = validate_holdout_split(split, source, metric)
+    # Explicit A-only injection of rigidly aligned TUM GT poses: never silently
+    # substitute a GT pose for the B-path estimator. Reject partial overrides.
+    if evaluation_poses is not None:
+        if set(evaluation_poses) != set(split["holdout"]):
+            raise DataError("A evaluation needs exactly the same 12 frozen GT view names")
+        for name in split["holdout"]:
+            rigid_matrix(evaluation_poses[name])
     dataset_root = Path(dataset_root).resolve()
     camera = load_recording(training_recording).camera
     cams = _cameras(Path(model_path) / "cameras.txt")
@@ -98,7 +107,8 @@ def evaluate_sensor_metric_holdouts(
         model_id = entry.get("camera_id")
         if model_id not in cams:
             raise DataError("Holdout pose references an unknown camera")
-        pose = rigid_matrix(entry["camera_to_metric_sfm_world"])
+        pose = rigid_matrix(evaluation_poses[name] if evaluation_poses is not None
+                            else entry["camera_to_metric_sfm_world"])
         measured = read_measured_depth(safe_path(dataset_root, relative),
                                       float(split["depth_numeric_units_per_meter"]),
                                       (original.height, original.width))
@@ -128,8 +138,10 @@ def evaluate_sensor_metric_holdouts(
         "version": "echo-b-mesh-heldout-1",
         "source_kind": "measured_registered_z_depth",
         "mesh_sha256": file_sha256(mesh_path),
-        "pose_kind": "RGB COLMAP + external three-frame sensor depth scale",
-        "gt_camera_poses_loaded": False,
+        "pose_kind": ("GT camera poses rigidly SE3-aligned to estimated metric world (A)"
+                      if evaluation_poses is not None else
+                      "RGB COLMAP + external three-frame sensor depth scale (B)"),
+        "gt_camera_poses_loaded": bool(evaluation_poses is not None),
         "holdout_frames": 12,
         "valid_measured_pixels": total_valid,
         "overlap_pixels": total_overlap,
