@@ -145,6 +145,18 @@ def execute(work: Path, artifact: Path) -> None:
                       f"Registered/sample: {scored['registered_images']}/{scored['sampled_images']}",
                       f"ATE RMSE (meters, after GT Sim3): {scored['ate_rmse_m_after_sim3']:.6f}",
                       f"Rotation mean error (degrees): {scored['rotation_mean_deg_after_sim3']:.4f}"]
+        if scored is not None:
+            separate = scored.get("interleaved_holdout", {})
+            if separate.get("status") == "scored":
+                lines += [
+                    "Interleaved 25% GT holdout (never used to fit eval Sim3):",
+                    f"Fit/withheld pairs: {separate['alignment_fitting_pairs']}/{separate['alignment_withheld_pairs']}",
+                    f"Withheld ATE RMSE (m): {separate['withheld_position_rmse_m']:.6f}",
+                    f"Withheld rotation mean error (deg): {separate['withheld_rotation_mean_deg']:.4f}",
+                    "Same-scene interleaving is NOT independent new-scene validation."
+                ]
+            else:
+                lines += [f"Interleaved GT holdout unavailable: {separate.get('reason', 'not evaluated')}"]
         if receipt.get("failure"):
             lines += [f"Failure: {receipt['failure']['type']}: {receipt['failure']['message']}"]
         (artifact / "SUMMARY.md").write_text("\n\n".join(lines) + "\n", encoding="utf-8")
