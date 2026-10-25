@@ -101,6 +101,15 @@ def build_parser() -> argparse.ArgumentParser:
     tum.add_argument("--max-pose-gap", type=float, default=.1)
     tum.add_argument("--max-color-gap", type=float, default=.03)
     tum.add_argument("--world-up", choices=["y","z"], default="y", help="y preserves axes; z rotates input Z-up to viewer Y-up")
+    colmap = sub.add_parser("import-colmap", help="Convert COLMAP TEXT poses + external metric depth")
+    colmap.add_argument("dataset", type=Path, help="Root directory for image/depth files and mapping indexes")
+    colmap.add_argument("--output", required=True, type=Path)
+    colmap.add_argument("--colmap-text", required=True, type=Path, help="Directory containing cameras.txt and images.txt")
+    colmap.add_argument("--depth-index", required=True, help="Two-column file: image_name depth_path")
+    colmap.add_argument("--timestamps", required=True, help="Two-column file: image_name timestamp_seconds")
+    colmap.add_argument("--depth-scale", type=float, default=1.0, help="Raw depth divider to convert values to metres")
+    colmap.add_argument("--scale-evidence", required=True,
+                        help="Human-readable independent metric-scale source (required)")
     return parser
 
 
@@ -125,9 +134,12 @@ def main(argv: list[str] | None = None) -> int:
             with output_transaction(args.output) as output:
                 write_json(output / "recording.echo.json", preview_recording(recording))
             result = {"output":str(args.output.resolve())}
-        else:
+        elif args.command == "import-tum":
             from .tum import import_tum
             result = import_tum(args)
+        else:
+            from .colmap import import_colmap
+            result = import_colmap(args)
         print(json.dumps(result, ensure_ascii=False, allow_nan=False))
         return 0
     except (DataError, OSError, ValueError, MemoryError) as error:

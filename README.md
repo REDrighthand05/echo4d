@@ -40,6 +40,7 @@ python -m http.server 8080 --bind 127.0.0.1 --directory dist
 | `src/echo4d/fusion.py` | 有界 CPU TSDF、观测支持过滤、Marching Cubes |
 | `src/echo4d/model.py` | 输入验证、逐帧读取、路径限制、输入 SHA-256 |
 | `src/echo4d/tum.py` | TUM 时间关联、SLERP 旋转插值、标定保持降采样 |
+| `src/echo4d/colmap.py` | COLMAP TEXT 位姿 + 外部米制深度转换，显式尺度依据 |
 | `src/echo4d/output.py` | 二进制 PLY、证据数组、场景导出、失败回滚 |
 | `src/echo4d/evaluation.py` | 与独立、已对齐参考点集比较 |
 | `dist/` | 无第三方运行时依赖的浏览器检查台；WebGL / Canvas |
@@ -57,6 +58,14 @@ echo4d reconstruct outputs/tum-input/recording.json --output outputs/tum-result 
 ```
 
 使用 TUM 提供的已知真值轨迹，不是 SLAM 定位评估；内参为官方格式页列出的 ROS 默认值。深度除以 5000 换算为米，RGB 已配准。`--world-up z` 将输入 Z-up 旋转为显示 Y-up，保持右手坐标。其他设备不要照抄标定和坐标参数。
+
+若你已有 COLMAP TEXT 位姿与外部米制深度（非 TUM 索引格式），可用：
+
+```bash
+echo4d import-colmap datasets/my-seq --colmap-text datasets/my-seq/colmap_text --timestamps timestamps.txt --depth-index depth-index.txt --scale-evidence "independent sensor depth anchors" --output outputs/colmap-input
+```
+
+详细约束见 [COLMAP 导入说明](docs/COLMAP_IMPORT.md)。
 
 本次结果：**60 帧 → 10,810 顶点 / 18,497 三角形**；零面积面 0、非流形边 0、边界边 3,007。存在孔洞，不是封闭可打印模型。PLY SHA-256：`8380f4cf2e3257ab58217cbd96322870794c94022c6293200a1750c33740bffa`。完整报告在 `docs/validation/tum-report.json`。
 
