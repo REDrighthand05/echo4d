@@ -60,6 +60,8 @@ def _cameras(path: Path) -> dict[int, Camera]:
             if camera_id <= 0 or camera_id in cameras:
                 raise DataError("Duplicate or invalid COLMAP camera ID")
             cameras[camera_id] = Camera(width, height, fx, fy, cx, cy)
+        except DataError:
+            raise
         except (ValueError, TypeError, OverflowError) as error:
             raise DataError(f"Invalid COLMAP camera entry: {line[:120]}") from error
     if not cameras:
@@ -98,6 +100,8 @@ def _images(path: Path) -> list[tuple[str, int, np.ndarray]]:
             pose = np.eye(4, dtype=np.float64)
             pose[:3, :3] = r_wc.T
             pose[:3, 3] = -(r_wc.T @ translation)
+        except DataError:
+            raise
         except (ValueError, TypeError) as error:
             raise DataError(f"Invalid COLMAP pose line: {line[:120]}") from error
         ids.add(image_id)
