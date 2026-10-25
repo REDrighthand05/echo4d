@@ -72,5 +72,5 @@ def test_missing_depth_fails_before_mesh(tmp_path):
     make_index(tmp_path)
     (tmp_path / 'depth/00004.png').unlink()
     source = fake_source()
-    with pytest.raises(DataError, match='Duplicate or absent depth source'):
+    with pytest.raises(DataError, match='Missing frame file or path outside dataset'):
         match_sensor_inputs(tmp_path, source, frozen_protocol(source))
