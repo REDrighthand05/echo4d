@@ -111,6 +111,17 @@ def build_parser() -> argparse.ArgumentParser:
     colmap.add_argument("--scale-source", required=True,
                         help="Traceable independent real-world measurement source, not evaluation GT")
     colmap.add_argument("--output", required=True, type=Path)
+    indexed = sub.add_parser("import-colmap-indexed", help="Explicit raw-depth index/unit conversion before the strict COLMAP importer")
+    indexed.add_argument("--model", required=True, type=Path)
+    indexed.add_argument("--images", required=True, type=Path)
+    indexed.add_argument("--depth-root", required=True, type=Path, help="Root containing indexed original camera-Z files")
+    indexed.add_argument("--depth-index", required=True, type=Path, help="CSV with exact header name,depth_path")
+    indexed.add_argument("--depth-unit", required=True, help="Known original sensor unit, e.g. millimeter")
+    indexed.add_argument("--depth-units-per-meter", required=True, type=float, help="Raw depth units for one metre (1000 for mm)")
+    indexed.add_argument("--timestamps", required=True, type=Path, help="Exact name,t CSV (seconds)")
+    indexed.add_argument("--meters-per-colmap-unit", required=True, type=float)
+    indexed.add_argument("--scale-source", required=True, help="Independent physical scale evidence")
+    indexed.add_argument("--output", required=True, type=Path)
     return parser
 
 
@@ -136,10 +147,13 @@ def main(argv: list[str] | None = None) -> int:
                 write_json(output / "recording.echo.json", preview_recording(recording))
             result = {"output":str(args.output.resolve())}
         elif args.command == "import-colmap":
-            # One strict adapter. Uses #6 + #24 hardening, NOT the incompatible
-            # second converter implementation from draft PR #19.
+            # The only strict COLMAP pose + metric-depth importer.
             from .colmap import import_colmap
             result = import_colmap(args)
+        elif args.command == "import-colmap-indexed":
+            # Explicit prep only; delegates final validation/import to core.
+            from .colmap_indexed_depth import import_colmap_indexed_depth
+            result = import_colmap_indexed_depth(args)
         else:
             from .tum import import_tum
             result = import_tum(args)
