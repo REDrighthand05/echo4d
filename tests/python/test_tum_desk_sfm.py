@@ -3,7 +3,12 @@ from __future__ import annotations
 import io
 import tarfile
 from pathlib import Path
+import sys
 import pytest
+
+# Both standalone public-data workflow and repository-wide verify.py must collect
+# these tests. The experiment runner is a script in tools/, not an installed module.
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'tools'))
 
 from echo4d.model import DataError
 import tum_desk_sfm as bench
