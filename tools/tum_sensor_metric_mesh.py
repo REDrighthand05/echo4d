@@ -27,6 +27,10 @@ from tum_public_roundtrip import ROOT, PINNED_ARCHIVE_SHA256
 # Fixed in Issue #15 before this real experiment executes.
 SELECTED_COUNT = 60
 HOLDOUT_INDICES = (4, 5, 9, 10, 14, 19, 24, 25, 29, 34, 35, 55)
+# AB-V2-final: pre-registered in Issue #28 before any comparative CI.
+# GT for frame_00025 is genuinely absent at the existing interpolation tolerance.
+FAIR_AB_V2_SELECTED_INDICES = tuple(i for i in range(61) if i != 25)
+FAIR_AB_V2_HOLDOUT_INDICES = (4, 5, 9, 10, 14, 19, 24, 26, 29, 34, 35, 55)
 ANCHOR_INDICES = (15, 45, 75)
 MAX_RGB_DEPTH_GAP_S = .03
 DOWNSAMPLE = 4
@@ -40,23 +44,29 @@ MAX_DEPTH_M = 4.0
 MIN_OBSERVATIONS = 2
 
 
-def split_names(source: list[dict]) -> tuple[list[str], list[str]]:
+def split_names(source: list[dict], *, fair_ab_v2: bool = False) -> tuple[list[str], list[str]]:
     if len(source) != 90:
         raise DataError("Expected 90 fixed TUM RGB source entries")
-    if len(set(HOLDOUT_INDICES)) != 12 or any(i in HOLDOUT_INDICES for i in ANCHOR_INDICES):
+    indices = FAIR_AB_V2_HOLDOUT_INDICES if fair_ab_v2 else HOLDOUT_INDICES
+    selected_indices = FAIR_AB_V2_SELECTED_INDICES if fair_ab_v2 else tuple(range(SELECTED_COUNT))
+    if (len(selected_indices) != SELECTED_COUNT or
+            len(set(selected_indices)) != SELECTED_COUNT or
+            not set(indices).issubset(selected_indices)):
+        raise DataError("AB source selection is invalid")
+    if len(set(indices)) != 12 or any(i in indices for i in ANCHOR_INDICES):
         raise DataError("Pre-registered holdout split is invalid")
-    selected = [entry["name"] for entry in source[:SELECTED_COUNT]]
+    selected = [source[i]["name"] for i in selected_indices]
     if len(set(selected)) != SELECTED_COUNT:
         raise DataError("Duplicate selected source frame name")
-    holdout = [selected[i] for i in HOLDOUT_INDICES]
+    holdout = [source[i]["name"] for i in indices]
     training = [s for s in selected if s not in set(holdout)]
     if len(training) != 48 or len(holdout) != 12:
         raise DataError("Pre-registered train/holdout counts changed")
     return training, holdout
 
 
-def build_split(source: list[dict], tum: Path) -> dict:
-    training, holdout = split_names(source)
+def build_split(source: list[dict], tum: Path, *, fair_ab_v2: bool = False) -> dict:
+    training, holdout = split_names(source, fair_ab_v2=fair_ab_v2)
     depth_rows = read_rows(tum / "depth.txt", 2)
     times = np.asarray([float(row[0]) for row in depth_rows])
     mapping = {row["name"]: row for row in source}
@@ -78,7 +88,10 @@ def build_split(source: list[dict], tum: Path) -> dict:
         "depth_numeric_units_per_meter": 5000,
         "train": train, "holdout": holdout,
         "protocol": {"source_rgb_frames": 90, "selected_frames": SELECTED_COUNT,
-                     "holdout_indices": HOLDOUT_INDICES,
+                     "holdout_indices": FAIR_AB_V2_HOLDOUT_INDICES if fair_ab_v2 else HOLDOUT_INDICES,
+                     "ab_version": "AB-V2-final" if fair_ab_v2 else "legacy-B-V1",
+                     "selected_source_indices": FAIR_AB_V2_SELECTED_INDICES if fair_ab_v2 else tuple(range(SELECTED_COUNT)),
+                     "missing_gt_source_index_predeclared_excluded": 25 if fair_ab_v2 else None,
                      "external_scale_anchor_indices": ANCHOR_INDICES,
                      "max_rgb_depth_gap_s": MAX_RGB_DEPTH_GAP_S},
     }
@@ -144,7 +157,7 @@ def experiment(args: argparse.Namespace, report: dict) -> None:
     model = sfm/sfm_report["result"]["sfm_model_dir"]
     source = metric_report["test_video"]["source_rgb_manifest"]
     tum = work/"unpacked"/ROOT
-    split = build_split(source,tum)
+    split = build_split(source,tum,fair_ab_v2=getattr(args, 'fair_ab_v2', False))
     split_path = target/"b-48train-12holdout.json"
     split_path.write_text(json.dumps(split,ensure_ascii=False,indent=2)+"\n",encoding="utf-8")
     metric_path = target/"metric"/"metric-trajectory-from-sensor.json"
