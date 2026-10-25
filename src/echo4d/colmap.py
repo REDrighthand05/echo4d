@@ -69,6 +69,21 @@ def _cameras(path: Path) -> dict[int, Camera]:
     return cameras
 
 
+def _validate_points2d(line: str, line_number: int) -> None:
+    """Check the paired row before consuming it; an empty observation row is valid."""
+    fields = line.split()
+    if len(fields) % 3:
+        raise DataError(f"Invalid COLMAP POINTS2D row at line {line_number}: expected x y point3D_id triples")
+    for index in range(0, len(fields), 3):
+        try:
+            x, y = float(fields[index]), float(fields[index + 1])
+            point_id = int(fields[index + 2])
+        except ValueError as error:
+            raise DataError(f"Invalid COLMAP POINTS2D values at line {line_number}") from error
+        if not math.isfinite(x) or not math.isfinite(y) or point_id < -1:
+            raise DataError(f"Invalid COLMAP POINTS2D values at line {line_number}")
+
+
 def _images(path: Path) -> list[tuple[str, int, np.ndarray]]:
     # A pose line is followed by one POINTS2D line, possibly empty.
     lines = _lines(path)
@@ -85,7 +100,8 @@ def _images(path: Path) -> list[tuple[str, int, np.ndarray]]:
             raise DataError("Invalid COLMAP image pose entry")
         if cursor >= len(lines):
             raise DataError("COLMAP image pose is missing its POINTS2D line")
-        cursor += 1  # consume POINTS2D, which may be empty
+        _validate_points2d(lines[cursor], cursor + 1)
+        cursor += 1
         try:
             image_id = int(fields[0])
             q = np.array([float(v) for v in fields[1:5]], dtype=np.float64)
@@ -174,6 +190,10 @@ def import_colmap(args: argparse.Namespace) -> dict:
             if image.size != (camera.width, camera.height):
                 raise DataError(f"Image size differs from COLMAP camera: {name}")
         depth = np.load(depth_file, allow_pickle=False, mmap_mode="r")
+        if not isinstance(depth, np.ndarray):
+            if isinstance(depth, np.lib.npyio.NpzFile):
+                depth.close()
+            raise DataError(f"Depth must be a single numeric NPY array, not an archive: {depth_name}")
         if depth.shape != (camera.height, camera.width) or depth.dtype.kind != "f":
             raise DataError(f"Depth must be floating-point metric Z, camera-sized NPY: {depth_name}")
         if not np.isfinite(depth).all() or np.any(depth < 0) or np.any(depth > 100):
