@@ -63,7 +63,7 @@ def extract_source_pts(video: Path, image_dir: Path, max_frames: int,
     run_step(
         ['ffmpeg', '-hide_banner', '-loglevel', 'error', '-nostdin',
          '-i', str(video), '-map', '0:v:0', '-an', '-sn',
-         '-vf', f'select=not(mod(n\,{step}))',
+         '-vf', f'select=not(mod(n\\,{step}))',
          '-fps_mode', 'passthrough', '-frames:v', str(len(indices)),
          '-start_number', '0', '-f', 'image2',
          str(image_dir / 'frame_%05d.png')],
