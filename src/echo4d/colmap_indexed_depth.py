@@ -56,7 +56,7 @@ def _depth_as_metres(path: Path, camera_shape: tuple[int, int],
             if image.size != (camera_shape[1], camera_shape[0]):
                 raise DataError(f"Indexed depth shape does not match COLMAP camera: {path.name}")
             raw = np.asarray(image)
-        if raw.dtype.kind not in "ui":
+        if raw.ndim != 2 or raw.dtype.kind not in "ui":
             raise DataError(f"PNG indexed depth must be single-channel integer camera-Z: {path.name}")
     else:
         raw = np.load(path, allow_pickle=False, mmap_mode="r")
