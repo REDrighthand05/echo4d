@@ -1,0 +1,7 @@
+numpy<3,>=1.26
+scipy<2,>=1.11
+Pillow<14,>=10.1
+scikit-image==0.25.2
+
+[test]
+pytest==8.4.2
