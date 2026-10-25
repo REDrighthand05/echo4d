@@ -2,7 +2,8 @@
 
 A: original TUM ground-truth camera poses + SAME 48 measured depth maps.
 B: estimated RGB COLMAP poses + 3 *measured sensor* scale anchors + SAME depths.
-Only opens full TUM groundtruth AFTER B was built and scored. The 12 withheld Z
+Only injects GT poses into A AFTER B Mesh/scoring completes; the B anchor
+stage may read GT earlier strictly for post-calibration diagnostics. The 12 withheld Z
 frames are never used to build either Mesh or optimize B's metric scale.
 This is same-sensor view consistency, NOT independent scanned-surface GT.
 """
@@ -46,6 +47,10 @@ def make_A_recording(b_record: Path, provenance: Path, split: dict,
         raise DataError("B input provenance and frozen training names disagree")
     if len({r["name"] for r in receipts}) != 48:
         raise DataError("Duplicated B training source name")
+    # Fail before publishing or altering any A pose if GT has missing entries.
+    missing = [r["name"] for r in receipts if r["name"] not in gt]
+    if missing:
+        raise DataError(f"GT unavailable for frozen training frame {missing[0]}")
     for frame, receipt in zip(b["frames"], receipts):
         name = receipt["name"]
         if name not in gt:
@@ -156,7 +161,7 @@ def run(args: argparse.Namespace, report: dict) -> None:
     b_receipt = {"git_sha": report["git_sha"], "status": "running"}
     # B mesh and 12-view heldout run finishes BEFORE this function reads GT.
     execute_B(args, b_receipt)
-    report["B_path_completed_before_A_gt_read"] = True
+    report["B_mesh_scored_before_A_gt_pose_injection"] = True
     report["B_mesh_sha256"] = b_receipt["b_mesh_sha256"]
     report["B_score"] = b_receipt["holdout_evaluation"]
     report["B_split_sha256"] = b_receipt["b_fixed_split_sha256"]
