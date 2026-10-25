@@ -64,6 +64,63 @@ def _probe_timestamps(video: Path, report: dict, ffprobe: str) -> list[float]:
     return values
 
 
+def _select_colmap_model(sparse: Path, output: Path, lookup: dict,
+                         report: dict, colmap: str) -> list[dict]:
+    """Select the largest valid disconnected COLMAP model, not blindly sparse/0.
+
+    All candidates, including rejected ones, remain visible in report.json.
+    Ties use numeric model ID ascending for deterministic selection. Never fuse
+    separately reconstructed coordinate systems into one trajectory.
+    """
+    candidates = sorted(
+        (p for p in sparse.iterdir()
+         if p.is_dir() and not p.is_symlink() and p.name.isascii() and p.name.isdigit()),
+        key=lambda p: (int(p.name), p.name))
+    if not candidates:
+        raise DataError("COLMAP mapper produced no numbered sparse models")
+    if len(candidates) > 32:
+        raise DataError("COLMAP produced more than 32 sparse models; manual review required")
+    report["model_candidates"] = []
+    best: tuple[int, int, str, list[dict]] | None = None
+    for model_dir in candidates:
+        entry: dict = {"model_id": model_dir.name, "status": "rejected"}
+        report["model_candidates"].append(entry)
+        try:
+            text_dir = output / f"model_txt_{model_dir.name}"
+            text_dir.mkdir()
+            _exec(f"colmap_model_converter_{model_dir.name}",
+                  [colmap, "model_converter", "--input_path", str(model_dir),
+                   "--output_path", str(text_dir), "--output_type", "TXT"], report)
+            cameras = _cameras(text_dir / "cameras.txt")
+            images = _images(text_dir / "images.txt")
+            poses = []
+            for name, camera_id, pose in images:
+                if name not in lookup or camera_id not in cameras:
+                    raise DataError("COLMAP model references unknown image or camera")
+                if (not np.isfinite(pose).all() or
+                        not np.allclose(pose[:3, :3].T @ pose[:3, :3], np.eye(3), atol=1e-5) or
+                        not np.isclose(np.linalg.det(pose[:3, :3]), 1, atol=1e-5)):
+                    raise DataError("COLMAP pose is not a finite right-handed rigid transform")
+                poses.append({"name": name, "camera_id": camera_id,
+                              "source_pts_seconds": lookup[name]["source_pts_seconds"],
+                              "camera_to_world_row_major": pose.tolist()})
+            entry["registered_images"] = len(poses)
+            if len(poses) < 2:
+                entry["reason"] = "fewer than two registered frames"
+                continue
+            poses.sort(key=lambda p: p["source_pts_seconds"])
+            entry["status"] = "valid"
+            key = (-len(poses), int(model_dir.name), model_dir.name)
+            if best is None or key < best[:3]:
+                best = (*key, poses)
+                report["selected_model_id"] = model_dir.name
+        except (DataError, OSError, ValueError) as exc:
+            entry["reason"] = f"{type(exc).__name__}: {str(exc)[:300]}"
+    if best is None:
+        raise DataError("No valid COLMAP model with >=2 registered frames; see model_candidates")
+    return best[3]
+
+
 def run(video: Path, output: Path, *, max_frames: int = 120,
         ffprobe: str = "ffprobe", ffmpeg: str = "ffmpeg", colmap: str = "colmap") -> dict:
     if not 2 <= max_frames <= 500:
@@ -111,30 +168,8 @@ def run(video: Path, output: Path, *, max_frames: int = 120,
             "--database_path", str(database), "--SiftMatching.use_gpu", "0"], report)
         _exec("colmap_mapper", [colmap, "mapper", "--database_path", str(database),
             "--image_path", str(image_dir), "--output_path", str(sparse)], report)
-        model_dir = sparse / "0"
-        if not model_dir.is_dir():
-            raise DataError("COLMAP created no sparse/0 reconstruction")
-        text_dir = output / "model_txt"
-        text_dir.mkdir()
-        _exec("colmap_model_converter", [colmap, "model_converter",
-            "--input_path", str(model_dir), "--output_path", str(text_dir),
-            "--output_type", "TXT"], report)
-        cameras = _cameras(text_dir / "cameras.txt")
-        images = _images(text_dir / "images.txt")
         lookup = {s["name"]: s for s in samples}
-        if len(images) < 2:
-            raise DataError("COLMAP registered fewer than two frames")
-        poses = []
-        for name, camera_id, pose in images:
-            if name not in lookup or camera_id not in cameras:
-                raise DataError("COLMAP pose references unknown image or camera")
-            if not np.isfinite(pose).all() or not np.allclose(
-                    pose[:3, :3].T @ pose[:3, :3], np.eye(3), atol=1e-5):
-                raise DataError("COLMAP pose is not a finite rigid transform")
-            poses.append({"name": name, "camera_id": camera_id,
-                          "source_pts_seconds": lookup[name]["source_pts_seconds"],
-                          "camera_to_world_row_major": pose.tolist()})
-        poses.sort(key=lambda x: x["source_pts_seconds"])
+        poses = _select_colmap_model(sparse, output, lookup, report, colmap)
         trajectory = {"version": "echo-colmap-trajectory-1",
                       "coordinate_system": "COLMAP arbitrary world axes",
                       "translation_unit": "unknown_colmap_units",
