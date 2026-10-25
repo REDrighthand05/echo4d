@@ -1,0 +1,67 @@
+name: TUM desk full 48-train 12-holdout sensor mesh
+on:
+  pull_request:
+    paths:
+      - 'tools/tum_desk_full_mesh.py'
+      - 'tests/python/test_tum_desk_full_mesh.py'
+      - '.github/workflows/tum-desk-full-mesh.yml'
+      - 'docs/DESK_FULL_MESH.md'
+      - 'tools/tum_desk_sfm.py'
+      - 'src/echo4d/metric_anchor.py'
+      - 'src/echo4d/metric_rgbd.py'
+      - 'src/echo4d/metric_holdout.py'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: desk-metric-mesh-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  desk-frozen-dense-geometry:
+    runs-on: ubuntu-latest
+    timeout-minutes: 65
+    steps:
+      - uses: actions/checkout@v4
+      - name: Record actual tested checkout
+        run: echo "ECHO_TESTED_CHECKOUT_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: requirements.lock
+      - name: Install CPU COLMAP and FFmpeg
+        timeout-minutes: 8
+        run: |
+          sudo apt-get -o Acquire::Retries=1 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20 update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=1 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20 install -y -qq colmap ffmpeg
+          colmap help
+      - name: Install locked source and test dependencies
+        run: |
+          python -m pip install -r requirements.lock
+          python -m pip install --no-deps -e .
+      - name: Assert frozen desk roles and fail-closed pairing
+        run: |
+          PYTHONPATH="$GITHUB_WORKSPACE/tools" python -m pytest -q tests/python/test_tum_desk_full_mesh.py
+      - name: Download pre-pinned desk and run RGB SfM through physical-sensor Mesh scoring
+        env:
+          ECHO_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          python tools/tum_desk_full_mesh.py \
+            --work "$RUNNER_TEMP/tum-desk-full-mesh" \
+            --report-dir "$GITHUB_WORKSPACE/artifacts/tum-desk-full-mesh"
+      - name: Preserve summary even on research-gate failure
+        if: always()
+        run: |
+          if [ -f artifacts/tum-desk-full-mesh/SUMMARY.md ]; then
+            cat artifacts/tum-desk-full-mesh/SUMMARY.md >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo 'No summary generated; inspect setup/tests.' >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Upload original Mesh, per-view metrics and failure artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tum-desk-full-mesh-${{ github.run_id }}
+          path: artifacts/tum-desk-full-mesh/
+          if-no-files-found: warn
+          retention-days: 14
