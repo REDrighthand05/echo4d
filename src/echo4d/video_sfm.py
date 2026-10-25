@@ -20,7 +20,7 @@ import time
 
 import numpy as np
 
-from .colmap import _cameras, _images
+from .colmap import _images
 from .model import DataError, file_sha256, safe_path
 
 MAX_INPUT_BYTES = 2 * 1024**3
@@ -161,6 +161,38 @@ def _estimated_track(text_model: Path, timestamps: dict[str,float]) -> tuple[lis
     return frames,len(registered)
 
 
+def _model_camera_ids(path: Path) -> set[int]:
+    """Check model-local camera IDs without narrowing the existing SfM model choices.
+
+    In contrast, the downstream measured-depth bridge still intentionally
+    requires undistorted PINHOLE inputs. SfM's SIMPLE_RADIAL default is kept.
+    """
+    if not path.is_file() or path.stat().st_size > 8 * 1024**2:
+        raise DataError('Missing or oversized COLMAP cameras.txt')
+    ids: set[int] = set()
+    expected = {'PINHOLE': 4, 'SIMPLE_PINHOLE': 3, 'SIMPLE_RADIAL': 4}
+    for line in path.read_text(encoding='utf-8').splitlines():
+        if not line.strip() or line.lstrip().startswith('#'):
+            continue
+        parts = line.split()
+        try:
+            camera_id = int(parts[0])
+            model = parts[1]
+            width, height = int(parts[2]), int(parts[3])
+            params = [float(v) for v in parts[4:]]
+        except (IndexError, TypeError, ValueError) as exc:
+            raise DataError('Invalid COLMAP cameras.txt record') from exc
+        if (camera_id <= 0 or camera_id in ids or model not in expected or
+                len(params) != expected[model] or
+                width < 1 or height < 1 or not all(math.isfinite(v) for v in params) or
+                params[0] <= 0 or (model == 'PINHOLE' and params[1] <= 0)):
+            raise DataError('Invalid COLMAP camera calibration or duplicate camera ID')
+        ids.add(camera_id)
+    if not ids:
+        raise DataError('COLMAP model has no valid cameras')
+    return ids
+
+
 def select_sparse_model(sparse: Path, target: Path, timestamps: dict[str, float],
                         receipt: dict) -> tuple[Path, list[dict], int]:
     """Select the most registered *valid* COLMAP model; preserve all failed candidates.
@@ -189,7 +221,7 @@ def select_sparse_model(sparse: Path, target: Path, timestamps: dict[str, float]
             run_step(['colmap', 'model_converter', '--input_path', str(candidate),
                       '--output_path', str(output), '--output_type', 'TXT'],
                      receipt, f'colmap-text-{candidate.name}', 90)
-            cameras = _cameras(output / 'cameras.txt')
+            cameras = _model_camera_ids(output / 'cameras.txt')
             frames, count = _estimated_track(output, timestamps)
             if any(frame['camera_id'] not in cameras for frame in frames):
                 raise DataError('COLMAP model references a missing camera calibration')
