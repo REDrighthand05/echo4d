@@ -1,0 +1,88 @@
+name: PR34 issue A same-mesh evaluator cross-check
+
+on:
+  pull_request:
+    paths:
+      - 'tools/cross_score_pr34_a.py'
+      - 'tests/python/test_cross_score_pr34_a.py'
+      - '.github/workflows/pr34-score-crosscheck.yml'
+      - 'docs/PR34_ISSUE_A.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr34-issue-a-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  frozen-B-V1-same-mesh-three-evaluators:
+    runs-on: ubuntu-latest
+    timeout-minutes: 70
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Record actual tested checkout
+        run: echo "ECHO_TESTED_CHECKOUT_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: requirements.lock
+      - name: Install pinned dependencies and CPU COLMAP
+        timeout-minutes: 9
+        run: |
+          sudo apt-get -o Acquire::Retries=1 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20 update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=1 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20 install -y -qq colmap ffmpeg
+          python -m pip install -r requirements.lock
+          python -m pip install --no-deps -e .
+          colmap help > /dev/null
+      - name: Run offline score invariants and independent camera-axis oracle
+        run: python -m pytest tests/python/test_cross_score_pr34_a.py -q
+      - name: Extract frozen evaluator code from exact PR25 and PR26 commits
+        run: |
+          git cat-file -e '072186fe7989efb300759b9e5442e2ca56d208f7^{commit}'
+          git cat-file -e '454eaaa8d2d99d19adbeb40210930b360d6d219a^{commit}'
+          git show 072186fe7989efb300759b9e5442e2ca56d208f7:src/echo4d/metric_holdout.py > "$RUNNER_TEMP/legacy25.py"
+          git show 454eaaa8d2d99d19adbeb40210930b360d6d219a:tools/tum_sensor_mesh_holdout.py > "$RUNNER_TEMP/legacy26.py"
+          sha256sum "$RUNNER_TEMP/legacy25.py" "$RUNNER_TEMP/legacy26.py"
+      - name: Reconstruct the one real B-V1 source, 48 training frames and 12 held-out depths
+        env:
+          ECHO_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          python tools/tum_sensor_metric_mesh.py \
+            --work "$RUNNER_TEMP/pr34-a-B-V1" \
+            --report-dir "$GITHUB_WORKSPACE/artifacts/pr34-a-source"
+      - name: Run frozen #25, frozen #26 and integrated #34 against that exact same mesh
+        run: |
+          python tools/cross_score_pr34_a.py \
+            --work "$RUNNER_TEMP/pr34-a-B-V1" \
+            --report-dir "$GITHUB_WORKSPACE/artifacts/pr34-a-source" \
+            --legacy25 "$RUNNER_TEMP/legacy25.py" \
+            --legacy26 "$RUNNER_TEMP/legacy26.py" \
+            --output "$GITHUB_WORKSPACE/artifacts/pr34-a-cross"
+      - name: Always show honest machine outcome
+        if: always()
+        run: |
+          if [ -f artifacts/pr34-a-cross/SUMMARY.md ]; then
+            cat artifacts/pr34-a-cross/SUMMARY.md >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Cross-score not completed; inspect setup or B-V1 pipeline logs." >> "$GITHUB_STEP_SUMMARY"
+          fi
+          echo "Actual tested checkout: $ECHO_TESTED_CHECKOUT_SHA" >> "$GITHUB_STEP_SUMMARY"
+      - name: Archive same-Mesh inputs, twelve-frame deltas and failure receipts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr34-a-cross-score-${{ github.run_id }}
+          path: |
+            artifacts/pr34-a-cross/
+            artifacts/pr34-a-source/report.json
+            artifacts/pr34-a-source/mesh-heldout-depth.json
+            artifacts/pr34-a-source/b-48train-12holdout.json
+            artifacts/pr34-a-source/metric/metric-trajectory-from-sensor.json
+            artifacts/pr34-a-source/mesh/mesh.ply
+          if-no-files-found: warn
+          retention-days: 14
