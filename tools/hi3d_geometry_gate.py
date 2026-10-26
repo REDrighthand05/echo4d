@@ -120,11 +120,24 @@ def audit(manifest,root,count=3000):
     transformed=(local@m[:3,:3].T +m[:3,3],faces)
     before=score(coarse,reference,count)
     after=score(transformed,reference,count)
-    passed=(after["measurements_to_surface_rmse_m"]<=before["measurements_to_surface_rmse_m"]+.005 and
-            after["measurement_coverage"]>=before["measurement_coverage"]-.02)
-    return {"version":"echo-hi3d-audit-report-1","status":"cpu_contract_evaluated",
+    # V2 synthetic-only screening, frozen before any real Hi3D evaluation:
+    # observed points must remain close to the candidate, AND the candidate
+    # must not add a large area unsupported by the independent measurements.
+    # Unsupported geometry is inconclusive, not proof that a plausible unseen
+    # back surface is false. The optional AI layer remains separate.
+    observed_ok=(after["measurements_to_surface_rmse_m"]<=before["measurements_to_surface_rmse_m"]+.005 and
+                 after["measurement_coverage"]>=before["measurement_coverage"]-.02)
+    surface_ok=(after["surface_to_measurements_rmse_m"]<=before["surface_to_measurements_rmse_m"]+.005 and
+                after["surface_precision"]>=before["surface_precision"]-.02)
+    passed=observed_ok and surface_ok
+    return {"version":"echo-hi3d-audit-report-2","status":"cpu_contract_evaluated",
             "hi3d_gpu_was_run":False,"physical_truth_certified":False,
             "candidate_passes_approximate_holdout_check":bool(passed),
+            "observed_measurement_consistency_screen_passed":bool(observed_ok),
+            "candidate_surface_support_screen_passed":bool(surface_ok),
+            "unsupported_surface_is_inconclusive_not_proven_false":True,
+            "screening_thresholds":{"max_rmse_regression_m":.005,
+                                    "max_coverage_or_precision_drop":.02},
             "input_manifest_sha256":file_hash(mf),
             "source_sha256":{k:file_hash(v) for k,v in assets.items()},
             "alignment_provenance_claim_not_cryptographically_verified":spec["alignment_provenance"],
@@ -134,6 +147,7 @@ def audit(manifest,root,count=3000):
             "limitations":["This is a CPU contract test, not Hi3D inference or GLB conversion",
                            "The caller must independently prove alignment and holdout separation",
                            "Mesh surface sampling approximates distances; success is not history certification",
+                           "A support-screen failure may be a plausible unobserved back surface, not proof of incorrect geometry",
                            "AI-generated unseen geometry must remain a separately labelled optional layer"]}
 
 def main():
