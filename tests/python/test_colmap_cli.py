@@ -25,7 +25,8 @@ def test_cli_routes_to_existing_undistorted_camera_z_adapter(tmp_path):
     assert a.command=="import-colmap"
     assert a.meters_per_colmap_unit == .05
     assert a.scale_source.startswith("3 independently measured")
-    assert not hasattr(a, "depth_index")  # one contract, not a silent incompatible alias
+    assert a.depth_index is None  # opt-in index, ordinary metric NPY remains the default
+    assert a.depth_scale is None  # never implicitly convert already-metric camera Z
 
 
 def test_refuse_unknown_or_zero_scale_even_before_file_import(tmp_path,capsys):
