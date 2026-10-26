@@ -35,3 +35,31 @@ python -m echo4d.video_sfm --images ./frames --timestamps ./times.csv --output .
 代码、测试、公共数据下载、运行命令、硬件成本、量化报告都由 `.github/workflows/tum-rgb-sfm.yml` 进行保存。CI 通过只说明定位程序真实运行且结果可评价，不等于纹理稀疏/动态场景全部适用。
 
 任务：Issue #11；输入适配接口：PR #6；独立几何误差基准：Issue #3。
+
+## VFR / 原始视频时间戳（PR #34 B 独立候选）
+
+默认 `--timestamp-mode resampled` 保持过去行为：FFmpeg 按 `--fps` 均匀重采样。**这不会保留 VFR 原始时间间隔**，但维持旧实验输入和结果的解释方式。
+
+若原视频帧率随时间变化，且需要保留来源视频内解码帧的时间关系，可显式改用：
+
+```bash
+python -m echo4d.video_sfm --video ./my-scene.mp4 \
+  --output ./outputs/pts-sfm --timestamp-mode source-pts \
+  --max-frames 120 --camera-model PINHOLE \
+  --camera-params 525,525,319.5,239.5
+```
+
+该模式先从 FFprobe 读取`best_effort_timestamp_time`，核查其有限、非负、严格递增；按解码帧序号和预算固定间隔抽取，FFmpeg 的 select + passthrough 不会为了固定帧率重复补帧。抽取的每张图仍命名 `frame_00000.png` 等；现有 `trajectory-scale-unknown.json` 中的 `frames[].t_s`、`registered_timestamps.csv` 与 `all_input_timestamps.csv` 均保留名称和相对秒数格式。新 `report.json` 增加 `source_pts_sampling.frame_map`，列出每张图的解码帧号、视频原始 PTS 和以第一解码帧为零的相对 PTS；失败会记录到 report 且不发布成功轨迹。
+
+**注意：**两种模式选中的帧不一定相同。即使固定同一个 MP4、相机参数和最大帧数，也不能把不同的输入帧集合/不同的 3D Mesh 的注册率和几何误差直接比较成算法优劣。`--fps` 仅用于 `resampled` 模式；`source-pts` 模式以 decoded-frame stride 控制最多抽多少帧。后续 #17/#23 以帧名、相机标定和单调相对时间匹配，字段格式保持不变，但**不能凭文件名推断两个模式抽取了同一张源照片**。如用实测深度做时间配准，必须核查来源时基、第一帧绝对时间偏移及实际同步误差；时间对齐不等于已经获得米制尺度。
+
+不支持不存在/重复/倒序的解码 PTS，不会静默生成近似时间；这类输入需先修复源记录并留下变更证据。多 disconnected COLMAP sparse-model 选择不在本轮迁移中。
+
+
+## 多模型安全与 Issue #47 B 合流候选
+
+当 COLMAP 产生多个互不连通的模型时，程序分别检查每个模型的相机参数、合法位姿和已抽取图像身份；保留每个模型的拒绝原因。只选择注册帧最多的单一合规模型，注册数并列按数字模型编号升序，绝不混合两个世界坐标系。成功报告中 `result.sfm_model_dir` 对应 `text-model-N`，下游 #17/#23 必须从该目录读取 `images.txt/cameras.txt/points3D.txt` 并验证 SHA，不可假定模型始终为 0。
+
+正常使用 `--timestamp-mode source-pts` 时，`frames[].t_s` 是视频容器 PTS 相对第一解码帧的秒数，而不是与外部深度传感器天然同步的绝对 UTC 或 TUM 时戳。采集设备之间的零点偏移需要独立对应关系；#17/#23 的传感器 RGB/深度时间差仍需逐帧实测核对，不能因为 PTS 严格递增就宣称达到 30ms 同步门槛。默认 `resampled` 保持旧时间含义。
+
+组合回归以 [Issue #47 B 的合流记录](ISSUE47_B_VIDEO_INTEGRATION.md) 为准，包含原有 #37/#40 独立真实 CI 与当前组合分支的新 CI。源 MP4 的人工重编码 CFR/VFR 检测不能冒充原生手机视频的传感器硬件 PTS 验证；两者均不从单目 RGB 推导米制尺度。
