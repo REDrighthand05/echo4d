@@ -134,6 +134,30 @@ def extract(manifest,root,output):
     frames=spec['frames']
     if not isinstance(frames,list) or not 2<=len(frames)<=30 or any(not isinstance(f,dict) for f in frames) or len({f.get('name') for f in frames})!=len(frames):
         raise EvidenceError('Need 2-30 unique reviewed RGB-D views')
+    # A renamed frame or a byte-for-byte copy is NOT a second source observation.
+    # Requiring an independent RGB, independent sensor-Z image and distinct pose
+    # is conservative: stationary duplicate-looking captures remain ineligible.
+    rgb_shas=set()
+    depth_shas=set()
+    seen_poses=[]
+    for frame in frames:
+        if (not isinstance(frame.get('rgb'),dict) or
+                not isinstance(frame.get('depth'),dict)):
+            raise EvidenceError('Missing source RGB/depth identity')
+        rgb_id=frame['rgb'].get('sha256')
+        depth_id=frame['depth'].get('sha256')
+        if rgb_id in rgb_shas or depth_id in depth_shas:
+            raise EvidenceError('Repeated source RGB/depth observation cannot count as a second view')
+        rgb_shas.add(rgb_id)
+        depth_shas.add(depth_id)
+        pose_id=frame.get('camera_to_world_column_major')
+        if isinstance(pose_id,list) and len(pose_id)==16:
+            pose_arr=np.asarray(pose_id,dtype=np.float64)
+            if not np.isfinite(pose_arr).all():
+                raise EvidenceError('Nonfinite camera source')
+            if any(np.allclose(pose_arr,p,rtol=0,atol=1e-7) for p in seen_poses):
+                raise EvidenceError('Repeated camera pose is not an independent viewpoint')
+            seen_poses.append(pose_arr)
     source=asset(root,spec['scene'],('.ply',))
     vertices,faces=load_mesh(source)
     positive=np.zeros(len(vertices),np.uint16)
@@ -156,10 +180,15 @@ def extract(manifest,root,output):
     try:
         trimesh.Trimesh(vertices=v,faces=f,process=False).export(output/'observed-object-world.ply')
         np.save(output/'selected-source-face-indices.npy',chosen)
+        # Geometry-only interface for D; NOT the strict ECHO TSDF PLY contract.
+        np.savez_compressed(output/'observed-object-world.npz',
+                            vertices=v.astype(np.float64), faces=f.astype(np.int64))
         report={'status':'candidate_requires_independent_instance_review',
             'verified_furniture':False,'hi3d_inference_run':False,'occluded_shape_inferred':False,
             'source_scene_sha256':spec['scene']['sha256'],'source_manifest_sha256':sha256(manifest),
             'output_mesh_sha256':sha256(output/'observed-object-world.ply'),
+            'output_geometry_npz_sha256':sha256(output/'observed-object-world.npz'),
+            'output_geometry_contract':'geometry_only_npz_not_ECHO_TSDF',
             'category_declared':spec['object_category'],'instance_id':spec['instance_id'],
             'source_mesh_face_count':len(faces),'kept_original_faces':len(chosen),
             'source_world_bounds_as_declared_m':[vertices.min(axis=0).tolist(),vertices.max(axis=0).tolist()],
