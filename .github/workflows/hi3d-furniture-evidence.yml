@@ -1,0 +1,84 @@
+name: Hi3D GPT D frozen real-furniture evidence and holdout contract
+
+on:
+  pull_request:
+    paths:
+      - 'tools/hi3d_furniture_evidence.py'
+      - 'tools/hi3d_furniture_compare.py'
+      - 'tests/python/test_hi3d_furniture_evidence.py'
+      - 'docs/evidence/hi3d-furniture-d/**'
+      - '.github/workflows/hi3d-furniture-evidence.yml'
+      - 'docs/HI3D_FURNITURE_VALIDATION.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  frozen-contract-and-real-tum-source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: requirements.lock
+      - name: Install locked baseline (no GPU or Hi3D weights)
+        run: |
+          python -m pip install -r requirements.lock
+          python -m pip install --no-deps -e .
+      - name: Run fixed-source and object-mask negative regressions
+        run: python -m pytest -q tests/python/test_hi3d_furniture_evidence.py
+      - name: Confirm existing 60 original TUM image/depth pairs; report missing furniture evidence
+        run: |
+          mkdir -p artifacts/hi3d-furniture-d
+          python tools/hi3d_furniture_evidence.py \
+            --ledger docs/evidence/hi3d-furniture-d/xyz-frozen-source-ledger.json \
+            --out artifacts/hi3d-furniture-d/historical-ledger-check.json
+      - name: Re-download official TUM archive, verify original bytes / SHAs and holdout mocap samples
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          from tools.tum_public_roundtrip import download
+          archive = Path(os.environ['RUNNER_TEMP']) / 'hi3d-furniture-source.tgz'
+          evidence = {}
+          try:
+              download(archive, evidence)   # official HTTPS, bounded bytes, original SHA
+          finally:
+              out = Path('artifacts/hi3d-furniture-d/source-download.json')
+              out.write_text(json.dumps(evidence, indent=2) + '\n')
+          PY
+          python tools/hi3d_furniture_evidence.py \
+            --ledger docs/evidence/hi3d-furniture-d/xyz-frozen-source-ledger.json \
+            --archive "${RUNNER_TEMP}/hi3d-furniture-source.tgz" \
+            --out artifacts/hi3d-furniture-d/source-reverified.json
+      - name: Summarize evidence WITHOUT pretending this is a verified furniture scan
+        if: always()
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path('artifacts/hi3d-furniture-d/source-reverified.json')
+          if p.is_file():
+              a=json.loads(p.read_text())
+              print('Real TUM source:',a['status'])
+              print('Verified actual original withheld photo files:',a.get('verified_raw_holdout_photos',0))
+              print('Verified actual original withheld sensor-depth files:',a.get('verified_raw_holdout_depths',0))
+              print('Verified individual furniture instances: 0 (blocked)')
+              with open(__import__('os').environ['GITHUB_STEP_SUMMARY'],'a') as f:
+                  f.write(f"**{a['status']}**. Original heldout RGB/depth pairs verified: {a.get('verified_raw_holdout_photos',0)}/{a.get('verified_raw_holdout_depths',0)}. **Furniture instances confirmed: 0. Hi3D runs: 0.**\n")
+          else:
+              print('Raw source revalidation unavailable: check earlier failed step and historical-ledger-check.json')
+          PY
+      - name: Preserve reports and honest failures (no copied source RGB license payload)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hi3d-gpt-d-evidence-${{ github.run_id }}
+          path: artifacts/hi3d-furniture-d/
+          retention-days: 21
+          if-no-files-found: warn
