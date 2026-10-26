@@ -121,6 +121,75 @@ def extract_sensor_depths(archive: Path, dataset: Path) -> dict:
             'depth_index_sha256': file_sha256(dataset / ROOT / 'depth.txt')}
 
 
+
+def sensor_pairing_diagnostics(tum: Path, source: list[dict],
+                               protocol: dict) -> dict:
+    """Explain nearest raw RGB/depth timestamp gaps WITHOUT opening depth pixels.
+
+    This inventory is informational only. It never changes the frozen 75 RGB
+    source identities, the 48/12 split, the 30ms gate, or depth associations.
+    Calling match_sensor_inputs afterwards remains mandatory.
+    """
+    depth_rows = read_rows(tum / 'depth.txt', 2)
+    times = np.asarray([float(row[0]) for row in depth_rows], dtype=np.float64)
+    if (not len(times) or not np.isfinite(times).all() or
+            np.any(np.diff(times) <= 0)):
+        raise DataError('Desk depth index timestamps invalid')
+    roles = sorted(set(GEOMETRY_SELECTED) | set(SCALE_ANCHORS) |
+                   set(SCALE_DIAGNOSTICS))
+    if (len(source) != FRAME_COUNT or len(protocol['train_names']) != 48 or
+            len(protocol['holdout_names']) != 12):
+        raise DataError('Frozen desk source or split changed before audit')
+    rows, first_seen = [], {}
+    for index in roles:
+        name = source[index].get('name')
+        if name != f'frame_{index:05d}.png':
+            raise DataError('Frozen desk RGB frame order changed')
+        t = float(source[index]['t_tum_rgb_s'])
+        if not math.isfinite(t):
+            raise DataError('Nonfinite source RGB timestamp')
+        # No maximum-gap filter in this DIAGNOSTIC: record the closest actual
+        # measurement even if the still-frozen 30ms acceptance gate rejects it.
+        nearest = nearest_timestamp(times, t, float('inf'))
+        if nearest is None:
+            raise DataError('No sensor timestamps available')
+        dt = float(times[nearest] - t)
+        name_depth = depth_rows[nearest][1]
+        duplicate = name_depth in first_seen
+        if not duplicate:
+            first_seen[name_depth] = name
+        role = ('geometry_holdout' if index in GEOMETRY_HELDOUT else
+                'scale_anchor' if index in SCALE_ANCHORS else
+                'scale_diagnostic' if index in SCALE_DIAGNOSTICS else
+                'geometry_training')
+        rows.append({'name': name, 'source_rgb_index': index, 'role': role,
+                     'source_rgb_time_s': t,
+                     'nearest_depth_time_s': float(times[nearest]),
+                     'nearest_depth_path': name_depth, 'signed_gap_s': dt,
+                     'absolute_gap_s': abs(dt),
+                     'within_frozen_30ms': abs(dt) <= MAX_GAP_S,
+                     'duplicate_nearest_depth': duplicate,
+                     'first_used_by': first_seen[name_depth] if duplicate else None})
+    gaps = np.asarray([row['absolute_gap_s'] for row in rows], dtype=float)
+    failures = [row for row in rows if not row['within_frozen_30ms']]
+    duplicates = [row for row in rows if row['duplicate_nearest_depth']]
+    return {'version': 'desk-rgb-depth-index-time-audit-1',
+            'diagnostic_only_no_depth_pixels_opened': True,
+            'source_selection_and_geometry_holdouts_unchanged': True,
+            'no_time_shift_or_threshold_fitting': True,
+            'max_allowed_gap_s': MAX_GAP_S, 'frozen_rgb_roles': len(roles),
+            'depth_index_rows': len(depth_rows),
+            'within_gap_count': len(rows) - len(failures),
+            'outside_gap_count': len(failures),
+            'duplicate_nearest_depth_count': len(duplicates),
+            'first_outside_gap': failures[0] if failures else None,
+            'median_abs_gap_s': float(np.median(gaps)),
+            'p95_abs_gap_s': float(np.percentile(gaps, 95)),
+            'max_abs_gap_s': float(gaps.max()),
+            'all_pairs_within_gap_and_unique': not (failures or duplicates),
+            'pairs': rows}
+
+
 def match_sensor_inputs(tum: Path, source: list[dict],
                         protocol: dict) -> dict[str, dict]:
     """Validate identities and timestamps; do not read geometric holdout pixels."""
@@ -216,6 +285,14 @@ def run(args: argparse.Namespace, record: dict) -> None:
 
     # Physical depth appears ONLY after the locked RGB SfM is complete.
     record['depth_extraction'] = extract_sensor_depths(archive, work / 'dataset')
+    # Preserve original 30ms hard stop, but record the nearest sensor time for
+    # every fixed RGB identity first; this does not inspect withheld Z pixels.
+    time_audit = sensor_pairing_diagnostics(tum, source, protocol)
+    record['sensor_pairing_preflight_sha256'] = persist(
+        report / 'sensor-pairing-preflight.json', time_audit)
+    record['sensor_pairing_summary'] = {
+        k: v for k, v in time_audit.items() if k not in ('pairs', 'first_outside_gap')}
+    record['sensor_pairing_first_outside_gap'] = time_audit['first_outside_gap']
     measurements = match_sensor_inputs(tum, source, protocol)
     calibration_spec = {
         'source_kind': 'measured_registered_z_depth',
