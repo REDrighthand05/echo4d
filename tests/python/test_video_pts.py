@@ -103,6 +103,29 @@ def test_real_video_pts_tracks_selected_decoded_frames(tmp_path, mode):
     assert list(mapping.values()) == pytest.approx(
         [all_pts[i] - all_pts[0] for i in [0, 2, 4, 6]])
     assert receipt['source_pts_sampling']['stride'] == 2
+    # Review gate: the old test only checked timestamps and file count.
+    # Decode every frame from the SAME encoded source independently, then
+    # compare actual pixel bytes to the claimed decoder-frame indices.
+    # This catches a future FFmpeg select/fps regression that still produces
+    # the right number of images and plausible PTS.
+    reference = tmp_path / 'reference-decode'
+    reference.mkdir()
+    subprocess.run(
+        ['ffmpeg', '-hide_banner', '-loglevel', 'error', '-nostdin',
+         '-i', str(video), '-map', '0:v:0', '-an', '-sn',
+         '-fps_mode', 'passthrough', '-start_number', '0',
+         '-f', 'image2', str(reference / 'decoded_%05d.png')],
+        check=True, capture_output=True)
+    assert len(list(reference.glob('decoded_*.png'))) == len(all_pts)
+    for i, frame in enumerate(receipt['source_pts_sampling']['frame_map']):
+        assert frame['name'] == f'frame_{i:05d}.png'
+        assert frame['decoded_frame_index'] == 2 * i
+        assert frame['source_pts_seconds'] == pytest.approx(all_pts[2 * i])
+        with Image.open(tmp_path / 'out' / frame['name']) as got, \
+                Image.open(reference / f'decoded_{2 * i:05d}.png') as expected:
+            assert got.mode == expected.mode
+            assert got.size == expected.size
+            assert got.tobytes() == expected.tobytes()
     assert all(x['status'] == 'passed' for x in receipt['commands'])
     gaps = [b - a for a, b in zip(mapping.values(),
                                   list(mapping.values())[1:])]
