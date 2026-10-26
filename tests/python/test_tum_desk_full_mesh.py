@@ -7,7 +7,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'tools'))
 from echo4d.model import DataError
 from tum_desk_full_mesh import (
     DEPTH_UNITS_PER_M, FRAME_COUNT, GEOMETRY_HELDOUT, SCALE_ANCHORS,
-    SCALE_DIAGNOSTICS, frozen_protocol, match_sensor_inputs,
+    SCALE_DIAGNOSTICS, frozen_protocol, match_sensor_inputs, audit_sensor_pairing,
 )
 
 def fake_source():
@@ -74,3 +74,44 @@ def test_missing_depth_fails_before_mesh(tmp_path):
     source = fake_source()
     with pytest.raises(DataError, match='Missing frame file or path outside dataset'):
         match_sensor_inputs(tmp_path, source, frozen_protocol(source))
+
+
+def test_sensor_time_audit_reports_all_68_predeclared_roles(tmp_path):
+    make_index(tmp_path, offset=.01)
+    source = fake_source()
+    audit = audit_sensor_pairing(tmp_path, source, frozen_protocol(source))
+    assert audit['frozen_roles_count'] == 68
+    assert audit['frozen_protocol_eligible'] is True
+    assert audit['matched_within_30ms'] == 68
+    assert audit['distinct_and_within_30ms'] == 68
+    assert len(audit['per_frame']) == 68
+    assert audit['per_frame'][0]['signed_delta_s'] == pytest.approx(.01)
+    assert audit['max_gap_s_frozen'] == .03
+
+
+def test_sensor_time_audit_never_rescues_out_of_window_frames(tmp_path):
+    make_index(tmp_path, offset=.04)
+    source = fake_source()
+    audit = audit_sensor_pairing(tmp_path, source, frozen_protocol(source))
+    assert audit['frozen_protocol_eligible'] is False
+    assert audit['matched_within_30ms'] == 0
+    assert len(audit['first_invalid_frozen_frames']) == 20
+    assert len(audit['per_frame']) == 68
+    assert audit['per_frame'][0]['closest_sensor_time_s'] == pytest.approx(.04)
+    assert audit['per_frame'][0]['eligible_without_reselection'] is False
+    # Original strict rejection remains intact, never silently taking +40ms.
+    with pytest.raises(DataError, match='within 30ms'):
+        match_sensor_inputs(tmp_path, source, frozen_protocol(source))
+
+
+def test_sensor_time_audit_flags_repeated_depth_row(tmp_path):
+    make_index(tmp_path)
+    source = fake_source()
+    # Two distinct RGB stamps can fall inside the same measured depth timestamp.
+    source[1]['t_tum_rgb_s'] = .004
+    audit = audit_sensor_pairing(tmp_path, source, frozen_protocol(source))
+    a, b = audit['per_frame'][0], audit['per_frame'][1]
+    assert a['within_frozen_30ms'] and b['within_frozen_30ms']
+    assert a['distinct_sensor_row'] is True
+    assert b['distinct_sensor_row'] is False
+    assert audit['frozen_protocol_eligible'] is False
