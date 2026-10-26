@@ -152,3 +152,44 @@ def test_never_overwrite_destination(tmp_path, capsys):
     assert main(argv(tmp_path)) == 2
     assert "already exists" in json.loads(capsys.readouterr().err)["error"]
     assert (out / "sentinel").read_text() == "keep"
+
+
+def test_raw_unit_provenance_is_explicitly_unverified(tmp_path, capsys):
+    fixture(tmp_path)
+    args = argv(tmp_path) + ["--depth-unit", "TUM PNG encoding: 5000 units per meter"]
+    assert main(args) == 0
+    capsys.readouterr()
+    p = json.loads((tmp_path / "published" / "import-provenance.json").read_text())
+    indexed = p["indexed_depth"]
+    assert indexed["raw_depth_unit_label"] == "TUM PNG encoding: 5000 units per meter"
+    assert indexed["raw_unit_label_verified_independently"] is False
+    assert indexed["raw_units_per_metre"] == 1000  # User's scale is not rewritten by label
+
+
+@pytest.mark.parametrize("label", ["", " " * 5, "x" * 161])
+def test_invalid_raw_depth_unit_label_fails_atomically(tmp_path, capsys, label):
+    fixture(tmp_path)
+    args = argv(tmp_path) + ["--depth-unit", label]
+    assert main(args) == 2
+    assert "depth-unit" in json.loads(capsys.readouterr().err)["error"]
+    assert not (tmp_path / "published").exists()
+
+
+def test_raw_depth_unit_cannot_be_used_without_index(tmp_path, capsys):
+    fixture(tmp_path)
+    args = argv(tmp_path, indexed=False, divisor=None) + ["--depth-unit", "millimetres"]
+    assert main(args) == 2
+    assert "depth-index" in json.loads(capsys.readouterr().err)["error"]
+    assert not (tmp_path / "published").exists()
+
+
+def test_symlink_alias_of_one_raw_depth_rejected(tmp_path, capsys):
+    # #35 only rejected repeated *text* paths; #47 A also rejects resolved aliases.
+    fixture(tmp_path)
+    alias = tmp_path / "raw" / "alias.png"
+    try:
+        alias.symlink_to(tmp_path / "raw" / "first.png")
+    except (OSError, NotImplementedError):
+        pytest.skip("Filesystem does not permit creating test symlinks")
+    (tmp_path / "index.txt").write_text("a.png first.png\\nb.png alias.png\\n")
+    failure(tmp_path, capsys, "same raw file")
