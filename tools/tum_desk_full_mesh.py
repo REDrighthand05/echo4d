@@ -121,6 +121,63 @@ def extract_sensor_depths(archive: Path, dataset: Path) -> dict:
             'depth_index_sha256': file_sha256(dataset / ROOT / 'depth.txt')}
 
 
+def audit_sensor_pairing(tum: Path, source: list[dict], protocol: dict) -> dict:
+    """Evidence-only scan of every frozen RGB/depth timestamp; never pairs by wishful offset.
+
+    Crucially this report is written even when the fixed 30ms cohort cannot
+    proceed. It does NOT move timestamps, change cohort members, or load heldout pixels.
+    """
+    depth_rows = read_rows(tum / 'depth.txt', 2)
+    times = np.asarray([float(row[0]) for row in depth_rows], dtype=np.float64)
+    if not len(times) or not np.isfinite(times).all() or np.any(np.diff(times) <= 0):
+        raise DataError('Desk depth.txt has non-monotonic/invalid timestamps')
+    roles = set(GEOMETRY_SELECTED) | set(SCALE_ANCHORS) | set(SCALE_DIAGNOSTICS)
+    if len(source) != FRAME_COUNT or len(protocol['train_names']) != 48:
+        raise DataError('Invalid frozen desk source before depth matching')
+    used: set[int] = set()
+    records = []
+    for i in sorted(roles):
+        t = float(source[i]['t_tum_rgb_s'])
+        if not math.isfinite(t):
+            raise DataError('Nonfinite source RGB timestamp')
+        at = int(np.searchsorted(times, t))
+        adjacent = [j for j in (at - 1, at) if 0 <= j < len(times)]
+        if not adjacent:
+            raise DataError('No sensor timestamp candidates')
+        nearest = min(adjacent, key=lambda j: (abs(times[j]-t), j))
+        delta = float(times[nearest]-t)
+        within = abs(delta) <= MAX_GAP_S
+        unique = nearest not in used
+        if within:
+            used.add(nearest)
+        records.append({
+            'name': source[i]['name'],
+            'original_rgb_time_s': t,
+            'closest_sensor_time_s': float(times[nearest]),
+            'closest_sensor_depth_path': depth_rows[nearest][1],
+            'signed_delta_s': delta,
+            'absolute_delta_s': abs(delta),
+            'within_frozen_30ms': within,
+            'distinct_sensor_row': unique,
+            'eligible_without_reselection': bool(within and unique),
+        })
+    invalid = [r['name'] for r in records if not r['eligible_without_reselection']]
+    return {
+        'version': 'echo-desk-sensor-time-audit-v1',
+        'sensor_index_sha256': file_sha256(tum / 'depth.txt'),
+        'max_gap_s_frozen': MAX_GAP_S,
+        'frozen_roles_count': len(roles),
+        'matched_within_30ms': sum(x['within_frozen_30ms'] for x in records),
+        'distinct_and_within_30ms': len(records) - len(invalid),
+        'first_invalid_frozen_frames': invalid[:20],
+        'max_nearest_abs_delta_s': max(r['absolute_delta_s'] for r in records),
+        'frozen_protocol_eligible': not invalid,
+        'action_on_failure': 'STOP; DO NOT tune the tolerance, shift clocks or substitute frames post hoc',
+        'timestamps_only_not_depth_pixel_evaluation': True,
+        'per_frame': records,
+    }
+
+
 def match_sensor_inputs(tum: Path, source: list[dict],
                         protocol: dict) -> dict[str, dict]:
     """Validate identities and timestamps; do not read geometric holdout pixels."""
@@ -216,6 +273,11 @@ def run(args: argparse.Namespace, record: dict) -> None:
 
     # Physical depth appears ONLY after the locked RGB SfM is complete.
     record['depth_extraction'] = extract_sensor_depths(archive, work / 'dataset')
+    pairing = audit_sensor_pairing(tum, source, protocol)
+    record['sensor_pairing_audit_sha256'] = persist(report / 'desk-sensor-pairing-audit.json', pairing)
+    record['sensor_pairing_frozen_protocol_eligible'] = pairing['frozen_protocol_eligible']
+    if not pairing['frozen_protocol_eligible']:
+        raise DataError('Frozen 30ms sensor pairing failed; see desk-sensor-pairing-audit.json for all predeclared frames')
     measurements = match_sensor_inputs(tum, source, protocol)
     calibration_spec = {
         'source_kind': 'measured_registered_z_depth',
