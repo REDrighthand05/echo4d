@@ -5,7 +5,10 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 import pytest
-import trimesh
+# Trimesh is optional for main; it is pinned in this PR's dedicated real-object CI.
+trimesh=pytest.importorskip('trimesh', reason='Dedicated object extraction CI installs optional trimesh')
+import sys
+sys.path.insert(0,str(Path(__file__).resolve().parents[2]/'tools'))
 from real_furniture_extract import EvidenceError, extract
 
 def digest(file):
