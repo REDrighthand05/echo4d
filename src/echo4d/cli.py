@@ -110,6 +110,8 @@ def build_parser() -> argparse.ArgumentParser:
                         help="Optional two-column image_name depth_path index, paths relative to --depth")
     colmap.add_argument("--depth-scale", type=float,
                         help="Required with --depth-index: raw camera-Z units per metre; 1 for float metre NPY")
+    colmap.add_argument("--depth-unit",
+                        help="Optional claimed raw depth unit label for audit; not independent calibration proof")
     colmap.add_argument("--meters-per-colmap-unit", required=True, type=float,
                         help="Measured metres for one COLMAP world unit; GT post-hoc alignment is forbidden")
     colmap.add_argument("--scale-source", required=True,
@@ -143,8 +145,8 @@ def main(argv: list[str] | None = None) -> int:
             # One strict adapter. Uses #6 + #24 hardening, NOT the incompatible
             # second converter implementation from draft PR #19.
             if args.depth_index is None:
-                if args.depth_scale is not None:
-                    raise DataError("--depth-scale requires --depth-index; ordinary NPY depth is already metres")
+                if args.depth_scale is not None or args.depth_unit is not None:
+                    raise DataError("--depth-scale/--depth-unit require --depth-index; ordinary NPY depth is already metres")
                 from .colmap import import_colmap
                 result = import_colmap(args)
             else:
