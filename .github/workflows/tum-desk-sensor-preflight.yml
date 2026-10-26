@@ -1,0 +1,41 @@
+name: Desk source RGB-depth index preflight (no SfM)
+on:
+  pull_request:
+    paths:
+      - 'tools/tum_desk_sensor_preflight.py'
+      - 'tests/python/test_tum_desk_sensor_preflight.py'
+      - '.github/workflows/tum-desk-sensor-preflight.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inspect-original-source-pairing:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: requirements.lock
+      - name: Install locked ECHO dependencies
+        run: |
+          python -m pip install -r requirements.lock
+          python -m pip install --no-deps -e .
+      - name: Run index-only positive and negative tests
+        run: |
+          PYTHONPATH="$GITHUB_WORKSPACE/tools" python -m pytest -q tests/python/test_tum_desk_sensor_preflight.py
+      - name: Read official pinned archive indexes before running COLMAP
+        run: |
+          python tools/tum_desk_sensor_preflight.py \
+            --work "$RUNNER_TEMP/desk-original-source-preflight" \
+            --report-dir "$GITHUB_WORKSPACE/artifacts/desk-index-preflight"
+      - name: Upload all source-index results, including blocked V1
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: desk-index-preflight-${{ github.run_id }}
+          path: artifacts/desk-index-preflight/
+          if-no-files-found: error
+          retention-days: 14
