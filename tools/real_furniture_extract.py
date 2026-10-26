@@ -56,6 +56,66 @@ def load_mesh(file):
         raise EvidenceError('Invalid scene mesh')
     return v,f
 
+
+
+def export_scoring_compatible_submesh(path, vertices, faces):
+    """Write only an observed face subset in D's strict *shape-only* PLY layout.
+
+    Derived triangle normals and 127-grey placeholder colors are NOT measured
+    RGB, fused TSDF, uncertainty, or verified object identity. The metadata
+    report must accompany this geometry outside the ECHO truth layer.
+    """
+    if not (3 <= len(vertices) <= 300000 and 1 <= len(faces) <= 500000):
+        raise EvidenceError('Object exceeds downstream bounded benchmark format')
+    derived = trimesh.Trimesh(vertices=vertices, faces=faces, process=False)
+    normals = np.asarray(derived.vertex_normals, dtype=np.float64)
+    if normals.shape != vertices.shape or not np.isfinite(normals).all():
+        raise EvidenceError('Invalid geometry-derived normals')
+    kind = [(name, '<f4') for name in ('x', 'y', 'z', 'nx', 'ny', 'nz')]
+    kind += [(name, 'u1') for name in ('red', 'green', 'blue')]
+    packed = np.zeros(len(vertices), dtype=kind)
+    for i, key in enumerate(('x','y','z')):
+        packed[key] = vertices[:, i]
+    for i, key in enumerate(('nx','ny','nz')):
+        packed[key] = normals[:, i]
+    for key in ('red', 'green', 'blue'):
+        packed[key] = 127
+    triangles = np.zeros(len(faces),
+                         dtype=[('count','u1'), ('indices','<i4',(3,))])
+    triangles['count'] = 3
+    triangles['indices'] = faces
+    header = ('ply\\nformat binary_little_endian 1.0\\n'
+              'comment ECHO-compatible observed triangle subset; NOT a TSDF result\\n'
+              'comment normals derived, RGB placeholders, not actual sensor color\\n'
+              f'element vertex {len(vertices)}\\n'
+              'property float x\\nproperty float y\\nproperty float z\\n'
+              'property float nx\\nproperty float ny\\nproperty float nz\\n'
+              'property uchar red\\nproperty uchar green\\nproperty uchar blue\\n'
+              f'element face {len(faces)}\\n'
+              'property list uchar int vertex_indices\\nend_header\\n')
+    with path.open('xb') as destination:
+        destination.write(header.encode('ascii'))
+        destination.write(packed.tobytes())
+        destination.write(triangles.tobytes())
+
+
+def distinct_observation_guard(frame, data, rgb_hashes, poses):
+    """Refuse copied/relabelled views from voting as separate geometric proof."""
+    photo_hash = frame['rgb']['sha256']
+    pose = data[-1]
+    if photo_hash in rgb_hashes:
+        raise EvidenceError('Duplicate source RGB observation: identical source bytes')
+    for prior in poses:
+        baseline = float(np.linalg.norm(pose[:3, 3] - prior[:3, 3]))
+        angle_cos = np.clip((np.trace(pose[:3, :3] @ prior[:3, :3].T) - 1)/2, -1, 1)
+        angle_degrees = float(np.degrees(np.arccos(angle_cos)))
+        if baseline < .01 and angle_degrees < .5:
+            raise EvidenceError('Two source views have no independent camera baseline')
+    rgb_hashes.add(photo_hash)
+    poses.append(pose)
+
+
+
 def read_frame(root,frame):
     names={'name','rgb','mask','depth','camera_to_world_column_major',
            'fx','fy','cx','cy','mask_annotation_source','reviewed_same_object'}
@@ -139,8 +199,11 @@ def extract(manifest,root,output):
     positive=np.zeros(len(vertices),np.uint16)
     negative=np.zeros(len(vertices),np.uint16)
     receipts=[]
+    rgb_hashes, poses = set(), []
     for frame in frames:
-        fg,bg=vote(vertices,read_frame(root,frame),tolerance)
+        observation = read_frame(root, frame)
+        distinct_observation_guard(frame, observation, rgb_hashes, poses)
+        fg,bg=vote(vertices,observation,tolerance)
         positive+=fg
         negative+=bg
         receipts.append({'name':frame['name'],'rgb_sha256':frame['rgb']['sha256'],
@@ -154,7 +217,7 @@ def extract(manifest,root,output):
     v,f=vertices[used],rev.reshape(-1,3)
     output.mkdir(parents=True,exist_ok=False)
     try:
-        trimesh.Trimesh(vertices=v,faces=f,process=False).export(output/'observed-object-world.ply')
+        export_scoring_compatible_submesh(output/'observed-object-world.ply',v,f)
         np.save(output/'selected-source-face-indices.npy',chosen)
         report={'status':'candidate_requires_independent_instance_review',
             'verified_furniture':False,'hi3d_inference_run':False,'occluded_shape_inferred':False,
@@ -167,6 +230,12 @@ def extract(manifest,root,output):
             'object_extent_as_declared_m':(v.max(axis=0)-v.min(axis=0)).tolist(),
             'world_transform':'identity_no_rescaling_no_repositioning','photo_mask_depth':receipts,
             'original_faces_preserved':True,
+            'source_world_frame_id':'observed-scene-sha256:'+spec['scene']['sha256'],
+            'independent_source_rgb_evidence_guarded':True,
+            'ply_scoring_compatibility_attributes':{
+                'normals':'derived_from_selected_triangles_not_sensor_normals',
+                'rgb':'constant_grey_127_placeholder_not_measured_color',
+                'not_an_original_tsdf_export':True},
             'limitations':['External mask review and measured-scale declarations are not authenticated by software',
                            'No missing faces generated; this is an unclosed observed-only surface',
                            'No real furniture has been independently verified by a synthetic unit test']}
