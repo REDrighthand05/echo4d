@@ -8,6 +8,7 @@ from echo4d.model import DataError
 from tum_desk_full_mesh import (
     DEPTH_UNITS_PER_M, FRAME_COUNT, GEOMETRY_HELDOUT, SCALE_ANCHORS,
     SCALE_DIAGNOSTICS, frozen_protocol, match_sensor_inputs,
+    sensor_pairing_diagnostics,
 )
 
 def fake_source():
@@ -74,3 +75,48 @@ def test_missing_depth_fails_before_mesh(tmp_path):
     source = fake_source()
     with pytest.raises(DataError, match='Missing frame file or path outside dataset'):
         match_sensor_inputs(tmp_path, source, frozen_protocol(source))
+
+
+def test_pairing_diagnostics_reports_all_frozen_roles_without_reselection(tmp_path):
+    make_index(tmp_path, offset=.04)
+    source = fake_source()
+    frozen = frozen_protocol(source)
+    audited = sensor_pairing_diagnostics(tmp_path, source, frozen)
+    assert audited['frozen_rgb_roles'] == 68
+    assert audited['outside_gap_count'] == 68
+    assert audited['within_gap_count'] == 0
+    assert audited['max_allowed_gap_s'] == .03
+    assert audited['first_outside_gap']['name'] == 'frame_00000.png'
+    assert audited['first_outside_gap']['absolute_gap_s'] == pytest.approx(.04)
+    assert audited['first_outside_gap']['nearest_depth_path'] == 'depth/00000.png'
+    assert len(audited['pairs']) == 68
+    assert all(not row['within_frozen_30ms'] for row in audited['pairs'])
+    # Merely observing the nearest out-of-window depth MUST NEVER authorize
+    # feeding it to scale calibration or geometric training.
+    with pytest.raises(DataError, match='within 30ms'):
+        match_sensor_inputs(tmp_path, source, frozen)
+
+
+def test_pairing_diagnostics_matches_successful_frozen_gate(tmp_path):
+    make_index(tmp_path, offset=.01)
+    source = fake_source()
+    frozen = frozen_protocol(source)
+    audited = sensor_pairing_diagnostics(tmp_path, source, frozen)
+    assert audited['all_pairs_within_gap_and_unique'] is True
+    assert audited['within_gap_count'] == 68
+    assert audited['outside_gap_count'] == 0
+    assert audited['median_abs_gap_s'] == pytest.approx(.01)
+    assert audited['first_outside_gap'] is None
+    assert len(match_sensor_inputs(tmp_path, source, frozen)) == 68
+
+
+def test_pairing_diagnostics_exposes_duplicate_nearest_depth(tmp_path):
+    make_index(tmp_path, duplicate=True)
+    source = fake_source()
+    frozen = frozen_protocol(source)
+    audited = sensor_pairing_diagnostics(tmp_path, source, frozen)
+    assert audited['duplicate_nearest_depth_count'] >= 1
+    assert audited['all_pairs_within_gap_and_unique'] is False
+    assert any(row['duplicate_nearest_depth'] for row in audited['pairs'])
+    with pytest.raises(DataError, match='Duplicate or absent depth source'):
+        match_sensor_inputs(tmp_path, source, frozen)
