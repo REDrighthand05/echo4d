@@ -156,12 +156,12 @@ def test_never_overwrite_destination(tmp_path, capsys):
 
 def test_raw_unit_provenance_is_explicitly_unverified(tmp_path, capsys):
     fixture(tmp_path)
-    args = argv(tmp_path) + ["--depth-unit", "TUM PNG encoding: 5000 units per meter"]
+    args = argv(tmp_path) + ["--depth-unit", "raw integer PNG, asserted 1000 units per metre"]
     assert main(args) == 0
     capsys.readouterr()
     p = json.loads((tmp_path / "published" / "import-provenance.json").read_text())
     indexed = p["indexed_depth"]
-    assert indexed["raw_depth_unit_label"] == "TUM PNG encoding: 5000 units per meter"
+    assert indexed["raw_depth_unit_label"] == "raw integer PNG, asserted 1000 units per metre"
     assert indexed["raw_unit_label_verified_independently"] is False
     assert indexed["raw_units_per_metre"] == 1000  # User's scale is not rewritten by label
 
