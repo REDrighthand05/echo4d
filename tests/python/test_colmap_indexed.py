@@ -191,5 +191,5 @@ def test_symlink_alias_of_one_raw_depth_rejected(tmp_path, capsys):
         alias.symlink_to(tmp_path / "raw" / "first.png")
     except (OSError, NotImplementedError):
         pytest.skip("Filesystem does not permit creating test symlinks")
-    (tmp_path / "index.txt").write_text("a.png first.png\\nb.png alias.png\\n")
+    (tmp_path / "index.txt").write_text("a.png first.png\nb.png alias.png\n")
     failure(tmp_path, capsys, "same raw file")
