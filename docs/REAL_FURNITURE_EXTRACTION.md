@@ -36,3 +36,32 @@
 ## Hi3D 负责人交接
 
 只有得到**有源照片/多视角实例 mask/米制来源/可逆世界坐标证据**的真正家具候选，才允许调用 #44 `prepare`，再将未来 Hi3D 生成几何交给 #43 在不参与生成的独立测量数据上评价。Hi3D 生成部分必须在单独层标为 AI 推测，**不能覆盖已观测的真实表面**。当前真实物体未证实则不进入 GPU 细化。
+
+
+## Issue #47 C→D interface audit (additional experimental candidate)
+
+Mainline ECHO uses a **strict binary PLY reader** for independent holdout
+geometry scoring. Trimesh's default xyz+face PLY cannot be fed to that
+reader. The candidate now writes the **same bounded vertex/face binary
+layout**, with face-derived normals and neutral gray (127) **placeholder**
+RGB. The extra fields exist **only for compatibility**; they are **not
+measured sensor colors, observed TSDF fusion, reconstructed texture, or
+verified furniture**. The `report.json` explicitly records this caveat;
+the original triangle indices, world vertices and source mesh SHA persist.
+The C→D reader regression calls the actual `echo4d.holdout.read_echo_ply`,
+not a toy substitute.
+
+Two identical source photographs (including the same photo copied to a
+different filename) cannot count as two independent observations. Two
+different bytes captured at effectively the **same camera pose** also
+cannot count as independent viewpoints; at least a 1cm camera translation
+or 0.5° orientation baseline is required in the current research gate.
+These checks are conservative software safeguards, **not cryptographic
+proof of actual different capture times, correct masks or identity**.
+
+The world-frame identifier in the candidate report is based on the
+**original scene SHA**, not an assertion of TUM/world GT alignment.
+GPT D's physical scoring still requires independently verified
+camera-to-world registration and dimension anchors before treating this
+mesh as compatible with the measured heldout depth. PLY parse
+compatibility alone does not mean the full D proof passes.
