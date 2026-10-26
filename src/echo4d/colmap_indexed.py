@@ -104,6 +104,10 @@ def import_colmap_indexed(args: argparse.Namespace) -> dict:
     # Text-distinct index paths can still alias the same underlying file.
     # Check resolved identity before any public output is published.
     used_raw_files: set[Path] = set()
+    # os.stat() identity also catches hard links that resolve() cannot distinguish.
+    # Some filesystems do not expose useful inode numbers; retain canonical-path
+    # checks and only use nonzero inode identities where the filesystem supplies them.
+    used_raw_inodes: set[tuple[int, int]] = set()
     with tempfile.TemporaryDirectory(prefix="echo-colmap-depth-") as temporary:
         staged = Path(temporary) / "metric-depth"
         staged.mkdir()
@@ -112,7 +116,13 @@ def import_colmap_indexed(args: argparse.Namespace) -> dict:
             raw_path = safe_path(root, raw_rel).resolve()
             if raw_path in used_raw_files:
                 raise DataError("Multiple indexed depth entries resolve to the same raw file")
+            identity = raw_path.stat()
+            inode_key = (identity.st_dev, identity.st_ino)
+            if identity.st_ino and inode_key in used_raw_inodes:
+                raise DataError("Multiple indexed depth entries refer to the same raw file (hard link)")
             used_raw_files.add(raw_path)
+            if identity.st_ino:
+                used_raw_inodes.add(inode_key)
             color_path = safe_path(image_root, name)
             color_hash = file_sha256(color_path)
             before = file_sha256(raw_path)
