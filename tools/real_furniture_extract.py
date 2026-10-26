@@ -84,15 +84,15 @@ def export_scoring_compatible_submesh(path, vertices, faces):
                          dtype=[('count','u1'), ('indices','<i4',(3,))])
     triangles['count'] = 3
     triangles['indices'] = faces
-    header = ('ply\\nformat binary_little_endian 1.0\\n'
-              'comment ECHO-compatible observed triangle subset; NOT a TSDF result\\n'
-              'comment normals derived, RGB placeholders, not actual sensor color\\n'
-              f'element vertex {len(vertices)}\\n'
-              'property float x\\nproperty float y\\nproperty float z\\n'
-              'property float nx\\nproperty float ny\\nproperty float nz\\n'
-              'property uchar red\\nproperty uchar green\\nproperty uchar blue\\n'
-              f'element face {len(faces)}\\n'
-              'property list uchar int vertex_indices\\nend_header\\n')
+    header = ('ply\nformat binary_little_endian 1.0\n'
+              'comment ECHO-compatible observed triangle subset; NOT a TSDF result\n'
+              'comment normals derived, RGB placeholders, not actual sensor color\n'
+              f'element vertex {len(vertices)}\n'
+              'property float x\nproperty float y\nproperty float z\n'
+              'property float nx\nproperty float ny\nproperty float nz\n'
+              'property uchar red\nproperty uchar green\nproperty uchar blue\n'
+              f'element face {len(faces)}\n'
+              'property list uchar int vertex_indices\nend_header\n')
     with path.open('xb') as destination:
         destination.write(header.encode('ascii'))
         destination.write(packed.tobytes())
