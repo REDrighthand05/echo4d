@@ -46,6 +46,13 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
+          # The fixed V2 run 40336531110 timed out fetching packages from
+          # azure.archive.ubuntu.com, before any dataset/geometry work began.
+          # Use Ubuntu's official public mirror, without changing versions.
+          if [ -f /etc/apt/sources.list.d/ubuntu.sources ]; then
+            sudo sed -i 's#http://azure.archive.ubuntu.com/ubuntu#http://archive.ubuntu.com/ubuntu#g' /etc/apt/sources.list.d/ubuntu.sources
+          fi
+          grep -hE '^(URIs:|Suites:|Components:|deb )' /etc/apt/sources.list /etc/apt/sources.list.d/*.sources /etc/apt/sources.list.d/*.list 2>/dev/null | tee artifacts/tum-desk-full-mesh/apt-sources.txt || true
           date -u '+apt_update_begin_utc=%Y-%m-%dT%H:%M:%SZ' | tee -a artifacts/tum-desk-full-mesh/apt-timings.txt
           sudo apt-get -o Acquire::Retries=1 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20 update 2>&1 | tee artifacts/tum-desk-full-mesh/apt-update.log
           date -u '+apt_update_end_utc=%Y-%m-%dT%H:%M:%SZ' | tee -a artifacts/tum-desk-full-mesh/apt-timings.txt
@@ -56,11 +63,21 @@ jobs:
         run: |
           set -o pipefail
           date -u '+apt_install_begin_utc=%Y-%m-%dT%H:%M:%SZ' | tee -a artifacts/tum-desk-full-mesh/apt-timings.txt
-          sudo DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=1 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20 install -y colmap ffmpeg 2>&1 | tee artifacts/tum-desk-full-mesh/apt-install.log
+          # Hosted runners may already include FFmpeg; avoid re-downloading
+          # its large codec dependency tree. Still require the real executable.
+          if command -v ffmpeg >/dev/null 2>&1; then
+            echo 'Using preinstalled FFmpeg' | tee artifacts/tum-desk-full-mesh/ffmpeg-install-source.txt
+            packages=(colmap)
+          else
+            echo 'Installing FFmpeg with COLMAP' | tee artifacts/tum-desk-full-mesh/ffmpeg-install-source.txt
+            packages=(colmap ffmpeg)
+          fi
+          sudo DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=1 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20 install -y --no-install-recommends "${packages[@]}" 2>&1 | tee artifacts/tum-desk-full-mesh/apt-install.log
           date -u '+apt_install_end_utc=%Y-%m-%dT%H:%M:%SZ' | tee -a artifacts/tum-desk-full-mesh/apt-timings.txt
           colmap help > artifacts/tum-desk-full-mesh/colmap-help.txt
           ffmpeg -version > artifacts/tum-desk-full-mesh/ffmpeg-version.txt
-          dpkg-query -W colmap ffmpeg > artifacts/tum-desk-full-mesh/installed-versions.txt
+          dpkg-query -W colmap > artifacts/tum-desk-full-mesh/installed-versions.txt
+          dpkg-query -W ffmpeg >> artifacts/tum-desk-full-mesh/installed-versions.txt 2>&1 || echo 'FFmpeg executable not owned by an apt package' >> artifacts/tum-desk-full-mesh/installed-versions.txt
       - name: Install locked source and test dependencies
         id: python_deps
         timeout-minutes: 12
