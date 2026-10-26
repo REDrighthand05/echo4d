@@ -203,5 +203,5 @@ def test_hard_link_same_source_is_not_two_independent_depth_frames(tmp_path, cap
         os.link(tmp_path / "raw" / "first.png", alias)
     except (OSError, NotImplementedError):
         pytest.skip("Filesystem does not permit creating hard links")
-    (tmp_path / "index.txt").write_text("a.png first.png\\nb.png hardlink.png\\n")
+    (tmp_path / "index.txt").write_text("a.png first.png\nb.png hardlink.png\n")
     failure(tmp_path, capsys, "hard link")
