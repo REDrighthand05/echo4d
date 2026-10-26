@@ -35,7 +35,8 @@ PINNED = {
     "mesh_sha256": "320da61fcd421c0e55aa6fc014750aeaa3e6e2d98b607e9feaae268f83d2a939",
     "artifact_zip_sha256": "d6bffd3eb08acccbc7e28b74f2a087c48972408683c2ef8eec324a290ea074a4",
 }
-HEX_SHA = re.compile(r"[0-9a-f]{64}\Z")
+HEX_SHA256 = re.compile(r"[0-9a-f]{64}\Z")
+HEX_GIT_SHA = re.compile(r"[0-9a-f]{40}\Z")
 
 
 def verify_receipt(data: dict) -> None:
@@ -44,7 +45,8 @@ def verify_receipt(data: dict) -> None:
     provenance = data["provenance"]
     for key, expected in PINNED.items():
         assert provenance[key] == expected
-        assert HEX_SHA.fullmatch(provenance[key])
+        validator = HEX_GIT_SHA if key in ("candidate_head_sha", "actual_tested_merge_checkout_sha") else HEX_SHA256
+        assert validator.fullmatch(provenance[key])
     assert provenance["base_prs"] == [58, 59, 60]
 
     contract = data["fixed_contract"]
@@ -77,7 +79,7 @@ def verify_receipt(data: dict) -> None:
     for row in rows:
         assert len(row) == len(FIELDS)
         _, depth_sha, valid, overlap, coverage, rmse, mae, p95 = row
-        assert HEX_SHA.fullmatch(depth_sha)
+        assert HEX_SHA256.fullmatch(depth_sha)
         assert type(valid) is int and type(overlap) is int
         assert 0 < overlap <= valid
         assert math.isclose(coverage, overlap / valid, abs_tol=1e-6)
