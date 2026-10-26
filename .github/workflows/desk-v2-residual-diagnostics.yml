@@ -1,0 +1,77 @@
+name: Desk V2 original-mesh residual attribution (no SfM)
+on:
+  pull_request:
+    paths:
+      - 'tools/desk_v2_residual_attribution.py'
+      - 'tests/python/test_desk_v2_residual_attribution.py'
+      - '.github/workflows/desk-v2-residual-diagnostics.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  original-frozen-v2-pixels:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: requirements.lock
+      - name: Install CPU evaluator
+        run: |
+          python -m pip install -r requirements.lock
+          python -m pip install --no-deps -e .
+      - name: Test known pixel partitions before real data
+        run: python -m pytest -q tests/python/test_desk_v2_residual_attribution.py
+      - name: Download immutable actual failed desk V2 run artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/desk-v2-original"
+          gh run download 40356324356 --repo "$GITHUB_REPOSITORY" --name tum-desk-full-mesh-40356324356 --dir "$RUNNER_TEMP/desk-v2-original"
+          test -f "$RUNNER_TEMP/desk-v2-original/mesh/mesh.ply"
+          test -f "$RUNNER_TEMP/desk-v2-original/desk-heldout-metrics.json"
+      - name: Download SHA-pinned official TUM source, no COLMAP
+        timeout-minutes: 15
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          from urllib.request import Request,urlopen
+          from urllib.parse import urlsplit
+          import os,hashlib
+          url='https://cvg.cit.tum.de/rgbd/dataset/freiburg1/rgbd_dataset_freiburg1_desk.tgz'
+          dest=Path(os.environ['RUNNER_TEMP'])/'source.tgz'
+          hash=hashlib.sha256()
+          n=0
+          with urlopen(Request(url,headers={'User-Agent':'ECHO4D-desk-residual-study/1.0'}),timeout=90) as src:
+              u=urlsplit(src.geturl())
+              if u.scheme!='https' or u.hostname not in {'cvg.cit.tum.de','webshare.cvg.cit.tum.de'}:
+                  raise SystemExit('Disallowed external source redirect')
+              with dest.open('xb') as out:
+                  while block:=src.read(1024*1024):
+                      n+=len(block)
+                      if n>700*1024**2: raise SystemExit('Source exceeds fixed resource cap')
+                      hash.update(block)
+                      out.write(block)
+          if n!=344011403 or hash.hexdigest()!='e983d6830916e66dc4a46a71368046b149b283de87769690e7aa4e0b9483530c':
+              raise SystemExit('Official TUM source bytes/SHA mismatch')
+          print('Pinned source downloaded and verified',n)
+          PY
+      - name: Reproduce all 12 original scores then describe frozen residual partitions
+        run: |
+          python tools/desk_v2_residual_attribution.py \
+            --evidence-dir "$RUNNER_TEMP/desk-v2-original" \
+            --source-archive "$RUNNER_TEMP/source.tgz" \
+            --frozen-evidence docs/evidence/issue47-desk-v2-real-heldout-failure-20261027.json \
+            --output artifacts/desk-v2-residual-diagnostics/result.json
+      - name: Archive real results or explicit failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: desk-v2-residuals-${{ github.run_id }}
+          path: artifacts/desk-v2-residual-diagnostics/
+          retention-days: 14
+          if-no-files-found: warn
