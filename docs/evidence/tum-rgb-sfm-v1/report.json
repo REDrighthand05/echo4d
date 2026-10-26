@@ -1,0 +1,1321 @@
+{
+  "experiment": "TUM-fr1_xyz-real-RGB-video-to-COLMAP-SfM-v1",
+  "started_utc": "2026-10-25T12:48:17.111850+00:00",
+  "git_sha": "2d9a334fd0970aa9f7156aff1e29ee0be94d7159",
+  "actions_url": "https://github.com/REDrighthand05/echo4d/actions/runs/40194684285",
+  "status": "passed_rgb_only_sfm_with_posthoc_evaluation",
+  "commands": [
+    {
+      "name": "encode-real-rgb-images-into-test-mp4",
+      "command": [
+        "ffmpeg",
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-nostdin",
+        "-y",
+        "-framerate",
+        "4",
+        "-start_number",
+        "0",
+        "-i",
+        "/home/runner/work/_temp/tum-rgb-sfm/rgb-input/frame_%05d.png",
+        "-frames:v",
+        "90",
+        "-c:v",
+        "libx264",
+        "-preset",
+        "ultrafast",
+        "-crf",
+        "15",
+        "-pix_fmt",
+        "yuv420p",
+        "/home/runner/work/_temp/tum-rgb-sfm/test-video-from-real-tum-rgb.mp4"
+      ],
+      "status": "passed",
+      "return_code": 0,
+      "stdout_tail": "",
+      "stderr_tail": "",
+      "seconds": 0.463
+    },
+    {
+      "name": "run-real-colmap-rgb-only-SfM",
+      "command": [
+        "/opt/hostedtoolcache/Python/3.12.15/x64/bin/python",
+        "-m",
+        "echo4d.video_sfm",
+        "--video",
+        "/home/runner/work/_temp/tum-rgb-sfm/test-video-from-real-tum-rgb.mp4",
+        "--output",
+        "/home/runner/work/_temp/tum-rgb-sfm/sfm-out",
+        "--fps",
+        "4",
+        "--max-frames",
+        "90",
+        "--camera-model",
+        "PINHOLE",
+        "--camera-params",
+        "525,525,319.5,239.5"
+      ],
+      "status": "passed",
+      "return_code": 0,
+      "stdout_tail": "{\"status\": \"passed_rgb_only_sfm_not_metric_geometry\", \"output\": \"/home/runner/work/_temp/tum-rgb-sfm/sfm-out\", \"result\": {\"frames_extracted\": 90, \"frames_registered\": 90, \"registration_fraction\": 1.0, \"sparse_points\": 9078, \"sfm_model_dir\": \"text-model-0\", \"scale_is_metric\": false, \"trajectory_sha256\": \"2779d7641a6eb2303f6ad4eb60e21c4de52b81e51c9d39582c9903faa0236605\", \"model_images_txt_sha256\": \"7eff723c998e495d84bd290c444212ecc543cd1528cd3b6b074c36c763e7d663\"}, \"error\": null}\n",
+      "stderr_tail": "",
+      "seconds": 162.451
+    }
+  ],
+  "quality_boundaries": [
+    "Real RGB images encoded as a NEW synthetic-timing MP4; not a native phone MP4.",
+    "SfM gets RGB only and known camera intrinsics, NOT depth or TUM GT poses.",
+    "COLMAP coordinate system has unknown metric scale even if Sim3 evaluator yields a value.",
+    "GT is read after SfM; fitted/validated on same poses: optimistic in-sample ATE.",
+    "No dense depth, metric mesh, scene reconstruction or person tracking claimed."
+  ],
+  "download": {
+    "requested_url": "https://cvg.cit.tum.de/rgbd/dataset/freiburg1/rgbd_dataset_freiburg1_xyz.tgz",
+    "bytes": 448204271,
+    "resolved_url": "https://webshare.cvg.cit.tum.de/g/rgbd/dataset/freiburg1/rgbd_dataset_freiburg1_xyz.tgz",
+    "http_status": 200,
+    "etag": "\"1ab70def-4ae2a1dc2ae80\"",
+    "sha256": "a0236d97b8c30cd93b653656d2b6c293ff7c982a4130ef2a1a8beecdb124ef98"
+  },
+  "dataset": {
+    "sha256": "a0236d97b8c30cd93b653656d2b6c293ff7c982a4130ef2a1a8beecdb124ef98",
+    "official_url": "https://cvg.cit.tum.de/rgbd/dataset/freiburg1/rgbd_dataset_freiburg1_xyz.tgz"
+  },
+  "extraction": {
+    "regular_members": 1600,
+    "uncompressed_bytes": 479252043,
+    "indexes": 3,
+    "rgb_depth_images": 1596
+  },
+  "test_video": {
+    "synthetic_timebase": true,
+    "real_tum_images": true,
+    "physical_phone_video": false,
+    "frames": 90,
+    "source_stride": 8,
+    "encoded_fps": 4,
+    "file_sha256": "d766da92599180d9ba575fae03af868bf17be9eba39a4c93fda27313fd2d77c9",
+    "bytes": 7649602,
+    "source_rgb_manifest": [
+      {
+        "name": "frame_00000.png",
+        "t_tum_rgb_s": 1305031102.175304,
+        "original_tum_path": "rgb/1305031102.175304.png",
+        "source_rgb_sha256": "331c3fd7a3d5eefb19e3da2026625aa221ca1991f5ae30ff96060e2e3e45e368"
+      },
+      {
+        "name": "frame_00001.png",
+        "t_tum_rgb_s": 1305031102.443271,
+        "original_tum_path": "rgb/1305031102.443271.png",
+        "source_rgb_sha256": "49deecb97bbb0ef1b8d14212b10d5cdb9a2ce7b4c852ad4838bc8e2a872d82df"
+      },
+      {
+        "name": "frame_00002.png",
+        "t_tum_rgb_s": 1305031102.711263,
+        "original_tum_path": "rgb/1305031102.711263.png",
+        "source_rgb_sha256": "48be03e8e2b369d348559d4f94b26811ac156f0036798092ccc0429367d09688"
+      },
+      {
+        "name": "frame_00003.png",
+        "t_tum_rgb_s": 1305031102.975203,
+        "original_tum_path": "rgb/1305031102.975203.png",
+        "source_rgb_sha256": "c3d09cdd91eb23c6407cb1969ed65e592e58f231f502b9185a0da7115ba59a68"
+      },
+      {
+        "name": "frame_00004.png",
+        "t_tum_rgb_s": 1305031103.243216,
+        "original_tum_path": "rgb/1305031103.243216.png",
+        "source_rgb_sha256": "dffe2b7b0efb05d9a3cb9d7d938efee092d16436d6fc9a29432b1c447cd20333"
+      },
+      {
+        "name": "frame_00005.png",
+        "t_tum_rgb_s": 1305031103.511333,
+        "original_tum_path": "rgb/1305031103.511333.png",
+        "source_rgb_sha256": "04c6b5a3018a8c8faf6a713466a4257360e1c9dd844c4dfb8237640a56a820b2"
+      },
+      {
+        "name": "frame_00006.png",
+        "t_tum_rgb_s": 1305031103.775342,
+        "original_tum_path": "rgb/1305031103.775342.png",
+        "source_rgb_sha256": "965eefeeb53c411760fdcf86f588b4d6bdca31c914a3fbcbcc9debf97543ac87"
+      },
+      {
+        "name": "frame_00007.png",
+        "t_tum_rgb_s": 1305031104.043249,
+        "original_tum_path": "rgb/1305031104.043249.png",
+        "source_rgb_sha256": "3cad59c089378a46c7c36f2dae64db7c4994cb3c4d8b27a2b93b30f6a17b2804"
+      },
+      {
+        "name": "frame_00008.png",
+        "t_tum_rgb_s": 1305031104.311219,
+        "original_tum_path": "rgb/1305031104.311219.png",
+        "source_rgb_sha256": "33187f3423a7681a8df736ada872d0b2c8bc4cd7ab39d869d14a10a03e08e87e"
+      },
+      {
+        "name": "frame_00009.png",
+        "t_tum_rgb_s": 1305031104.575343,
+        "original_tum_path": "rgb/1305031104.575343.png",
+        "source_rgb_sha256": "55b5ef44c2246a548f4d203613053ce3dd27fdbc59bbb424d6b673669a7ce7d7"
+      },
+      {
+        "name": "frame_00010.png",
+        "t_tum_rgb_s": 1305031104.843258,
+        "original_tum_path": "rgb/1305031104.843258.png",
+        "source_rgb_sha256": "c550780c4ee5d37a22abe5ab06b0a62fe6fd3b75e20ae432b1dfa73da9ade577"
+      },
+      {
+        "name": "frame_00011.png",
+        "t_tum_rgb_s": 1305031105.111299,
+        "original_tum_path": "rgb/1305031105.111299.png",
+        "source_rgb_sha256": "3cc2ff4dffb668ae4429ad1070160bc250d406c52cf135be85562e44ca35cc78"
+      },
+      {
+        "name": "frame_00012.png",
+        "t_tum_rgb_s": 1305031105.375338,
+        "original_tum_path": "rgb/1305031105.375338.png",
+        "source_rgb_sha256": "bae91fcb8e02e0b719031f53f5a64fe4b5b993d03276ae8aa038393d28be9a51"
+      },
+      {
+        "name": "frame_00013.png",
+        "t_tum_rgb_s": 1305031105.643273,
+        "original_tum_path": "rgb/1305031105.643273.png",
+        "source_rgb_sha256": "3fc9f7946f3688e6efb32f585fc63cbb4cf7a240032c69774181a5dec58840e7"
+      },
+      {
+        "name": "frame_00014.png",
+        "t_tum_rgb_s": 1305031105.911262,
+        "original_tum_path": "rgb/1305031105.911262.png",
+        "source_rgb_sha256": "6f38aed9080e03d761a8e41b9829caf1c970316435b22b1f8acc3c10e063a3f5"
+      },
+      {
+        "name": "frame_00015.png",
+        "t_tum_rgb_s": 1305031106.175534,
+        "original_tum_path": "rgb/1305031106.175534.png",
+        "source_rgb_sha256": "6fabe6e561dd439967909be6a9a78ff62a91d0e61a2af47574c4dc571d27846d"
+      },
+      {
+        "name": "frame_00016.png",
+        "t_tum_rgb_s": 1305031106.443278,
+        "original_tum_path": "rgb/1305031106.443278.png",
+        "source_rgb_sha256": "2c2bc0550375fb208793a97704d03d0ea52056a29db2e0e32482f5b88541dfd0"
+      },
+      {
+        "name": "frame_00017.png",
+        "t_tum_rgb_s": 1305031106.711508,
+        "original_tum_path": "rgb/1305031106.711508.png",
+        "source_rgb_sha256": "47fefd35f756f83861e861336a6111d325e6e9791f00f541547350833793a87d"
+      },
+      {
+        "name": "frame_00018.png",
+        "t_tum_rgb_s": 1305031106.975547,
+        "original_tum_path": "rgb/1305031106.975547.png",
+        "source_rgb_sha256": "d1ebdbcedd5a6842c859c66d099c66bb2c5d553c6c76a8b41cabca549967a04d"
+      },
+      {
+        "name": "frame_00019.png",
+        "t_tum_rgb_s": 1305031107.243378,
+        "original_tum_path": "rgb/1305031107.243378.png",
+        "source_rgb_sha256": "31417824f3d332093c3f685b669a77b267b3774c58d5ce97899b5fe5c76a3293"
+      },
+      {
+        "name": "frame_00020.png",
+        "t_tum_rgb_s": 1305031107.511352,
+        "original_tum_path": "rgb/1305031107.511352.png",
+        "source_rgb_sha256": "610f06aed526c164eb21364c2c2c99c08c81baf6655250846251b42e40741106"
+      },
+      {
+        "name": "frame_00021.png",
+        "t_tum_rgb_s": 1305031107.775802,
+        "original_tum_path": "rgb/1305031107.775802.png",
+        "source_rgb_sha256": "bb4c902493f57bddee1c2920839133f720f9bd33adf1d82581b452aa96bf4233"
+      },
+      {
+        "name": "frame_00022.png",
+        "t_tum_rgb_s": 1305031108.043418,
+        "original_tum_path": "rgb/1305031108.043418.png",
+        "source_rgb_sha256": "2dfed98b89b670b29c866f46dd0da5d8bfae434a6ad207cff43a988ab9581372"
+      },
+      {
+        "name": "frame_00023.png",
+        "t_tum_rgb_s": 1305031108.311332,
+        "original_tum_path": "rgb/1305031108.311332.png",
+        "source_rgb_sha256": "cc0552244b36f15f86edc4c2f4809976802bb71b16d8077a1a7ffc9f18add0df"
+      },
+      {
+        "name": "frame_00024.png",
+        "t_tum_rgb_s": 1305031108.575414,
+        "original_tum_path": "rgb/1305031108.575414.png",
+        "source_rgb_sha256": "280bf93c50aed86ea2fc0034974d3050a77112b0e495ff5ea75b6edf2776e2f5"
+      },
+      {
+        "name": "frame_00025.png",
+        "t_tum_rgb_s": 1305031108.843264,
+        "original_tum_path": "rgb/1305031108.843264.png",
+        "source_rgb_sha256": "ac3a83afb4e0cf4205b6da956353a382769b5123e7072572852de4b3790852c7"
+      },
+      {
+        "name": "frame_00026.png",
+        "t_tum_rgb_s": 1305031109.111282,
+        "original_tum_path": "rgb/1305031109.111282.png",
+        "source_rgb_sha256": "84d4489713798fb8df7a0fd67898c53e545f3273a02cd202b04eef59618326ec"
+      },
+      {
+        "name": "frame_00027.png",
+        "t_tum_rgb_s": 1305031109.375397,
+        "original_tum_path": "rgb/1305031109.375397.png",
+        "source_rgb_sha256": "8f516bfe340c52d969f2cbea0346668a493d33107d39794be4cf409ad1830629"
+      },
+      {
+        "name": "frame_00028.png",
+        "t_tum_rgb_s": 1305031109.643229,
+        "original_tum_path": "rgb/1305031109.643229.png",
+        "source_rgb_sha256": "b277eb9c96f3d2c15e2fbd9a24fd9e3b6d6f61a2ac450f650d694514eefec7fc"
+      },
+      {
+        "name": "frame_00029.png",
+        "t_tum_rgb_s": 1305031109.911265,
+        "original_tum_path": "rgb/1305031109.911265.png",
+        "source_rgb_sha256": "d9696026d2858baff93bdc353fb44d45e11151eef588aeecf7edfebc09e17c6b"
+      },
+      {
+        "name": "frame_00030.png",
+        "t_tum_rgb_s": 1305031110.175641,
+        "original_tum_path": "rgb/1305031110.175641.png",
+        "source_rgb_sha256": "79043b10bafe4b073574eed704bd3efecaa4badf59549c09ac24b022511a0cc3"
+      },
+      {
+        "name": "frame_00031.png",
+        "t_tum_rgb_s": 1305031110.44326,
+        "original_tum_path": "rgb/1305031110.443260.png",
+        "source_rgb_sha256": "20c947533dd459314003791823b93c6723e6888df9944ff91761fab663c40f9e"
+      },
+      {
+        "name": "frame_00032.png",
+        "t_tum_rgb_s": 1305031110.711412,
+        "original_tum_path": "rgb/1305031110.711412.png",
+        "source_rgb_sha256": "54a6995a8145ed3f6913eda696363ae8d45320b9cd8b9c390500c62bf7693a52"
+      },
+      {
+        "name": "frame_00033.png",
+        "t_tum_rgb_s": 1305031110.979345,
+        "original_tum_path": "rgb/1305031110.979345.png",
+        "source_rgb_sha256": "3f891575a31944df4bb7c40ad16c288acb7083a5ba7e6ad151cb74a5bdc593f4"
+      },
+      {
+        "name": "frame_00034.png",
+        "t_tum_rgb_s": 1305031111.243236,
+        "original_tum_path": "rgb/1305031111.243236.png",
+        "source_rgb_sha256": "2d1ffebcff486c06723e0d35eb0980e4ce11aff74d0c3f950d2ed26abfe8acc9"
+      },
+      {
+        "name": "frame_00035.png",
+        "t_tum_rgb_s": 1305031111.511264,
+        "original_tum_path": "rgb/1305031111.511264.png",
+        "source_rgb_sha256": "c959ae17895a931fd59a60d81645d67b1e5f0c2a7f77e872e602f77333875044"
+      },
+      {
+        "name": "frame_00036.png",
+        "t_tum_rgb_s": 1305031111.779423,
+        "original_tum_path": "rgb/1305031111.779423.png",
+        "source_rgb_sha256": "4a28a0a38aeaeaf984b54c13c0ed4dcdfb530b95a06e56423ab4a7520adf729b"
+      },
+      {
+        "name": "frame_00037.png",
+        "t_tum_rgb_s": 1305031112.04327,
+        "original_tum_path": "rgb/1305031112.043270.png",
+        "source_rgb_sha256": "33c3be01ab9f28655c823913187e83f0ab1efab82ad8b31dfd7406cef9b1fb5a"
+      },
+      {
+        "name": "frame_00038.png",
+        "t_tum_rgb_s": 1305031112.311312,
+        "original_tum_path": "rgb/1305031112.311312.png",
+        "source_rgb_sha256": "13c26a8c5ce69f4469a3e7956d3bb4b6a8d5e80fddf0ff81d02f9d921e98bb22"
+      },
+      {
+        "name": "frame_00039.png",
+        "t_tum_rgb_s": 1305031112.579252,
+        "original_tum_path": "rgb/1305031112.579252.png",
+        "source_rgb_sha256": "1003c67747ac9dd428a48e880cf3424f5fae939259c860ef0a93a212e8a15795"
+      },
+      {
+        "name": "frame_00040.png",
+        "t_tum_rgb_s": 1305031112.843286,
+        "original_tum_path": "rgb/1305031112.843286.png",
+        "source_rgb_sha256": "481cfeaf1d16b56b867317d5fa84a9206b7ae30d57144b7335f25859e3c0ae3f"
+      },
+      {
+        "name": "frame_00041.png",
+        "t_tum_rgb_s": 1305031113.111316,
+        "original_tum_path": "rgb/1305031113.111316.png",
+        "source_rgb_sha256": "fd1fd8795e8e1ed6fa40beddd53c153399840ab95c500f55ff1c946ad7cfd72d"
+      },
+      {
+        "name": "frame_00042.png",
+        "t_tum_rgb_s": 1305031113.379312,
+        "original_tum_path": "rgb/1305031113.379312.png",
+        "source_rgb_sha256": "dd0c37f9386e189977ace8cfca59d5b19edaf23499b1e0b569cc50b80a8ae706"
+      },
+      {
+        "name": "frame_00043.png",
+        "t_tum_rgb_s": 1305031113.643222,
+        "original_tum_path": "rgb/1305031113.643222.png",
+        "source_rgb_sha256": "de796e13351ecf4754971bf119c83ada8bd69e92dc61bba6869ddfda867d8b5e"
+      },
+      {
+        "name": "frame_00044.png",
+        "t_tum_rgb_s": 1305031113.91129,
+        "original_tum_path": "rgb/1305031113.911290.png",
+        "source_rgb_sha256": "85cc646a5ac231a34469af58c63f9bd695ffddfa28f6d8a4612b586cfddc2138"
+      },
+      {
+        "name": "frame_00045.png",
+        "t_tum_rgb_s": 1305031114.179337,
+        "original_tum_path": "rgb/1305031114.179337.png",
+        "source_rgb_sha256": "663e52eb57231619d101612d8d6bf914b592f01490bac91625764b22ef633576"
+      },
+      {
+        "name": "frame_00046.png",
+        "t_tum_rgb_s": 1305031114.443345,
+        "original_tum_path": "rgb/1305031114.443345.png",
+        "source_rgb_sha256": "6669dd78a695340863b9f5dc974b26443827592fbe2f0c61a7017fe9261f5040"
+      },
+      {
+        "name": "frame_00047.png",
+        "t_tum_rgb_s": 1305031114.711306,
+        "original_tum_path": "rgb/1305031114.711306.png",
+        "source_rgb_sha256": "3215d05b568d884cf8aff39e934042eea0aca11e1e6f0bc378ff8c0b7a75f246"
+      },
+      {
+        "name": "frame_00048.png",
+        "t_tum_rgb_s": 1305031114.97928,
+        "original_tum_path": "rgb/1305031114.979280.png",
+        "source_rgb_sha256": "627c23c66c6e451593b79a75112986a9d52f2c918d6feb0bdd26eb6a4a12d72c"
+      },
+      {
+        "name": "frame_00049.png",
+        "t_tum_rgb_s": 1305031115.243297,
+        "original_tum_path": "rgb/1305031115.243297.png",
+        "source_rgb_sha256": "5914e73a994f6fd34469619bc75e90f5e15171a07814b869a0bdcb00cb7c3040"
+      },
+      {
+        "name": "frame_00050.png",
+        "t_tum_rgb_s": 1305031115.511253,
+        "original_tum_path": "rgb/1305031115.511253.png",
+        "source_rgb_sha256": "ac1c63ab16df2ac07fddc21f3fa110885d91bc191543ca572ef1a88db58a45e3"
+      },
+      {
+        "name": "frame_00051.png",
+        "t_tum_rgb_s": 1305031115.779425,
+        "original_tum_path": "rgb/1305031115.779425.png",
+        "source_rgb_sha256": "a054e3bdd064269711383f7308ad564aa0977ccb9706251a13419e5a89b756de"
+      },
+      {
+        "name": "frame_00052.png",
+        "t_tum_rgb_s": 1305031116.043164,
+        "original_tum_path": "rgb/1305031116.043164.png",
+        "source_rgb_sha256": "814f7bbb7b279e3d5dc6f43b4fa93a83f3e5f33e2815b5584d4c446b2d687cc2"
+      },
+      {
+        "name": "frame_00053.png",
+        "t_tum_rgb_s": 1305031116.311336,
+        "original_tum_path": "rgb/1305031116.311336.png",
+        "source_rgb_sha256": "74b301dc97315c27742ba003d8c39b12cf71da635d3834cf8247c8a27d4826ed"
+      },
+      {
+        "name": "frame_00054.png",
+        "t_tum_rgb_s": 1305031116.579313,
+        "original_tum_path": "rgb/1305031116.579313.png",
+        "source_rgb_sha256": "0682fed5e34d179fd924294981a48aa1ab4284aeef3137703dfdf27f1b856f9e"
+      },
+      {
+        "name": "frame_00055.png",
+        "t_tum_rgb_s": 1305031116.846089,
+        "original_tum_path": "rgb/1305031116.846089.png",
+        "source_rgb_sha256": "2115334908d7d87ad1d0e2d03068b0bba92bba175e83210d56a50de7815a8096"
+      },
+      {
+        "name": "frame_00056.png",
+        "t_tum_rgb_s": 1305031117.111238,
+        "original_tum_path": "rgb/1305031117.111238.png",
+        "source_rgb_sha256": "c1cb0548504869b0ca45dd3dd007419e4ade8955f45a073393957edfbca7f0e1"
+      },
+      {
+        "name": "frame_00057.png",
+        "t_tum_rgb_s": 1305031117.379454,
+        "original_tum_path": "rgb/1305031117.379454.png",
+        "source_rgb_sha256": "db35ccd31ed402c04debedeef7d86aac4da147ce0cf398247fc8a29b2e464348"
+      },
+      {
+        "name": "frame_00058.png",
+        "t_tum_rgb_s": 1305031117.643252,
+        "original_tum_path": "rgb/1305031117.643252.png",
+        "source_rgb_sha256": "4e867fad5796e032546fd5baae5c42ab77c6bb9dad3be2bb5ee76918813d4955"
+      },
+      {
+        "name": "frame_00059.png",
+        "t_tum_rgb_s": 1305031117.911407,
+        "original_tum_path": "rgb/1305031117.911407.png",
+        "source_rgb_sha256": "711fd613992e67d3efa4f7e675478fd10a0fbd98c660c2f20e6f321e686cbfa6"
+      },
+      {
+        "name": "frame_00060.png",
+        "t_tum_rgb_s": 1305031118.179323,
+        "original_tum_path": "rgb/1305031118.179323.png",
+        "source_rgb_sha256": "f7e88c2d0125f35b8f58867b445cf9317e862aa052297efe79742946e9b7cd4f"
+      },
+      {
+        "name": "frame_00061.png",
+        "t_tum_rgb_s": 1305031118.445692,
+        "original_tum_path": "rgb/1305031118.445692.png",
+        "source_rgb_sha256": "d4a232452809ec33673beea46483f7c31af5f72f8584b418c864e618b7cc101e"
+      },
+      {
+        "name": "frame_00062.png",
+        "t_tum_rgb_s": 1305031118.711421,
+        "original_tum_path": "rgb/1305031118.711421.png",
+        "source_rgb_sha256": "8dba718d123a5f9344429250ce554eddb55a56e0ccc828b41851ec10b8804d4f"
+      },
+      {
+        "name": "frame_00063.png",
+        "t_tum_rgb_s": 1305031118.979374,
+        "original_tum_path": "rgb/1305031118.979374.png",
+        "source_rgb_sha256": "bb6f95900387f17969e5ca36e1b5af2ce201ccd623e93df1f2220d6aa6c44d68"
+      },
+      {
+        "name": "frame_00064.png",
+        "t_tum_rgb_s": 1305031119.247399,
+        "original_tum_path": "rgb/1305031119.247399.png",
+        "source_rgb_sha256": "f579b267c6023e20fafcdc53e7433247dc6a329be356b806b31a13f2c3c94956"
+      },
+      {
+        "name": "frame_00065.png",
+        "t_tum_rgb_s": 1305031119.51124,
+        "original_tum_path": "rgb/1305031119.511240.png",
+        "source_rgb_sha256": "5fa9a25fe45c1e331bb0c0bf63d1e7b93efee14881451f23aaba460b0e86eae7"
+      },
+      {
+        "name": "frame_00066.png",
+        "t_tum_rgb_s": 1305031119.779169,
+        "original_tum_path": "rgb/1305031119.779169.png",
+        "source_rgb_sha256": "47449d36ff25db2d12ecfa53201cf28d72c4b1c90f2eb248a715c6b5ba7df648"
+      },
+      {
+        "name": "frame_00067.png",
+        "t_tum_rgb_s": 1305031120.04729,
+        "original_tum_path": "rgb/1305031120.047290.png",
+        "source_rgb_sha256": "c44d873b738d2f411ab00e6e9dc5db60fe73431c0a12428ffa9f17d5576707f0"
+      },
+      {
+        "name": "frame_00068.png",
+        "t_tum_rgb_s": 1305031120.315196,
+        "original_tum_path": "rgb/1305031120.315196.png",
+        "source_rgb_sha256": "6277e3d9ad2656774dbd9f4b8015ef7e810d566f13e3c5d992360d77a3d8e112"
+      },
+      {
+        "name": "frame_00069.png",
+        "t_tum_rgb_s": 1305031120.579551,
+        "original_tum_path": "rgb/1305031120.579551.png",
+        "source_rgb_sha256": "6328d9a56e90e5f2a77f9a436acd02d893de014f89629fa624241de7adc0a13b"
+      },
+      {
+        "name": "frame_00070.png",
+        "t_tum_rgb_s": 1305031120.847921,
+        "original_tum_path": "rgb/1305031120.847921.png",
+        "source_rgb_sha256": "50273d725823e9451c577432fc5d4c0b98cfd156a88b5c32d875db2aaae1e9a4"
+      },
+      {
+        "name": "frame_00071.png",
+        "t_tum_rgb_s": 1305031121.114696,
+        "original_tum_path": "rgb/1305031121.114696.png",
+        "source_rgb_sha256": "7c86c39096f226d354e3457e938608e40b8a4e2512df77187e3cacb92e9eda34"
+      },
+      {
+        "name": "frame_00072.png",
+        "t_tum_rgb_s": 1305031121.383226,
+        "original_tum_path": "rgb/1305031121.383226.png",
+        "source_rgb_sha256": "3d81cbf5099e319cd568391a80b560a24122eb6b013b7c62a484fb60de790abc"
+      },
+      {
+        "name": "frame_00073.png",
+        "t_tum_rgb_s": 1305031121.647183,
+        "original_tum_path": "rgb/1305031121.647183.png",
+        "source_rgb_sha256": "edfe29bc822519a59e4758c4581fa5604895f040f4d39dadf87746c132a8f9cf"
+      },
+      {
+        "name": "frame_00074.png",
+        "t_tum_rgb_s": 1305031121.914931,
+        "original_tum_path": "rgb/1305031121.914931.png",
+        "source_rgb_sha256": "5266ae8168b48d4e8f83c8efe3c948e8a2c6b8a53db5ee527ba585bd2d029891"
+      },
+      {
+        "name": "frame_00075.png",
+        "t_tum_rgb_s": 1305031122.183042,
+        "original_tum_path": "rgb/1305031122.183042.png",
+        "source_rgb_sha256": "314c9fd09b4479631986b454d85c8eb9c7f0c8a7dcb6a89ad6c9f8796fbbfc6d"
+      },
+      {
+        "name": "frame_00076.png",
+        "t_tum_rgb_s": 1305031122.451257,
+        "original_tum_path": "rgb/1305031122.451257.png",
+        "source_rgb_sha256": "6cc72a3f69dc13e28148e514e0d07c968c4184a0dc828dc2110778694b2ab8b4"
+      },
+      {
+        "name": "frame_00077.png",
+        "t_tum_rgb_s": 1305031122.715208,
+        "original_tum_path": "rgb/1305031122.715208.png",
+        "source_rgb_sha256": "2d86099bb0d442f489d20b6b79e121ddb78ccbbce51393524ef2839b29e18d38"
+      },
+      {
+        "name": "frame_00078.png",
+        "t_tum_rgb_s": 1305031122.982815,
+        "original_tum_path": "rgb/1305031122.982815.png",
+        "source_rgb_sha256": "3a71a601313d61fc41cd42cfd9d657e0891e185d297583d2ab6ba74ff6cdda4e"
+      },
+      {
+        "name": "frame_00079.png",
+        "t_tum_rgb_s": 1305031123.250618,
+        "original_tum_path": "rgb/1305031123.250618.png",
+        "source_rgb_sha256": "c120f575111182c4f15f975bb1665703cba26379ba1c2ae695b4081b46f17bce"
+      },
+      {
+        "name": "frame_00080.png",
+        "t_tum_rgb_s": 1305031123.51136,
+        "original_tum_path": "rgb/1305031123.511360.png",
+        "source_rgb_sha256": "b003ccea6d6185a26398e8257605a27dedc631eca0202906005efd9c724d6e5f"
+      },
+      {
+        "name": "frame_00081.png",
+        "t_tum_rgb_s": 1305031123.783858,
+        "original_tum_path": "rgb/1305031123.783858.png",
+        "source_rgb_sha256": "4c9062a133e06080399035583edc2d8746210390c04272dd9120c6ad7e7b1a58"
+      },
+      {
+        "name": "frame_00082.png",
+        "t_tum_rgb_s": 1305031124.051505,
+        "original_tum_path": "rgb/1305031124.051505.png",
+        "source_rgb_sha256": "0ed036488acf7bf767d76e08f85d0acbafaaf2b9c89eeb4d2165a2a2c8f89718"
+      },
+      {
+        "name": "frame_00083.png",
+        "t_tum_rgb_s": 1305031124.311361,
+        "original_tum_path": "rgb/1305031124.311361.png",
+        "source_rgb_sha256": "9b59c08e566ca1ff5c5a189fad334f363f6bdebc5d2607fbd881197af9b03a06"
+      },
+      {
+        "name": "frame_00084.png",
+        "t_tum_rgb_s": 1305031124.579404,
+        "original_tum_path": "rgb/1305031124.579404.png",
+        "source_rgb_sha256": "12f010642b98bc7916091f8fcb644ad0d59ee49b19e488b0e02d2033669eebea"
+      },
+      {
+        "name": "frame_00085.png",
+        "t_tum_rgb_s": 1305031124.850535,
+        "original_tum_path": "rgb/1305031124.850535.png",
+        "source_rgb_sha256": "5c5100b3cbc5946393a40a492d17bf3746b040a0fde2feaf684a76b355216b09"
+      },
+      {
+        "name": "frame_00086.png",
+        "t_tum_rgb_s": 1305031125.111364,
+        "original_tum_path": "rgb/1305031125.111364.png",
+        "source_rgb_sha256": "a2063af1c4e355b2c091400789f41d1724d41c6ad83ebdbf83f5937c737016d1"
+      },
+      {
+        "name": "frame_00087.png",
+        "t_tum_rgb_s": 1305031125.379401,
+        "original_tum_path": "rgb/1305031125.379401.png",
+        "source_rgb_sha256": "8f43678dab47e91a3e501f0a3ef840453aeb107f62447c57c31882ba0bd47a1c"
+      },
+      {
+        "name": "frame_00088.png",
+        "t_tum_rgb_s": 1305031125.650575,
+        "original_tum_path": "rgb/1305031125.650575.png",
+        "source_rgb_sha256": "e8bd322648ba986a7a40fd1a98d64ea1c1b1f762bcd607986f603b9de01e06f3"
+      },
+      {
+        "name": "frame_00089.png",
+        "t_tum_rgb_s": 1305031125.911305,
+        "original_tum_path": "rgb/1305031125.911305.png",
+        "source_rgb_sha256": "a99d94b2d10dab1d2365ef3d5d4b99c3b3ed201dc65c00536709612e38760c74"
+      }
+    ]
+  },
+  "sfm": {
+    "version": "echo-sfm-run-1",
+    "status": "passed_rgb_only_sfm_not_metric_geometry",
+    "started_utc": "2026-10-25T12:48:37.437477+00:00",
+    "declared_scale": "unknown",
+    "source": "RGB-only; no depths or GT poses for SfM",
+    "commands": [
+      {
+        "stage": "probe-video",
+        "command": [
+          "ffprobe",
+          "-v",
+          "error",
+          "-select_streams",
+          "v:0",
+          "-show_entries",
+          "stream=width,height,codec_name",
+          "-show_entries",
+          "format=duration",
+          "-of",
+          "json",
+          "/home/runner/work/_temp/tum-rgb-sfm/test-video-from-real-tum-rgb.mp4"
+        ],
+        "status": "passed",
+        "seconds": 0.063,
+        "returncode": 0,
+        "stdout_tail": "{\n    \"programs\": [\n\n    ],\n    \"streams\": [\n        {\n            \"codec_name\": \"h264\",\n            \"width\": 640,\n            \"height\": 480\n        }\n    ],\n    \"format\": {\n        \"duration\": \"22.500000\"\n    }\n}\n",
+        "stderr_tail": ""
+      },
+      {
+        "stage": "extract-frames",
+        "command": [
+          "ffmpeg",
+          "-hide_banner",
+          "-loglevel",
+          "error",
+          "-nostdin",
+          "-i",
+          "/home/runner/work/_temp/tum-rgb-sfm/test-video-from-real-tum-rgb.mp4",
+          "-vf",
+          "fps=4",
+          "-frames:v",
+          "90",
+          "-start_number",
+          "0",
+          "-f",
+          "image2",
+          "/home/runner/work/_temp/tum-rgb-sfm/sfm-out/images/frame_%05d.png"
+        ],
+        "status": "passed",
+        "seconds": 0.947,
+        "returncode": 0,
+        "stdout_tail": "",
+        "stderr_tail": ""
+      },
+      {
+        "stage": "colmap-help-version-compatible",
+        "command": [
+          "colmap",
+          "help"
+        ],
+        "status": "passed",
+        "seconds": 0.015,
+        "returncode": 0,
+        "stdout_tail": "COLMAP 3.9.1 -- Structure-from-Motion and Multi-View Stereo\n(Commit Unknown on Unknown without CUDA)\n\nUsage:\n  colmap [command] [options]\n\nDocumentation:\n  https://colmap.github.io/\n\nExample usage:\n  colmap help [ -h, --help ]\n  colmap gui\n  colmap gui -h [ --help ]\n  colmap automatic_reconstructor -h [ --help ]\n  colmap automatic_reconstructor --image_path IMAGES --workspace_path WORKSPACE\n  colmap feature_extractor --image_path IMAGES --database_path DATABASE\n  colmap exhaustive_matcher --database_path DATABASE\n  colmap mapper --image_path IMAGES --database_path DATABASE --output_path MODEL\n  ...\n\nAvailable commands:\n  help\n  gui\n  automatic_reconstructor\n  bundle_adjuster\n  color_extractor\n  database_cleaner\n  database_creator\n  database_merger\n  delaunay_mesher\n  exhaustive_matcher\n  feature_extractor\n  feature_importer\n  hierarchical_mapper\n  image_deleter\n  image_filterer\n  image_rectifier\n  image_registrator\n  image_undistorter\n  image_undistorter_standalone\n  mapper\n  matches_importer\n  model_aligner\n  model_analyzer\n  model_comparer\n  model_converter\n  model_cropper\n  model_merger\n  model_orientation_aligner\n  model_splitter\n  model_transformer\n  patch_match_stereo\n  point_filtering\n  point_triangulator\n  poisson_mesher\n  project_generator\n  rig_bundle_adjuster\n  sequential_matcher\n  spatial_matcher\n  stereo_fusion\n  transitive_matcher\n  vocab_tree_builder\n  vocab_tree_matcher\n  vocab_tree_retriever\n\n",
+        "stderr_tail": ""
+      },
+      {
+        "stage": "colmap-features",
+        "command": [
+          "colmap",
+          "feature_extractor",
+          "--database_path",
+          "/home/runner/work/_temp/tum-rgb-sfm/sfm-out/database.db",
+          "--image_path",
+          "/home/runner/work/_temp/tum-rgb-sfm/sfm-out/images",
+          "--ImageReader.camera_model",
+          "PINHOLE",
+          "--ImageReader.single_camera",
+          "1",
+          "--ImageReader.camera_params",
+          "525,525,319.5,239.5",
+          "--SiftExtraction.use_gpu",
+          "0",
+          "--SiftExtraction.num_threads",
+          "2",
+          "--SiftExtraction.max_num_features",
+          "4096"
+        ],
+        "status": "passed",
+        "seconds": 18.168,
+        "returncode": 0,
+        "stdout_tail": "",
+        "stderr_tail": " 4306 feature_extraction.cc:283]   Dimensions:      640 x 480\nI20261025 12:48:53.279852  4306 feature_extraction.cc:286]   Camera:          #1 - PINHOLE\nI20261025 12:48:53.279860  4306 feature_extraction.cc:289]   Focal Length:    525.00px (Prior)\nI20261025 12:48:53.279874  4306 feature_extraction.cc:302]   Features:        2324\nI20261025 12:48:53.295857  4306 feature_extraction.cc:254] Processed file [73/90]\nI20261025 12:48:53.295886  4306 feature_extraction.cc:257]   Name:            frame_00072.png\nI20261025 12:48:53.295894  4306 feature_extraction.cc:283]   Dimensions:      640 x 480\nI20261025 12:48:53.295902  4306 feature_extraction.cc:286]   Camera:          #1 - PINHOLE\nI20261025 12:48:53.295909  4306 feature_extraction.cc:289]   Focal Length:    525.00px (Prior)\nI20261025 12:48:53.295919  4306 feature_extraction.cc:302]   Features:        1649\nI20261025 12:48:53.671209  4306 feature_extraction.cc:254] Processed file [74/90]\nI20261025 12:48:53.671345  4306 feature_extraction.cc:257]   Name:            frame_00073.png\nI20261025 12:48:53.671371  4306 feature_extraction.cc:283]   Dimensions:      640 x 480\nI20261025 12:48:53.671392  4306 feature_extraction.cc:286]   Camera:          #1 - PINHOLE\nI20261025 12:48:53.671413  4306 feature_extraction.cc:289]   Focal Length:    525.00px (Prior)\nI20261025 12:48:53.671440  4306 feature_extraction.cc:302]   Features:        1965\nI20261025 12:48:53.702682  4306 feature_extraction.cc:254] Processed file [75/90]\nI20261025 12:48:53.702800  4306 feature_extraction.cc:257]   Name:            frame_00074.png\nI20261025 12:48:53.702824  4306 feature_extraction.cc:283]   Dimensions:      640 x 480\nI20261025 12:48:53.702845  4306 feature_extraction.cc:286]   Camera:          #1 - PINHOLE\nI20261025 12:48:53.702867  4306 feature_extraction.cc:289]   Focal Length:    525.00px (Prior)\nI20261025 12:48:53.702893  4306 feature_extraction.cc:302]   Features:        2371\nI20261025 12:48:54.066483  4306 feature_extraction.cc:254] Processed file [76/90]\nI20261025 12:48:54.066613  4306 feature_extraction.cc:257]   Name:            frame_00075.png\nI20261025 12:48:54.066638  4306 feature_extraction.cc:283]   Dimensions:      640 x 480\nI20261025 12:48:54.066659  4306 feature_extraction.cc:286]   Camera:          #1 - PINHOLE\nI20261025 12:48:54.066680  4306 feature_extraction.cc:289]   Focal Length:    525.00px (Prior)\nI20261025 12:48:54.066721  4306 feature_extraction.cc:302]   Features:        2036\nI20261025 12:48:54.081570  4306 feature_extraction.cc:254] Processed file [77/90]\nI20261025 12:48:54.081647  4306 feature_extraction.cc:257]   Name:            frame_00076.png\nI20261025 12:48:54.081657  4306 feature_extraction.cc:283]   Dimensions:      640 x 480\nI20261025 12:48:54.081665  4306 feature_extraction.cc:286]   Camera:          #1 - PINHOLE\nI20261025 12:48:54.081672  4306 feature_extraction.cc:289]   Focal Length:    525.00px (Prior)\nI20261025 12:48:54.081683  4306 feature_extraction.cc:302]   Features:        1836\nI20261025 12:48:54.485503  4306 feature_extraction.cc:254] Processed file [78/90]\nI20261025 12:48:54.485639  4306 feature_extraction.cc:257]   Name:            frame_00077.png\nI20261025 12:48:54.485651  4306 feature_extraction.cc:283]   Dimensions:      640 x 480\nI20261025 12:48:54.485658  4306 feature_extraction.cc:286]   Camera:          #1 - PINHOLE\nI20261025 12:48:54.485666  4306 feature_extraction.cc:289]   Focal Length:    525.00px (Prior)\nI20261025 12:48:54.485679  4306 feature_extraction.cc:302]   Features:        2268\nI20261025 12:48:54.493541  4306 feature_extraction.cc:254] Processed file [79/90]\nI20261025 12:48:54.493561  4306 feature_extraction.cc:257]   Name:            frame_00078.png\nI20261025 12:48:54.493569  4306 feature_extraction.cc:283]   Dimensions:      640 x 480\nI20261025 12:48:54.493577  4306 feature_extraction.cc:286]   Camera:          #1 - PINHOLE\nI20261025 12:48:54.493583  4306 feature_extraction.cc:289]   Focal Length:    525.00px (Prior)\nI20261025 12:48:54.493592  4306 feature_extraction.cc:302]   Features:        2141\nI20261025 12:48:54.806840  4306 feature_extraction.cc:254] Processed file [80/90]\nI20261025 12:48:54.806974  4306 feature_extraction.cc:257]   Name:            frame_00079.png\nI20261025 12:48:54.806985  4306 feature_extraction.cc:283]   Dimensions:      640 x 480\nI20261025 12:48:54.806993  4306 feature_extraction.cc:286]   Camera:          #1 - PINHOLE\nI20261025 12:48:54.807001  4306 feature_extraction.cc:289]   Focal Length:    525.00px (Prior)\nI20261025 12:48:54.807014  4306 feature_extraction.cc:302]   Features:        1240\nI20261025 12:48:54.882485  4306 feature_extraction.cc:254] Processed file [81/90]\nI20261025 12:48:54.882534  4306 feature_extraction.cc:257]   Name:            frame_00080.png\nI20261025 12:48:54.882542  4306 feature_extraction.cc:283]   Dimensions:      640 x 480\nI20261025 12:48:54.882550  4306 feature_extraction.cc:286]   Camera:          #1 - PINHOLE\nI20261025 12:48:54.882557  4306 feature_extraction.cc:289]   Focal Length:    525.00px (Prior)\nI20261025 12:48:54.882570  4306 feature_extraction.cc:302]   Features:        1914\nI20261025 12:48:55.206868  4306 feature_extraction.cc:254] Processed file [82/90]\nI20261025 12:48:55.206923  4306 feature_extraction.cc:257]   Name:            frame_00081.png\nI20261025 12:48:55.206931  4306 feature_extraction.cc:283]   Dimensions:      640 x 480\nI20261025 12:48:55.206939  4306 feature_extraction.cc:286]   Camera:          #1 - PINHOLE\nI20261025 12:48:55.206947  4306 feature_extraction.cc:289]   Focal Length:    525.00px (Prior)\nI20261025 12:48:55.206961  4306 feature_extraction.cc:302]   Features:        2165\nI20261025 12:48:55.269280  4306 feature_extraction.cc:254] Processed file [83/90]\nI20261025 12:48:55.269327  4306 feature_extraction.cc:257]   Name:            frame_00082.png\nI20261025 12:48:55.269335  4306 feature_extraction.cc:283]   Dimensions:      640 x 480\nI20261025 12:48:55.269343  4306 feature_extraction.cc:286]   Camera:          #1 - PINHOLE\nI20261025 12:48:55.269351  4306 feature_extraction.cc:289]   Focal Length:    525.00px (Prior)\nI20261025 12:48:55.269362  4306 feature_extraction.cc:302]   Features:        1893\nI20261025 12:48:55.520601  4306 feature_extraction.cc:254] Processed file [84/90]\nI20261025 12:48:55.520658  4306 feature_extraction.cc:257]   Name:            frame_00083.png\nI20261025 12:48:55.520668  4306 feature_extraction.cc:283]   Dimensions:      640 x 480\nI20261025 12:48:55.520675  4306 feature_extraction.cc:286]   Camera:          #1 - PINHOLE\nI20261025 12:48:55.520684  4306 feature_extraction.cc:289]   Focal Length:    525.00px (Prior)\nI20261025 12:48:55.520711  4306 feature_extraction.cc:302]   Features:        1158\nI20261025 12:48:55.607877  4306 feature_extraction.cc:254] Processed file [85/90]\nI20261025 12:48:55.607934  4306 feature_extraction.cc:257]   Name:            frame_00084.png\nI20261025 12:48:55.607944  4306 feature_extraction.cc:283]   Dimensions:      640 x 480\nI20261025 12:48:55.607950  4306 feature_extraction.cc:286]   Camera:          #1 - PINHOLE\nI20261025 12:48:55.607959  4306 feature_extraction.cc:289]   Focal Length:    525.00px (Prior)\nI20261025 12:48:55.607970  4306 feature_extraction.cc:302]   Features:        1405\nI20261025 12:48:55.911847  4306 feature_extraction.cc:254] Processed file [86/90]\nI20261025 12:48:55.911904  4306 feature_extraction.cc:257]   Name:            frame_00085.png\nI20261025 12:48:55.911912  4306 feature_extraction.cc:283]   Dimensions:      640 x 480\nI20261025 12:48:55.911921  4306 feature_extraction.cc:286]   Camera:          #1 - PINHOLE\nI20261025 12:48:55.911928  4306 feature_extraction.cc:289]   Focal Length:    525.00px (Prior)\nI20261025 12:48:55.911942  4306 feature_extraction.cc:302]   Features:        1874\nI20261025 12:48:55.998867  4306 feature_extraction.cc:254] Processed file [87/90]\nI20261025 12:48:55.998986  4306 feature_extraction.cc:257]   Name:            frame_00086.png\nI20261025 12:48:55.999011  4306 feature_extraction.cc:283]   Dimensions:      640 x 480\nI20261025 12:48:55.999033  4306 feature_extraction.cc:286]   Camera:          #1 - PINHOLE\nI20261025 12:48:55.999055  4306 feature_extraction.cc:289]   Focal Length:    525.00px (Prior)\nI20261025 12:48:55.999080  4306 feature_extraction.cc:302]   Features:        1924\nI20261025 12:48:56.295388  4306 feature_extraction.cc:254] Processed file [88/90]\nI20261025 12:48:56.295521  4306 feature_extraction.cc:257]   Name:            frame_00087.png\nI20261025 12:48:56.295545  4306 feature_extraction.cc:283]   Dimensions:      640 x 480\nI20261025 12:48:56.295567  4306 feature_extraction.cc:286]   Camera:          #1 - PINHOLE\nI20261025 12:48:56.295589  4306 feature_extraction.cc:289]   Focal Length:    525.00px (Prior)\nI20261025 12:48:56.295615  4306 feature_extraction.cc:302]   Features:        1882\nI20261025 12:48:56.388970  4306 feature_extraction.cc:254] Processed file [89/90]\nI20261025 12:48:56.389106  4306 feature_extraction.cc:257]   Name:            frame_00088.png\nI20261025 12:48:56.389132  4306 feature_extraction.cc:283]   Dimensions:      640 x 480\nI20261025 12:48:56.389154  4306 feature_extraction.cc:286]   Camera:          #1 - PINHOLE\nI20261025 12:48:56.389176  4306 feature_extraction.cc:289]   Focal Length:    525.00px (Prior)\nI20261025 12:48:56.389209  4306 feature_extraction.cc:302]   Features:        1945\nI20261025 12:48:56.634888  4306 feature_extraction.cc:254] Processed file [90/90]\nI20261025 12:48:56.634951  4306 feature_extraction.cc:257]   Name:            frame_00089.png\nI20261025 12:48:56.634961  4306 feature_extraction.cc:283]   Dimensions:      640 x 480\nI20261025 12:48:56.634969  4306 feature_extraction.cc:286]   Camera:          #1 - PINHOLE\nI20261025 12:48:56.634979  4306 feature_extraction.cc:289]   Focal Length:    525.00px (Prior)\nI20261025 12:48:56.634991  4306 feature_extraction.cc:302]   Features:        1426\nI20261025 12:48:56.636046  4301 timer.cc:91] Elapsed time: 0.303 [minutes]\n"
+      },
+      {
+        "stage": "colmap-sequential-matching",
+        "command": [
+          "colmap",
+          "sequential_matcher",
+          "--database_path",
+          "/home/runner/work/_temp/tum-rgb-sfm/sfm-out/database.db",
+          "--SequentialMatching.overlap",
+          "10",
+          "--SiftMatching.use_gpu",
+          "0",
+          "--SiftMatching.num_threads",
+          "2"
+        ],
+        "status": "passed",
+        "seconds": 95.306,
+        "returncode": 0,
+        "stdout_tail": "",
+        "stderr_tail": " [23/90]\nI20261025 12:49:28.708904  4311 feature_matching.cc:46]  in 1.019s\nI20261025 12:49:28.709112  4311 feature_matching.cc:362] Matching image [24/90]\nI20261025 12:49:29.942844  4311 feature_matching.cc:46]  in 1.234s\nI20261025 12:49:29.943045  4311 feature_matching.cc:362] Matching image [25/90]\nI20261025 12:49:31.078191  4311 feature_matching.cc:46]  in 1.135s\nI20261025 12:49:31.078408  4311 feature_matching.cc:362] Matching image [26/90]\nI20261025 12:49:32.332091  4311 feature_matching.cc:46]  in 1.254s\nI20261025 12:49:32.332262  4311 feature_matching.cc:362] Matching image [27/90]\nI20261025 12:49:33.571674  4311 feature_matching.cc:46]  in 1.239s\nI20261025 12:49:33.571859  4311 feature_matching.cc:362] Matching image [28/90]\nI20261025 12:49:34.583134  4311 feature_matching.cc:46]  in 1.011s\nI20261025 12:49:34.583312  4311 feature_matching.cc:362] Matching image [29/90]\nI20261025 12:49:35.766098  4311 feature_matching.cc:46]  in 1.183s\nI20261025 12:49:35.766317  4311 feature_matching.cc:362] Matching image [30/90]\nI20261025 12:49:36.773584  4311 feature_matching.cc:46]  in 1.007s\nI20261025 12:49:36.773860  4311 feature_matching.cc:362] Matching image [31/90]\nI20261025 12:49:37.831563  4311 feature_matching.cc:46]  in 1.058s\nI20261025 12:49:37.831828  4311 feature_matching.cc:362] Matching image [32/90]\nI20261025 12:49:38.728503  4311 feature_matching.cc:46]  in 0.897s\nI20261025 12:49:38.728785  4311 feature_matching.cc:362] Matching image [33/90]\nI20261025 12:49:39.890534  4311 feature_matching.cc:46]  in 1.162s\nI20261025 12:49:39.890786  4311 feature_matching.cc:362] Matching image [34/90]\nI20261025 12:49:40.980177  4311 feature_matching.cc:46]  in 1.089s\nI20261025 12:49:40.980368  4311 feature_matching.cc:362] Matching image [35/90]\nI20261025 12:49:42.194284  4311 feature_matching.cc:46]  in 1.214s\nI20261025 12:49:42.194496  4311 feature_matching.cc:362] Matching image [36/90]\nI20261025 12:49:43.124156  4311 feature_matching.cc:46]  in 0.930s\nI20261025 12:49:43.124377  4311 feature_matching.cc:362] Matching image [37/90]\nI20261025 12:49:43.987146  4311 feature_matching.cc:46]  in 0.863s\nI20261025 12:49:43.987329  4311 feature_matching.cc:362] Matching image [38/90]\nI20261025 12:49:44.880028  4311 feature_matching.cc:46]  in 0.893s\nI20261025 12:49:44.880235  4311 feature_matching.cc:362] Matching image [39/90]\nI20261025 12:49:45.939970  4311 feature_matching.cc:46]  in 1.060s\nI20261025 12:49:45.940184  4311 feature_matching.cc:362] Matching image [40/90]\nI20261025 12:49:47.252175  4311 feature_matching.cc:46]  in 1.312s\nI20261025 12:49:47.252373  4311 feature_matching.cc:362] Matching image [41/90]\nI20261025 12:49:48.271199  4311 feature_matching.cc:46]  in 1.019s\nI20261025 12:49:48.271411  4311 feature_matching.cc:362] Matching image [42/90]\nI20261025 12:49:49.287154  4311 feature_matching.cc:46]  in 1.016s\nI20261025 12:49:49.287329  4311 feature_matching.cc:362] Matching image [43/90]\nI20261025 12:49:50.280157  4311 feature_matching.cc:46]  in 0.993s\nI20261025 12:49:50.280339  4311 feature_matching.cc:362] Matching image [44/90]\nI20261025 12:49:51.512045  4311 feature_matching.cc:46]  in 1.232s\nI20261025 12:49:51.512321  4311 feature_matching.cc:362] Matching image [45/90]\nI20261025 12:49:52.636054  4311 feature_matching.cc:46]  in 1.124s\nI20261025 12:49:52.636289  4311 feature_matching.cc:362] Matching image [46/90]\nI20261025 12:49:53.671355  4311 feature_matching.cc:46]  in 1.035s\nI20261025 12:49:53.675307  4311 feature_matching.cc:362] Matching image [47/90]\nI20261025 12:49:54.535823  4311 feature_matching.cc:46]  in 0.861s\nI20261025 12:49:54.536038  4311 feature_matching.cc:362] Matching image [48/90]\nI20261025 12:49:55.532485  4311 feature_matching.cc:46]  in 0.996s\nI20261025 12:49:55.532708  4311 feature_matching.cc:362] Matching image [49/90]\nI20261025 12:49:56.589329  4311 feature_matching.cc:46]  in 1.057s\nI20261025 12:49:56.589494  4311 feature_matching.cc:362] Matching image [50/90]\nI20261025 12:49:57.537619  4311 feature_matching.cc:46]  in 0.948s\nI20261025 12:49:57.537803  4311 feature_matching.cc:362] Matching image [51/90]\nI20261025 12:49:58.318133  4311 feature_matching.cc:46]  in 0.780s\nI20261025 12:49:58.318331  4311 feature_matching.cc:362] Matching image [52/90]\nI20261025 12:49:59.200196  4311 feature_matching.cc:46]  in 0.882s\nI20261025 12:49:59.200359  4311 feature_matching.cc:362] Matching image [53/90]\nI20261025 12:50:00.000435  4311 feature_matching.cc:46]  in 0.800s\nI20261025 12:50:00.000576  4311 feature_matching.cc:362] Matching image [54/90]\nI20261025 12:50:00.918084  4311 feature_matching.cc:46]  in 0.918s\nI20261025 12:50:00.918257  4311 feature_matching.cc:362] Matching image [55/90]\nI20261025 12:50:01.891718  4311 feature_matching.cc:46]  in 0.973s\nI20261025 12:50:01.891875  4311 feature_matching.cc:362] Matching image [56/90]\nI20261025 12:50:02.829380  4311 feature_matching.cc:46]  in 0.938s\nI20261025 12:50:02.829511  4311 feature_matching.cc:362] Matching image [57/90]\nI20261025 12:50:03.851022  4311 feature_matching.cc:46]  in 1.022s\nI20261025 12:50:03.851199  4311 feature_matching.cc:362] Matching image [58/90]\nI20261025 12:50:05.278344  4311 feature_matching.cc:46]  in 1.427s\nI20261025 12:50:05.278573  4311 feature_matching.cc:362] Matching image [59/90]\nI20261025 12:50:06.494556  4311 feature_matching.cc:46]  in 1.216s\nI20261025 12:50:06.494839  4311 feature_matching.cc:362] Matching image [60/90]\nI20261025 12:50:07.637513  4311 feature_matching.cc:46]  in 1.143s\nI20261025 12:50:07.637769  4311 feature_matching.cc:362] Matching image [61/90]\nI20261025 12:50:08.674826  4311 feature_matching.cc:46]  in 1.037s\nI20261025 12:50:08.675038  4311 feature_matching.cc:362] Matching image [62/90]\nI20261025 12:50:09.846014  4311 feature_matching.cc:46]  in 1.171s\nI20261025 12:50:09.846201  4311 feature_matching.cc:362] Matching image [63/90]\nI20261025 12:50:11.008626  4311 feature_matching.cc:46]  in 1.162s\nI20261025 12:50:11.008826  4311 feature_matching.cc:362] Matching image [64/90]\nI20261025 12:50:11.979362  4311 feature_matching.cc:46]  in 0.971s\nI20261025 12:50:11.979575  4311 feature_matching.cc:362] Matching image [65/90]\nI20261025 12:50:13.124750  4311 feature_matching.cc:46]  in 1.145s\nI20261025 12:50:13.125007  4311 feature_matching.cc:362] Matching image [66/90]\nI20261025 12:50:14.239341  4311 feature_matching.cc:46]  in 1.114s\nI20261025 12:50:14.239580  4311 feature_matching.cc:362] Matching image [67/90]\nI20261025 12:50:15.261971  4311 feature_matching.cc:46]  in 1.022s\nI20261025 12:50:15.262229  4311 feature_matching.cc:362] Matching image [68/90]\nI20261025 12:50:16.293087  4311 feature_matching.cc:46]  in 1.031s\nI20261025 12:50:16.293288  4311 feature_matching.cc:362] Matching image [69/90]\nI20261025 12:50:17.263747  4311 feature_matching.cc:46]  in 0.970s\nI20261025 12:50:17.263934  4311 feature_matching.cc:362] Matching image [70/90]\nI20261025 12:50:18.228082  4311 feature_matching.cc:46]  in 0.964s\nI20261025 12:50:18.228247  4311 feature_matching.cc:362] Matching image [71/90]\nI20261025 12:50:19.280541  4311 feature_matching.cc:46]  in 1.052s\nI20261025 12:50:19.280825  4311 feature_matching.cc:362] Matching image [72/90]\nI20261025 12:50:20.344168  4311 feature_matching.cc:46]  in 1.063s\nI20261025 12:50:20.344367  4311 feature_matching.cc:362] Matching image [73/90]\nI20261025 12:50:21.282385  4311 feature_matching.cc:46]  in 0.938s\nI20261025 12:50:21.282582  4311 feature_matching.cc:362] Matching image [74/90]\nI20261025 12:50:22.245076  4311 feature_matching.cc:46]  in 0.963s\nI20261025 12:50:22.245263  4311 feature_matching.cc:362] Matching image [75/90]\nI20261025 12:50:23.241559  4311 feature_matching.cc:46]  in 0.996s\nI20261025 12:50:23.241740  4311 feature_matching.cc:362] Matching image [76/90]\nI20261025 12:50:24.096179  4311 feature_matching.cc:46]  in 0.854s\nI20261025 12:50:24.096339  4311 feature_matching.cc:362] Matching image [77/90]\nI20261025 12:50:24.964874  4311 feature_matching.cc:46]  in 0.869s\nI20261025 12:50:24.965039  4311 feature_matching.cc:362] Matching image [78/90]\nI20261025 12:50:25.917763  4311 feature_matching.cc:46]  in 0.953s\nI20261025 12:50:25.917985  4311 feature_matching.cc:362] Matching image [79/90]\nI20261025 12:50:26.834192  4311 feature_matching.cc:46]  in 0.916s\nI20261025 12:50:26.834385  4311 feature_matching.cc:362] Matching image [80/90]\nI20261025 12:50:27.564217  4311 feature_matching.cc:46]  in 0.730s\nI20261025 12:50:27.564366  4311 feature_matching.cc:362] Matching image [81/90]\nI20261025 12:50:28.438388  4311 feature_matching.cc:46]  in 0.874s\nI20261025 12:50:28.438583  4311 feature_matching.cc:362] Matching image [82/90]\nI20261025 12:50:29.209969  4311 feature_matching.cc:46]  in 0.771s\nI20261025 12:50:29.210170  4311 feature_matching.cc:362] Matching image [83/90]\nI20261025 12:50:29.895041  4311 feature_matching.cc:46]  in 0.685s\nI20261025 12:50:29.895171  4311 feature_matching.cc:362] Matching image [84/90]\nI20261025 12:50:30.337369  4311 feature_matching.cc:46]  in 0.442s\nI20261025 12:50:30.337529  4311 feature_matching.cc:362] Matching image [85/90]\nI20261025 12:50:30.809751  4311 feature_matching.cc:46]  in 0.472s\nI20261025 12:50:30.809909  4311 feature_matching.cc:362] Matching image [86/90]\nI20261025 12:50:31.202098  4311 feature_matching.cc:46]  in 0.392s\nI20261025 12:50:31.202266  4311 feature_matching.cc:362] Matching image [87/90]\nI20261025 12:50:31.550127  4311 feature_matching.cc:46]  in 0.348s\nI20261025 12:50:31.550287  4311 feature_matching.cc:362] Matching image [88/90]\nI20261025 12:50:31.766532  4311 feature_matching.cc:46]  in 0.216s\nI20261025 12:50:31.766682  4311 feature_matching.cc:362] Matching image [89/90]\nI20261025 12:50:31.937393  4311 feature_matching.cc:46]  in 0.171s\nI20261025 12:50:31.937507  4311 feature_matching.cc:362] Matching image [90/90]\nI20261025 12:50:31.937523  4311 feature_matching.cc:46]  in 0.000s\nI20261025 12:50:31.937531  4311 timer.cc:91] Elapsed time: 1.588 [minutes]\n"
+      },
+      {
+        "stage": "colmap-sparse-mapper",
+        "command": [
+          "colmap",
+          "mapper",
+          "--database_path",
+          "/home/runner/work/_temp/tum-rgb-sfm/sfm-out/database.db",
+          "--image_path",
+          "/home/runner/work/_temp/tum-rgb-sfm/sfm-out/images",
+          "--output_path",
+          "/home/runner/work/_temp/tum-rgb-sfm/sfm-out/sparse"
+        ],
+        "status": "passed",
+        "seconds": 47.352,
+        "returncode": 0,
+        "stdout_tail": "1e-01   1.09e+00  8.10e+05        1    1.80e-01    1.16e+00\n   5  5.197149e+04    2.93e-05    3.22e-01   1.40e-01   1.04e+00  2.43e+06        1    1.81e-01    1.34e+00\niter      cost      cost_change  |gradient|   |step|    tr_ratio  tr_radius  ls_iter  iter_time  total_time\n   0  5.218041e+04    0.00e+00    5.62e+02   0.00e+00   0.00e+00  1.00e+04        0    4.69e-02    1.67e-01\n   1  5.209148e+04    8.89e+01    7.23e+00   0.00e+00   1.00e+00  3.00e+04        1    4.53e-01    6.20e-01\n   2  5.209124e+04    2.32e-01    2.42e+00   1.31e+00   1.05e+00  9.00e+04        1    1.81e-01    8.02e-01\n   3  5.209124e+04    4.28e-03    1.99e+00   2.23e-01   1.15e+00  2.70e+05        1    1.86e-01    9.88e-01\n   4  5.209124e+04    1.58e-04    8.62e-01   6.64e-02   1.17e+00  8.10e+05        1    1.81e-01    1.17e+00\niter      cost      cost_change  |gradient|   |step|    tr_ratio  tr_radius  ls_iter  iter_time  total_time\n   0  5.211446e+04    0.00e+00    2.69e+02   0.00e+00   0.00e+00  1.00e+04        0    4.62e-02    1.63e-01\n   1  5.210878e+04    5.68e+00    2.00e+00   0.00e+00   1.00e+00  3.00e+04        1    4.51e-01    6.14e-01\n   2  5.210877e+04    2.93e-03    2.00e+00   2.06e-01   1.08e+00  9.00e+04        1    1.81e-01    7.95e-01\n   3  5.210877e+04    1.18e-04    8.22e-01   4.47e-02   1.16e+00  2.70e+05        1    1.80e-01    9.75e-01\niter      cost      cost_change  |gradient|   |step|    tr_ratio  tr_radius  ls_iter  iter_time  total_time\n   0  5.928786e+04    0.00e+00    1.03e+03   0.00e+00   0.00e+00  1.00e+04        0    4.91e-02    1.79e-01\n   1  5.874905e+04    5.39e+02    6.51e+01   0.00e+00   1.00e+00  3.00e+04        1    5.21e-01    7.00e-01\n   2  5.874840e+04    6.43e-01    2.00e+00   2.44e+00   1.02e+00  9.00e+04        1    2.19e-01    9.19e-01\n   3  5.874840e+04    8.14e-03    2.00e+00   4.69e-01   1.04e+00  2.70e+05        1    2.20e-01    1.14e+00\n   4  5.874840e+04    9.52e-05    7.14e-01   3.81e-02   1.09e+00  8.10e+05        1    2.19e-01    1.36e+00\niter      cost      cost_change  |gradient|   |step|    tr_ratio  tr_radius  ls_iter  iter_time  total_time\n   0  5.891881e+04    0.00e+00    5.80e+02   0.00e+00   0.00e+00  1.00e+04        0    4.93e-02    1.82e-01\n   1  5.883933e+04    7.95e+01    8.38e+00   0.00e+00   1.00e+00  3.00e+04        1    5.18e-01    7.01e-01\n   2  5.883930e+04    2.61e-02    2.00e+00   2.72e-01   1.00e+00  9.00e+04        1    2.20e-01    9.21e-01\n   3  5.883930e+04    9.16e-05    9.12e-01   3.50e-02   1.06e+00  2.70e+05        1    2.24e-01    1.15e+00\niter      cost      cost_change  |gradient|   |step|    tr_ratio  tr_radius  ls_iter  iter_time  total_time\n   0  5.886040e+04    0.00e+00    1.11e+02   0.00e+00   0.00e+00  1.00e+04        0    4.96e-02    1.84e-01\n   1  5.885250e+04    7.90e+00    2.03e+00   0.00e+00   1.00e+00  3.00e+04        1    5.15e-01    6.99e-01\n   2  5.885249e+04    8.85e-03    1.95e+00   1.86e-01   1.02e+00  9.00e+04        1    2.21e-01    9.20e-01\n   3  5.885249e+04    6.01e-05    5.42e-01   2.01e-02   1.13e+00  2.70e+05        1    2.21e-01    1.14e+00\niter      cost      cost_change  |gradient|   |step|    tr_ratio  tr_radius  ls_iter  iter_time  total_time\n   0  6.432176e+04    0.00e+00    4.62e+02   0.00e+00   0.00e+00  1.00e+04        0    5.23e-02    1.99e-01\n   1  6.396076e+04    3.61e+02    6.83e+00   0.00e+00   1.00e+00  3.00e+04        1    5.60e-01    7.59e-01\n   2  6.396045e+04    3.06e-01    2.00e+00   1.64e+00   1.04e+00  9.00e+04        1    2.39e-01    9.98e-01\n   3  6.396045e+04    3.97e-03    2.00e+00   1.99e-01   1.11e+00  2.70e+05        1    2.35e-01    1.23e+00\n   4  6.396045e+04    8.64e-05    6.32e-01   2.38e-02   1.15e+00  8.10e+05        1    2.34e-01    1.47e+00\niter      cost      cost_change  |gradient|   |step|    tr_ratio  tr_radius  ls_iter  iter_time  total_time\n   0  6.403751e+04    0.00e+00    2.06e+02   0.00e+00   0.00e+00  1.00e+04        0    5.25e-02    1.96e-01\n   1  6.400773e+04    2.98e+01    2.84e+00   0.00e+00   1.00e+00  3.00e+04        1    5.51e-01    7.46e-01\n   2  6.400771e+04    1.22e-02    1.99e+00   3.20e-01   1.01e+00  9.00e+04        1    2.37e-01    9.83e-01\n   3  6.400771e+04    9.21e-05    3.60e-01   4.71e-02   1.03e+00  2.70e+05        1    2.33e-01    1.22e+00\niter      cost      cost_change  |gradient|   |step|    tr_ratio  tr_radius  ls_iter  iter_time  total_time\n   0  6.750679e+04    0.00e+00    6.66e+02   0.00e+00   0.00e+00  1.00e+04        0    5.74e-02    2.19e-01\n   1  6.724797e+04    2.59e+02    5.31e+00   0.00e+00   9.99e-01  3.00e+04        1    5.73e-01    7.92e-01\n   2  6.724760e+04    3.72e-01    2.00e+00   3.17e+00   1.01e+00  9.00e+04        1    2.30e-01    1.02e+00\n   3  6.724760e+04    6.33e-03    1.20e+00   4.13e-01   1.03e+00  2.70e+05        1    2.37e-01    1.26e+00\n   4  6.724760e+04    6.02e-05    3.74e-01   2.66e-02   1.06e+00  8.10e+05        1    2.31e-01    1.49e+00\niter      cost      cost_change  |gradient|   |step|    tr_ratio  tr_radius  ls_iter  iter_time  total_time\n   0  6.736453e+04    0.00e+00    2.09e+02   0.00e+00   0.00e+00  1.00e+04        0    5.45e-02    2.09e-01\n   1  6.732284e+04    4.17e+01    2.19e+00   0.00e+00   1.00e+00  3.00e+04        1    5.60e-01    7.69e-01\n   2  6.732281e+04    3.03e-02    2.00e+00   4.81e-01   1.02e+00  9.00e+04        1    2.27e-01    9.96e-01\n   3  6.732281e+04    3.71e-04    6.90e-01   7.70e-02   1.04e+00  2.70e+05        1    2.25e-01    1.22e+00\niter      cost      cost_change  |gradient|   |step|    tr_ratio  tr_radius  ls_iter  iter_time  total_time\n   0  6.808601e+04    0.00e+00    4.60e+02   0.00e+00   0.00e+00  1.00e+04        0    5.50e-02    2.14e-01\n   1  6.802627e+04    5.97e+01    3.24e+00   0.00e+00   9.99e-01  3.00e+04        1    5.93e-01    8.07e-01\n   2  6.802622e+04    4.98e-02    2.00e+00   4.33e-01   1.04e+00  9.00e+04        1    2.46e-01    1.05e+00\n   3  6.802622e+04    1.17e-03    9.57e-01   6.66e-02   1.12e+00  2.70e+05        1    2.52e-01    1.30e+00\n",
+        "stderr_tail": "       Time : 0.00254393 [s]\n Initial cost : 0.692399 [px]\n   Final cost : 0.554877 [px]\n  Termination : Convergence\n\nI20261025 12:51:14.631117  4360 incremental_mapper.cc:40] => Continued observations: 200\nI20261025 12:51:14.631412  4360 incremental_mapper.cc:43] => Added observations: 30\nI20261025 12:51:14.661218  4360 misc.cc:205] \nBundle adjustment report\n------------------------\nI20261025 12:51:14.661252  4360 bundle_adjustment.cc:942] \n    Residuals : 10036\n   Parameters : 425\n   Iterations : 4\n         Time : 0.025202 [s]\n Initial cost : 0.493241 [px]\n   Final cost : 0.488452 [px]\n  Termination : Convergence\n\nI20261025 12:51:14.668274  4360 incremental_mapper.cc:78] => Merged observations: 126\nI20261025 12:51:14.668290  4360 incremental_mapper.cc:79] => Completed observations: 27\nI20261025 12:51:14.668296  4360 incremental_mapper.cc:81] => Filtered observations: 13\nI20261025 12:51:14.668301  4360 incremental_mapper.cc:90] => Changed observations: 0.029728\nI20261025 12:51:14.682983  4360 misc.cc:205] \nBundle adjustment report\n------------------------\nI20261025 12:51:14.683012  4360 bundle_adjustment.cc:942] \n    Residuals : 8196\n   Parameters : 383\n   Iterations : 2\n         Time : 0.0103881 [s]\n Initial cost : 0.642739 [px]\n   Final cost : 0.639848 [px]\n  Termination : Convergence\n\nI20261025 12:51:14.688937  4360 incremental_mapper.cc:78] => Merged observations: 0\nI20261025 12:51:14.688954  4360 incremental_mapper.cc:79] => Completed observations: 3\nI20261025 12:51:14.688961  4360 incremental_mapper.cc:81] => Filtered observations: 0\nI20261025 12:51:14.688966  4360 incremental_mapper.cc:90] => Changed observations: 0.000557\nI20261025 12:51:14.688982  4360 misc.cc:198] \n==============================================================================\nRetriangulation\n==============================================================================\nI20261025 12:51:14.701577  4360 incremental_mapper.cc:175] => Completed observations: 24\nI20261025 12:51:14.712123  4360 incremental_mapper.cc:178] => Merged observations: 687\nI20261025 12:51:14.712141  4360 incremental_mapper.cc:105] => Retriangulated observations: 0\nI20261025 12:51:14.712270  4360 misc.cc:198] \n==============================================================================\nGlobal bundle adjustment\n==============================================================================\nI20261025 12:51:16.275363  4360 misc.cc:205] \nBundle adjustment report\n------------------------\nI20261025 12:51:16.275413  4360 bundle_adjustment.cc:942] \n    Residuals : 189270\n   Parameters : 27574\n   Iterations : 5\n         Time : 1.49353 [s]\n Initial cost : 0.597218 [px]\n   Final cost : 0.59607 [px]\n  Termination : Convergence\n\nI20261025 12:51:16.318630  4360 incremental_mapper.cc:175] => Completed observations: 18\nI20261025 12:51:16.328756  4360 incremental_mapper.cc:178] => Merged observations: 66\nI20261025 12:51:16.333568  4360 incremental_mapper.cc:160] => Filtered observations: 5\nI20261025 12:51:16.333583  4360 incremental_mapper.cc:119] => Changed observations: 0.000940\nI20261025 12:51:16.333602  4360 misc.cc:198] \n==============================================================================\nGlobal bundle adjustment\n==============================================================================\nI20261025 12:51:17.626420  4360 misc.cc:205] \nBundle adjustment report\n------------------------\nI20261025 12:51:17.626471  4360 bundle_adjustment.cc:942] \n    Residuals : 189296\n   Parameters : 27565\n   Iterations : 4\n         Time : 1.22438 [s]\n Initial cost : 0.596547 [px]\n   Final cost : 0.596363 [px]\n  Termination : Convergence\n\nI20261025 12:51:17.671140  4360 incremental_mapper.cc:175] => Completed observations: 5\nI20261025 12:51:17.681332  4360 incremental_mapper.cc:178] => Merged observations: 0\nI20261025 12:51:17.686244  4360 incremental_mapper.cc:160] => Filtered observations: 0\nI20261025 12:51:17.686260  4360 incremental_mapper.cc:119] => Changed observations: 0.000053\nI20261025 12:51:17.686277  4360 incremental_mapper.cc:167] => Filtered images: 0\nI20261025 12:51:17.691207  4360 misc.cc:198] \n==============================================================================\nRegistering image #56 (89)\n==============================================================================\nI20261025 12:51:17.691223  4360 incremental_mapper.cc:495] => Image sees 172 / 354 points\nI20261025 12:51:17.697420  4360 misc.cc:205] \nPose refinement report\n----------------------\nI20261025 12:51:17.697448  4360 bundle_adjustment.cc:942] \n    Residuals : 380\n   Parameters : 6\n   Iterations : 18\n         Time : 0.00364208 [s]\n Initial cost : 0.76642 [px]\n   Final cost : 0.694066 [px]\n  Termination : Convergence\n\nI20261025 12:51:17.697592  4360 incremental_mapper.cc:40] => Continued observations: 162\nI20261025 12:51:17.698136  4360 incremental_mapper.cc:43] => Added observations: 111\nI20261025 12:51:17.731350  4360 misc.cc:205] \nBundle adjustment report\n------------------------\nI20261025 12:51:17.731386  4360 bundle_adjustment.cc:942] \n    Residuals : 6852\n   Parameters : 494\n   Iterations : 7\n         Time : 0.029747 [s]\n Initial cost : 0.667586 [px]\n   Final cost : 0.659662 [px]\n  Termination : Convergence\n\nI20261025 12:51:17.737238  4360 incremental_mapper.cc:78] => Merged observations: 42\nI20261025 12:51:17.737255  4360 incremental_mapper.cc:79] => Completed observations: 14\nI20261025 12:51:17.737262  4360 incremental_mapper.cc:81] => Filtered observations: 55\nI20261025 12:51:17.737267  4360 incremental_mapper.cc:90] => Changed observations: 0.027153\nI20261025 12:51:17.753249  4360 misc.cc:205] \nBundle adjustment report\n------------------------\nI20261025 12:51:17.753278  4360 bundle_adjustment.cc:942] \n    Residuals : 6778\n   Parameters : 473\n   Iterations : 3\n         Time : 0.0127149 [s]\n Initial cost : 0.814597 [px]\n   Final cost : 0.807693 [px]\n  Termination : Convergence\n\nI20261025 12:51:17.758088  4360 incremental_mapper.cc:78] => Merged observations: 0\nI20261025 12:51:17.758104  4360 incremental_mapper.cc:79] => Completed observations: 4\nI20261025 12:51:17.758111  4360 incremental_mapper.cc:81] => Filtered observations: 3\nI20261025 12:51:17.758116  4360 incremental_mapper.cc:90] => Changed observations: 0.001728\nI20261025 12:51:17.763021  4360 misc.cc:198] \n==============================================================================\nRegistering image #53 (90)\n==============================================================================\nI20261025 12:51:17.763036  4360 incremental_mapper.cc:495] => Image sees 214 / 367 points\nI20261025 12:51:17.771016  4360 misc.cc:205] \nPose refinement report\n----------------------\nI20261025 12:51:17.771042  4360 bundle_adjustment.cc:942] \n    Residuals : 486\n   Parameters : 6\n   Iterations : 19\n         Time : 0.00494003 [s]\n Initial cost : 0.829451 [px]\n   Final cost : 0.705575 [px]\n  Termination : Convergence\n\nI20261025 12:51:17.771206  4360 incremental_mapper.cc:40] => Continued observations: 207\nI20261025 12:51:17.771548  4360 incremental_mapper.cc:43] => Added observations: 90\nI20261025 12:51:17.789935  4360 misc.cc:205] \nBundle adjustment report\n------------------------\nI20261025 12:51:17.789968  4360 bundle_adjustment.cc:942] \n    Residuals : 4146\n   Parameters : 518\n   Iterations : 6\n         Time : 0.015542 [s]\n Initial cost : 0.750147 [px]\n   Final cost : 0.734304 [px]\n  Termination : Convergence\n\nI20261025 12:51:17.795497  4360 incremental_mapper.cc:78] => Merged observations: 80\nI20261025 12:51:17.795516  4360 incremental_mapper.cc:79] => Completed observations: 26\nI20261025 12:51:17.795522  4360 incremental_mapper.cc:81] => Filtered observations: 57\nI20261025 12:51:17.795527  4360 incremental_mapper.cc:90] => Changed observations: 0.048454\nI20261025 12:51:17.802649  4360 misc.cc:205] \nBundle adjustment report\n------------------------\nI20261025 12:51:17.802675  4360 bundle_adjustment.cc:942] \n    Residuals : 4076\n   Parameters : 503\n   Iterations : 2\n         Time : 0.00529981 [s]\n Initial cost : 0.8139 [px]\n   Final cost : 0.803991 [px]\n  Termination : Convergence\n\nI20261025 12:51:17.805441  4360 incremental_mapper.cc:78] => Merged observations: 0\nI20261025 12:51:17.805456  4360 incremental_mapper.cc:79] => Completed observations: 10\nI20261025 12:51:17.805461  4360 incremental_mapper.cc:81] => Filtered observations: 2\nI20261025 12:51:17.805467  4360 incremental_mapper.cc:90] => Changed observations: 0.005391\nI20261025 12:51:17.810273  4360 misc.cc:198] \n==============================================================================\nRetriangulation\n==============================================================================\nI20261025 12:51:17.823000  4360 incremental_mapper.cc:175] => Completed observations: 11\nI20261025 12:51:17.832890  4360 incremental_mapper.cc:178] => Merged observations: 54\nI20261025 12:51:17.832907  4360 incremental_mapper.cc:105] => Retriangulated observations: 0\nI20261025 12:51:17.833039  4360 misc.cc:198] \n==============================================================================\nGlobal bundle adjustment\n==============================================================================\nI20261025 12:51:19.209980  4360 misc.cc:205] \nBundle adjustment report\n------------------------\nI20261025 12:51:19.210031  4360 bundle_adjustment.cc:942] \n    Residuals : 190338\n   Parameters : 27772\n   Iterations : 4\n         Time : 1.30748 [s]\n Initial cost : 0.59809 [px]\n   Final cost : 0.597827 [px]\n  Termination : Convergence\n\nI20261025 12:51:19.255925  4360 incremental_mapper.cc:175] => Completed observations: 5\nI20261025 12:51:19.266036  4360 incremental_mapper.cc:178] => Merged observations: 0\nI20261025 12:51:19.270900  4360 incremental_mapper.cc:160] => Filtered observations: 4\nI20261025 12:51:19.270915  4360 incremental_mapper.cc:119] => Changed observations: 0.000095\nI20261025 12:51:19.270931  4360 incremental_mapper.cc:167] => Filtered images: 0\nI20261025 12:51:19.288514  4360 timer.cc:91] Elapsed time: 0.789 [minutes]\n"
+      },
+      {
+        "stage": "colmap-text-0",
+        "command": [
+          "colmap",
+          "model_converter",
+          "--input_path",
+          "/home/runner/work/_temp/tum-rgb-sfm/sfm-out/sparse/0",
+          "--output_path",
+          "/home/runner/work/_temp/tum-rgb-sfm/sfm-out/text-model-0",
+          "--output_type",
+          "TXT"
+        ],
+        "status": "passed",
+        "seconds": 0.226,
+        "returncode": 0,
+        "stdout_tail": "",
+        "stderr_tail": ""
+      }
+    ],
+    "repo_sha": "d302a77f45295cf66afdb311d7f6e64d603f5341",
+    "video": {
+      "width": 640,
+      "height": 480,
+      "duration_seconds": 22.5,
+      "codec": "h264",
+      "sha256": "d766da92599180d9ba575fae03af868bf17be9eba39a4c93fda27313fd2d77c9"
+    },
+    "input_kind": "video",
+    "timestamp_note": "Uniform FFmpeg fps-resampled relative times; original VFR camera packet times are not preserved.",
+    "frames_extracted": 90,
+    "result": {
+      "frames_extracted": 90,
+      "frames_registered": 90,
+      "registration_fraction": 1.0,
+      "sparse_points": 9078,
+      "sfm_model_dir": "text-model-0",
+      "scale_is_metric": false,
+      "trajectory_sha256": "2779d7641a6eb2303f6ad4eb60e21c4de52b81e51c9d39582c9903faa0236605",
+      "model_images_txt_sha256": "7eff723c998e495d84bd290c444212ecc543cd1528cd3b6b074c36c763e7d663"
+    },
+    "seconds": 162.12
+  },
+  "groundtruth_for_evaluation_only": {
+    "groundtruth_txt_sha256": "aac0319a6ef4e1cdf61e779d2152b95aa7e9f7b1749d6d18717b43ddabffede2",
+    "matched_with_TUM_timestamps": 89,
+    "not_covered_by_GT": [
+      "frame_00025.png"
+    ],
+    "scope": "Read after COLMAP solver completed; Sim3 fit is evaluation-only."
+  },
+  "pose_evaluation": {
+    "matched_frames": 89,
+    "estimated_frames": 90,
+    "ground_truth_frames": 89,
+    "matched_fraction_of_gt": 1.0,
+    "ate_rmse_m_after_sim3": 0.012393989087991322,
+    "ate_median_m_after_sim3": 0.010892104032950966,
+    "position_p95_m_after_sim3": 0.02048576697197314,
+    "rotation_median_degrees_after_sim3": 2.28633558044523,
+    "rotation_p95_degrees_after_sim3": 3.501149426463095,
+    "evaluation_only_sim3_scale_m_per_sfm_unit": 0.050154814947706704,
+    "evaluation_alignment_rotation_3x3_rowmajor": [
+      -0.03528791582032183,
+      0.7635281890189309,
+      -0.6448096366917366,
+      0.9988594771816653,
+      0.006180779275789972,
+      -0.04734493438494096,
+      -0.03216376597086021,
+      -0.6457449206467019,
+      -0.7628754745157011
+    ],
+    "evaluation_alignment_translation_m": [
+      1.2451950370226337,
+      0.609060599252436,
+      1.5634753267301116
+    ],
+    "alignment_scope": "Fit and scored on the SAME matched camera poses (optimistic in-sample ATE).",
+    "metric_scale_available_in_product": false,
+    "pose_source": "COLMAP RGB SfM (model registration, no GT used in mapper)",
+    "truth_source": "TUM motion capture poses, used only after solving SfM",
+    "individual": [
+      {
+        "name": "frame_00000.png",
+        "position_error_m": 0.012001248420585522,
+        "rotation_error_degrees": 1.5570369994323427
+      },
+      {
+        "name": "frame_00001.png",
+        "position_error_m": 0.015948688815160296,
+        "rotation_error_degrees": 1.1082662322424957
+      },
+      {
+        "name": "frame_00002.png",
+        "position_error_m": 0.003953595091081598,
+        "rotation_error_degrees": 2.2248790007736714
+      },
+      {
+        "name": "frame_00003.png",
+        "position_error_m": 0.01395597718786854,
+        "rotation_error_degrees": 2.0571669231223098
+      },
+      {
+        "name": "frame_00004.png",
+        "position_error_m": 0.01864849150094329,
+        "rotation_error_degrees": 1.8143472709944912
+      },
+      {
+        "name": "frame_00005.png",
+        "position_error_m": 0.010456684452795895,
+        "rotation_error_degrees": 3.1329547223352883
+      },
+      {
+        "name": "frame_00006.png",
+        "position_error_m": 0.004593260569653078,
+        "rotation_error_degrees": 2.7583292723229214
+      },
+      {
+        "name": "frame_00007.png",
+        "position_error_m": 0.011225850056779896,
+        "rotation_error_degrees": 2.710886446533235
+      },
+      {
+        "name": "frame_00008.png",
+        "position_error_m": 0.009611543828459967,
+        "rotation_error_degrees": 2.28633558044523
+      },
+      {
+        "name": "frame_00009.png",
+        "position_error_m": 0.016313891516164504,
+        "rotation_error_degrees": 2.4282103477000962
+      },
+      {
+        "name": "frame_00010.png",
+        "position_error_m": 0.020843979083635673,
+        "rotation_error_degrees": 1.37525414930794
+      },
+      {
+        "name": "frame_00011.png",
+        "position_error_m": 0.02561935492263344,
+        "rotation_error_degrees": 0.8598345585195899
+      },
+      {
+        "name": "frame_00012.png",
+        "position_error_m": 0.014681682868465308,
+        "rotation_error_degrees": 1.3653231138554405
+      },
+      {
+        "name": "frame_00013.png",
+        "position_error_m": 0.006036355089080255,
+        "rotation_error_degrees": 1.7238194781978493
+      },
+      {
+        "name": "frame_00014.png",
+        "position_error_m": 0.011300417169617811,
+        "rotation_error_degrees": 1.9137275551766455
+      },
+      {
+        "name": "frame_00015.png",
+        "position_error_m": 0.014490369291040866,
+        "rotation_error_degrees": 2.039805413697233
+      },
+      {
+        "name": "frame_00016.png",
+        "position_error_m": 0.011461333221711237,
+        "rotation_error_degrees": 2.898625722877312
+      },
+      {
+        "name": "frame_00017.png",
+        "position_error_m": 0.013922782127835367,
+        "rotation_error_degrees": 2.78109298876623
+      },
+      {
+        "name": "frame_00018.png",
+        "position_error_m": 0.013894251318135866,
+        "rotation_error_degrees": 3.125467965862858
+      },
+      {
+        "name": "frame_00019.png",
+        "position_error_m": 0.009627722714409384,
+        "rotation_error_degrees": 2.3575968396406717
+      },
+      {
+        "name": "frame_00020.png",
+        "position_error_m": 0.011504448323494723,
+        "rotation_error_degrees": 1.5011254393309061
+      },
+      {
+        "name": "frame_00021.png",
+        "position_error_m": 0.012276122134885995,
+        "rotation_error_degrees": 1.364886719934513
+      },
+      {
+        "name": "frame_00022.png",
+        "position_error_m": 0.014690818904604398,
+        "rotation_error_degrees": 1.9441396414875465
+      },
+      {
+        "name": "frame_00023.png",
+        "position_error_m": 0.014139047315160587,
+        "rotation_error_degrees": 0.887812826927178
+      },
+      {
+        "name": "frame_00024.png",
+        "position_error_m": 0.004938655215260601,
+        "rotation_error_degrees": 1.466758682182819
+      },
+      {
+        "name": "frame_00026.png",
+        "position_error_m": 0.011991204291548745,
+        "rotation_error_degrees": 1.3062540155748712
+      },
+      {
+        "name": "frame_00027.png",
+        "position_error_m": 0.01727467321775696,
+        "rotation_error_degrees": 1.7590367034200878
+      },
+      {
+        "name": "frame_00028.png",
+        "position_error_m": 0.005473278175210553,
+        "rotation_error_degrees": 1.625495077475936
+      },
+      {
+        "name": "frame_00029.png",
+        "position_error_m": 0.007062436126346844,
+        "rotation_error_degrees": 1.8976960555086084
+      },
+      {
+        "name": "frame_00030.png",
+        "position_error_m": 0.005497090813489757,
+        "rotation_error_degrees": 2.126827582798455
+      },
+      {
+        "name": "frame_00031.png",
+        "position_error_m": 0.004045593600178824,
+        "rotation_error_degrees": 2.655339550304393
+      },
+      {
+        "name": "frame_00032.png",
+        "position_error_m": 0.009090274660125445,
+        "rotation_error_degrees": 3.068607504328524
+      },
+      {
+        "name": "frame_00033.png",
+        "position_error_m": 0.011198270684022005,
+        "rotation_error_degrees": 3.23125177848053
+      },
+      {
+        "name": "frame_00034.png",
+        "position_error_m": 0.012515025787001735,
+        "rotation_error_degrees": 3.4048961263629693
+      },
+      {
+        "name": "frame_00035.png",
+        "position_error_m": 0.0175861361220773,
+        "rotation_error_degrees": 3.437479917763543
+      },
+      {
+        "name": "frame_00036.png",
+        "position_error_m": 0.022236348337902574,
+        "rotation_error_degrees": 3.195011747848591
+      },
+      {
+        "name": "frame_00037.png",
+        "position_error_m": 0.019299624536137705,
+        "rotation_error_degrees": 2.7599565130822534
+      },
+      {
+        "name": "frame_00038.png",
+        "position_error_m": 0.016907041386754907,
+        "rotation_error_degrees": 2.265370576017642
+      },
+      {
+        "name": "frame_00039.png",
+        "position_error_m": 0.011132903891598687,
+        "rotation_error_degrees": 1.3630815205773794
+      },
+      {
+        "name": "frame_00040.png",
+        "position_error_m": 0.017647051557130727,
+        "rotation_error_degrees": 0.8659546935580164
+      },
+      {
+        "name": "frame_00041.png",
+        "position_error_m": 0.016354015731038694,
+        "rotation_error_degrees": 1.8134017401062779
+      },
+      {
+        "name": "frame_00042.png",
+        "position_error_m": 0.014711551368236073,
+        "rotation_error_degrees": 1.5273925184477894
+      },
+      {
+        "name": "frame_00043.png",
+        "position_error_m": 0.004961822430179071,
+        "rotation_error_degrees": 1.7120848092741747
+      },
+      {
+        "name": "frame_00044.png",
+        "position_error_m": 0.0057849220541557715,
+        "rotation_error_degrees": 1.8525391245375853
+      },
+      {
+        "name": "frame_00045.png",
+        "position_error_m": 0.004659831163874546,
+        "rotation_error_degrees": 2.529812149856726
+      },
+      {
+        "name": "frame_00046.png",
+        "position_error_m": 0.012224601130865027,
+        "rotation_error_degrees": 2.44943978216744
+      },
+      {
+        "name": "frame_00047.png",
+        "position_error_m": 0.0055679752782556696,
+        "rotation_error_degrees": 2.6770358575396664
+      },
+      {
+        "name": "frame_00048.png",
+        "position_error_m": 0.010770866706229135,
+        "rotation_error_degrees": 2.682295150018431
+      },
+      {
+        "name": "frame_00049.png",
+        "position_error_m": 0.010099205630844252,
+        "rotation_error_degrees": 3.1201540906532403
+      },
+      {
+        "name": "frame_00050.png",
+        "position_error_m": 0.01964289704689707,
+        "rotation_error_degrees": 3.5435957655961308
+      },
+      {
+        "name": "frame_00051.png",
+        "position_error_m": 0.019948448804479355,
+        "rotation_error_degrees": 2.8526412463327007
+      },
+      {
+        "name": "frame_00052.png",
+        "position_error_m": 0.024023127537879156,
+        "rotation_error_degrees": 2.6222603151864563
+      },
+      {
+        "name": "frame_00053.png",
+        "position_error_m": 0.018682884729088634,
+        "rotation_error_degrees": 1.3896816262481895
+      },
+      {
+        "name": "frame_00054.png",
+        "position_error_m": 0.009669942406596292,
+        "rotation_error_degrees": 1.590991180531554
+      },
+      {
+        "name": "frame_00055.png",
+        "position_error_m": 0.026691912995137738,
+        "rotation_error_degrees": 2.5755442834843434
+      },
+      {
+        "name": "frame_00056.png",
+        "position_error_m": 0.019173588362257285,
+        "rotation_error_degrees": 2.289416251253383
+      },
+      {
+        "name": "frame_00057.png",
+        "position_error_m": 0.010322179086169746,
+        "rotation_error_degrees": 3.0177080831830767
+      },
+      {
+        "name": "frame_00058.png",
+        "position_error_m": 0.009987091910994663,
+        "rotation_error_degrees": 2.732606611193584
+      },
+      {
+        "name": "frame_00059.png",
+        "position_error_m": 0.010892104032950966,
+        "rotation_error_degrees": 2.7112784309204363
+      },
+      {
+        "name": "frame_00060.png",
+        "position_error_m": 0.01274818220269134,
+        "rotation_error_degrees": 2.5664680261316146
+      },
+      {
+        "name": "frame_00061.png",
+        "position_error_m": 0.006150127803386229,
+        "rotation_error_degrees": 1.7930044799025855
+      },
+      {
+        "name": "frame_00062.png",
+        "position_error_m": 0.006881531559302029,
+        "rotation_error_degrees": 1.681505713416952
+      },
+      {
+        "name": "frame_00063.png",
+        "position_error_m": 0.011100693937085892,
+        "rotation_error_degrees": 1.4762706661781788
+      },
+      {
+        "name": "frame_00064.png",
+        "position_error_m": 0.004007651570997981,
+        "rotation_error_degrees": 2.236552270591965
+      },
+      {
+        "name": "frame_00065.png",
+        "position_error_m": 0.004206523986869364,
+        "rotation_error_degrees": 2.079463552439658
+      },
+      {
+        "name": "frame_00066.png",
+        "position_error_m": 0.0026316628007154305,
+        "rotation_error_degrees": 2.5575643299102957
+      },
+      {
+        "name": "frame_00067.png",
+        "position_error_m": 0.005986748574791093,
+        "rotation_error_degrees": 3.1350302097106177
+      },
+      {
+        "name": "frame_00068.png",
+        "position_error_m": 0.012131162045919764,
+        "rotation_error_degrees": 3.8413878350056794
+      },
+      {
+        "name": "frame_00069.png",
+        "position_error_m": 0.00641856307319273,
+        "rotation_error_degrees": 2.926578377452705
+      },
+      {
+        "name": "frame_00070.png",
+        "position_error_m": 0.0050566372799868186,
+        "rotation_error_degrees": 2.4426755736150945
+      },
+      {
+        "name": "frame_00071.png",
+        "position_error_m": 0.0031167104432423755,
+        "rotation_error_degrees": 2.450613299317251
+      },
+      {
+        "name": "frame_00072.png",
+        "position_error_m": 0.0071404217411000625,
+        "rotation_error_degrees": 2.5491510773258246
+      },
+      {
+        "name": "frame_00073.png",
+        "position_error_m": 0.006570545239573809,
+        "rotation_error_degrees": 2.0150570484082087
+      },
+      {
+        "name": "frame_00074.png",
+        "position_error_m": 0.0028987435131356803,
+        "rotation_error_degrees": 1.5662845141818393
+      },
+      {
+        "name": "frame_00075.png",
+        "position_error_m": 0.003795268775967624,
+        "rotation_error_degrees": 1.881910959111876
+      },
+      {
+        "name": "frame_00076.png",
+        "position_error_m": 0.00961855120414275,
+        "rotation_error_degrees": 1.5045247445163858
+      },
+      {
+        "name": "frame_00077.png",
+        "position_error_m": 0.002398222095278284,
+        "rotation_error_degrees": 2.133058841503241
+      },
+      {
+        "name": "frame_00078.png",
+        "position_error_m": 0.0020778832620511755,
+        "rotation_error_degrees": 2.3033899820994734
+      },
+      {
+        "name": "frame_00079.png",
+        "position_error_m": 0.008482946706393503,
+        "rotation_error_degrees": 2.175331470445651
+      },
+      {
+        "name": "frame_00080.png",
+        "position_error_m": 0.007555560478462597,
+        "rotation_error_degrees": 3.3701591730163916
+      },
+      {
+        "name": "frame_00081.png",
+        "position_error_m": 0.006690492707509169,
+        "rotation_error_degrees": 3.835276169788758
+      },
+      {
+        "name": "frame_00082.png",
+        "position_error_m": 0.005743237244453975,
+        "rotation_error_degrees": 3.694951020791985
+      },
+      {
+        "name": "frame_00083.png",
+        "position_error_m": 0.017567594829488012,
+        "rotation_error_degrees": 4.315166493523556
+      },
+      {
+        "name": "frame_00084.png",
+        "position_error_m": 0.011343567489631976,
+        "rotation_error_degrees": 3.225222529916669
+      },
+      {
+        "name": "frame_00085.png",
+        "position_error_m": 0.003914052613257627,
+        "rotation_error_degrees": 2.5548880807069665
+      },
+      {
+        "name": "frame_00086.png",
+        "position_error_m": 0.007029140907658812,
+        "rotation_error_degrees": 2.4618373598820598
+      },
+      {
+        "name": "frame_00087.png",
+        "position_error_m": 0.006167628603449939,
+        "rotation_error_degrees": 2.0835132697951075
+      },
+      {
+        "name": "frame_00088.png",
+        "position_error_m": 0.012462004833170295,
+        "rotation_error_degrees": 2.0134508769081756
+      },
+      {
+        "name": "frame_00089.png",
+        "position_error_m": 0.017062587087568172,
+        "rotation_error_degrees": 1.3591776200144552
+      }
+    ]
+  },
+  "registration_gate": {
+    "min_registered_images": 10,
+    "min_fraction_of_extracted": 0.35,
+    "observed_images": 90,
+    "observed_fraction": 1.0,
+    "passes": true
+  },
+  "artifact_sha256": {
+    "images.txt": "7eff723c998e495d84bd290c444212ecc543cd1528cd3b6b074c36c763e7d663",
+    "cameras.txt": "45711c4f3378663601f8f47c6f81774b61b6258d8d9e16cd8775edfbfc75fcc3",
+    "points3D.txt": "cef142ef062c6bb7e71eee1dfceb5ca19a916a9b747c04f941323afd838ce387",
+    "registered_timestamps.csv": "eb48d9139abcc534f5307281d2e6511db5af9f42eb548e09abbecf464da6a237",
+    "trajectory-scale-unknown.json": "2779d7641a6eb2303f6ad4eb60e21c4de52b81e51c9d39582c9903faa0236605"
+  },
+  "elapsed_seconds": 182.511
+}

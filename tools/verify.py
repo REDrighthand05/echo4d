@@ -14,7 +14,9 @@ def main():
     node = shutil.which('node')
     if node is None: raise SystemExit('Node.js 22+ required for browser contract tests')
     env = os.environ.copy()
-    env['PYTHONPATH'] = str(ROOT/'src') + os.pathsep + env.get('PYTHONPATH','')
+    # Experiment tests also import helper scripts from tools/; keep both roots.
+    env['PYTHONPATH'] = os.pathsep.join(p for p in (
+        str(ROOT/'src'), str(ROOT/'tools'), env.get('PYTHONPATH', '')) if p)
     def run(args):
         print('+ '+' '.join(args),flush=True)
         subprocess.run(args,cwd=ROOT,env=env,check=True)

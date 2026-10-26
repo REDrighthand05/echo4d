@@ -1,0 +1,914 @@
+{
+  "experiment": "tum-rgb-sfm-plus-three-real-sensor-depth-anchors-v1",
+  "started_utc": "2026-10-25T13:27:58.873569+00:00",
+  "github_run_url": "https://github.com/REDrighthand05/echo4d/actions/runs/40197656598",
+  "git_sha": "f4ece5c6d6c75fee43ab5de0748eb6a5ccefeb61",
+  "status": "passed_sensor_metric_calibration_not_rgb_only_metric",
+  "commands": [
+    {
+      "name": "encode-real-rgb-images-into-test-mp4",
+      "command": [
+        "ffmpeg",
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-nostdin",
+        "-y",
+        "-framerate",
+        "4",
+        "-start_number",
+        "0",
+        "-i",
+        "/home/runner/work/_temp/tum-metric-anchor/rgb-input/frame_%05d.png",
+        "-frames:v",
+        "90",
+        "-c:v",
+        "libx264",
+        "-preset",
+        "ultrafast",
+        "-crf",
+        "15",
+        "-pix_fmt",
+        "yuv420p",
+        "/home/runner/work/_temp/tum-metric-anchor/test-video-from-real-tum-rgb.mp4"
+      ],
+      "status": "passed",
+      "return_code": 0,
+      "stdout_tail": "",
+      "stderr_tail": "",
+      "seconds": 0.566
+    },
+    {
+      "name": "estimate-camera-poses-from-RGB-ONLY",
+      "command": [
+        "/opt/hostedtoolcache/Python/3.12.15/x64/bin/python",
+        "-m",
+        "echo4d.video_sfm",
+        "--video",
+        "/home/runner/work/_temp/tum-metric-anchor/test-video-from-real-tum-rgb.mp4",
+        "--output",
+        "/home/runner/work/_temp/tum-metric-anchor/rgb-only-colmap",
+        "--fps",
+        "4",
+        "--max-frames",
+        "90",
+        "--camera-model",
+        "PINHOLE",
+        "--camera-params",
+        "525,525,319.5,239.5"
+      ],
+      "status": "passed",
+      "return_code": 0,
+      "stdout_tail": "{\"status\": \"passed_rgb_only_sfm_not_metric_geometry\", \"output\": \"/home/runner/work/_temp/tum-metric-anchor/rgb-only-colmap\", \"result\": {\"frames_extracted\": 90, \"frames_registered\": 90, \"registration_fraction\": 1.0, \"sparse_points\": 9107, \"sfm_model_dir\": \"text-model-0\", \"scale_is_metric\": false, \"trajectory_sha256\": \"8586a388148295ee20127ed3dab2ece56c5089a23c2ed0ed809e8a33d744a125\", \"model_images_txt_sha256\": \"1231e70d5e5854eb0252660d0da8dc08cb88dcf8f08f1fab6ec67feca782688e\"}, \"error\": null}\n",
+      "stderr_tail": "",
+      "seconds": 156.927
+    }
+  ],
+  "pre_registered_calibration_indices": [
+    15,
+    45,
+    75
+  ],
+  "pre_registered_heldout_indices": [
+    5,
+    10,
+    25,
+    35,
+    55,
+    65,
+    85
+  ],
+  "algorithmic_limits": [
+    "SfM from RGB and known intrinsics only",
+    "Source RGB was rebundled as test MP4, not recorded natively as phone video",
+    "Scale from three external measured registered TUM RGB-D sensor depth frames",
+    "Holdout depth does not set scale",
+    "GT camera poses read only after scale locked, used for one-frame SE3 world gauge and evaluation",
+    "Sparse SfM points only; no dense 3D TSDF mesh",
+    "Provenance claims not independently authenticated by core adapter"
+  ],
+  "download": {
+    "requested_url": "https://cvg.cit.tum.de/rgbd/dataset/freiburg1/rgbd_dataset_freiburg1_xyz.tgz",
+    "bytes": 448204271,
+    "resolved_url": "https://webshare.cvg.cit.tum.de/g/rgbd/dataset/freiburg1/rgbd_dataset_freiburg1_xyz.tgz",
+    "http_status": 200,
+    "etag": "\"1ab70def-4ae2a1dc2ae80\"",
+    "sha256": "a0236d97b8c30cd93b653656d2b6c293ff7c982a4130ef2a1a8beecdb124ef98"
+  },
+  "dataset": {
+    "url": "https://cvg.cit.tum.de/rgbd/dataset/freiburg1/rgbd_dataset_freiburg1_xyz.tgz",
+    "sha256": "a0236d97b8c30cd93b653656d2b6c293ff7c982a4130ef2a1a8beecdb124ef98",
+    "bytes": 448204271
+  },
+  "extraction": {
+    "regular_members": 1600,
+    "uncompressed_bytes": 479252043,
+    "indexes": 3,
+    "rgb_depth_images": 1596
+  },
+  "test_video": {
+    "synthetic_timebase": true,
+    "real_tum_images": true,
+    "physical_phone_video": false,
+    "frames": 90,
+    "source_stride": 8,
+    "encoded_fps": 4,
+    "file_sha256": "d766da92599180d9ba575fae03af868bf17be9eba39a4c93fda27313fd2d77c9",
+    "bytes": 7649602,
+    "source_rgb_manifest": [
+      {
+        "name": "frame_00000.png",
+        "t_tum_rgb_s": 1305031102.175304,
+        "original_tum_path": "rgb/1305031102.175304.png",
+        "source_rgb_sha256": "331c3fd7a3d5eefb19e3da2026625aa221ca1991f5ae30ff96060e2e3e45e368"
+      },
+      {
+        "name": "frame_00001.png",
+        "t_tum_rgb_s": 1305031102.443271,
+        "original_tum_path": "rgb/1305031102.443271.png",
+        "source_rgb_sha256": "49deecb97bbb0ef1b8d14212b10d5cdb9a2ce7b4c852ad4838bc8e2a872d82df"
+      },
+      {
+        "name": "frame_00002.png",
+        "t_tum_rgb_s": 1305031102.711263,
+        "original_tum_path": "rgb/1305031102.711263.png",
+        "source_rgb_sha256": "48be03e8e2b369d348559d4f94b26811ac156f0036798092ccc0429367d09688"
+      },
+      {
+        "name": "frame_00003.png",
+        "t_tum_rgb_s": 1305031102.975203,
+        "original_tum_path": "rgb/1305031102.975203.png",
+        "source_rgb_sha256": "c3d09cdd91eb23c6407cb1969ed65e592e58f231f502b9185a0da7115ba59a68"
+      },
+      {
+        "name": "frame_00004.png",
+        "t_tum_rgb_s": 1305031103.243216,
+        "original_tum_path": "rgb/1305031103.243216.png",
+        "source_rgb_sha256": "dffe2b7b0efb05d9a3cb9d7d938efee092d16436d6fc9a29432b1c447cd20333"
+      },
+      {
+        "name": "frame_00005.png",
+        "t_tum_rgb_s": 1305031103.511333,
+        "original_tum_path": "rgb/1305031103.511333.png",
+        "source_rgb_sha256": "04c6b5a3018a8c8faf6a713466a4257360e1c9dd844c4dfb8237640a56a820b2"
+      },
+      {
+        "name": "frame_00006.png",
+        "t_tum_rgb_s": 1305031103.775342,
+        "original_tum_path": "rgb/1305031103.775342.png",
+        "source_rgb_sha256": "965eefeeb53c411760fdcf86f588b4d6bdca31c914a3fbcbcc9debf97543ac87"
+      },
+      {
+        "name": "frame_00007.png",
+        "t_tum_rgb_s": 1305031104.043249,
+        "original_tum_path": "rgb/1305031104.043249.png",
+        "source_rgb_sha256": "3cad59c089378a46c7c36f2dae64db7c4994cb3c4d8b27a2b93b30f6a17b2804"
+      },
+      {
+        "name": "frame_00008.png",
+        "t_tum_rgb_s": 1305031104.311219,
+        "original_tum_path": "rgb/1305031104.311219.png",
+        "source_rgb_sha256": "33187f3423a7681a8df736ada872d0b2c8bc4cd7ab39d869d14a10a03e08e87e"
+      },
+      {
+        "name": "frame_00009.png",
+        "t_tum_rgb_s": 1305031104.575343,
+        "original_tum_path": "rgb/1305031104.575343.png",
+        "source_rgb_sha256": "55b5ef44c2246a548f4d203613053ce3dd27fdbc59bbb424d6b673669a7ce7d7"
+      },
+      {
+        "name": "frame_00010.png",
+        "t_tum_rgb_s": 1305031104.843258,
+        "original_tum_path": "rgb/1305031104.843258.png",
+        "source_rgb_sha256": "c550780c4ee5d37a22abe5ab06b0a62fe6fd3b75e20ae432b1dfa73da9ade577"
+      },
+      {
+        "name": "frame_00011.png",
+        "t_tum_rgb_s": 1305031105.111299,
+        "original_tum_path": "rgb/1305031105.111299.png",
+        "source_rgb_sha256": "3cc2ff4dffb668ae4429ad1070160bc250d406c52cf135be85562e44ca35cc78"
+      },
+      {
+        "name": "frame_00012.png",
+        "t_tum_rgb_s": 1305031105.375338,
+        "original_tum_path": "rgb/1305031105.375338.png",
+        "source_rgb_sha256": "bae91fcb8e02e0b719031f53f5a64fe4b5b993d03276ae8aa038393d28be9a51"
+      },
+      {
+        "name": "frame_00013.png",
+        "t_tum_rgb_s": 1305031105.643273,
+        "original_tum_path": "rgb/1305031105.643273.png",
+        "source_rgb_sha256": "3fc9f7946f3688e6efb32f585fc63cbb4cf7a240032c69774181a5dec58840e7"
+      },
+      {
+        "name": "frame_00014.png",
+        "t_tum_rgb_s": 1305031105.911262,
+        "original_tum_path": "rgb/1305031105.911262.png",
+        "source_rgb_sha256": "6f38aed9080e03d761a8e41b9829caf1c970316435b22b1f8acc3c10e063a3f5"
+      },
+      {
+        "name": "frame_00015.png",
+        "t_tum_rgb_s": 1305031106.175534,
+        "original_tum_path": "rgb/1305031106.175534.png",
+        "source_rgb_sha256": "6fabe6e561dd439967909be6a9a78ff62a91d0e61a2af47574c4dc571d27846d"
+      },
+      {
+        "name": "frame_00016.png",
+        "t_tum_rgb_s": 1305031106.443278,
+        "original_tum_path": "rgb/1305031106.443278.png",
+        "source_rgb_sha256": "2c2bc0550375fb208793a97704d03d0ea52056a29db2e0e32482f5b88541dfd0"
+      },
+      {
+        "name": "frame_00017.png",
+        "t_tum_rgb_s": 1305031106.711508,
+        "original_tum_path": "rgb/1305031106.711508.png",
+        "source_rgb_sha256": "47fefd35f756f83861e861336a6111d325e6e9791f00f541547350833793a87d"
+      },
+      {
+        "name": "frame_00018.png",
+        "t_tum_rgb_s": 1305031106.975547,
+        "original_tum_path": "rgb/1305031106.975547.png",
+        "source_rgb_sha256": "d1ebdbcedd5a6842c859c66d099c66bb2c5d553c6c76a8b41cabca549967a04d"
+      },
+      {
+        "name": "frame_00019.png",
+        "t_tum_rgb_s": 1305031107.243378,
+        "original_tum_path": "rgb/1305031107.243378.png",
+        "source_rgb_sha256": "31417824f3d332093c3f685b669a77b267b3774c58d5ce97899b5fe5c76a3293"
+      },
+      {
+        "name": "frame_00020.png",
+        "t_tum_rgb_s": 1305031107.511352,
+        "original_tum_path": "rgb/1305031107.511352.png",
+        "source_rgb_sha256": "610f06aed526c164eb21364c2c2c99c08c81baf6655250846251b42e40741106"
+      },
+      {
+        "name": "frame_00021.png",
+        "t_tum_rgb_s": 1305031107.775802,
+        "original_tum_path": "rgb/1305031107.775802.png",
+        "source_rgb_sha256": "bb4c902493f57bddee1c2920839133f720f9bd33adf1d82581b452aa96bf4233"
+      },
+      {
+        "name": "frame_00022.png",
+        "t_tum_rgb_s": 1305031108.043418,
+        "original_tum_path": "rgb/1305031108.043418.png",
+        "source_rgb_sha256": "2dfed98b89b670b29c866f46dd0da5d8bfae434a6ad207cff43a988ab9581372"
+      },
+      {
+        "name": "frame_00023.png",
+        "t_tum_rgb_s": 1305031108.311332,
+        "original_tum_path": "rgb/1305031108.311332.png",
+        "source_rgb_sha256": "cc0552244b36f15f86edc4c2f4809976802bb71b16d8077a1a7ffc9f18add0df"
+      },
+      {
+        "name": "frame_00024.png",
+        "t_tum_rgb_s": 1305031108.575414,
+        "original_tum_path": "rgb/1305031108.575414.png",
+        "source_rgb_sha256": "280bf93c50aed86ea2fc0034974d3050a77112b0e495ff5ea75b6edf2776e2f5"
+      },
+      {
+        "name": "frame_00025.png",
+        "t_tum_rgb_s": 1305031108.843264,
+        "original_tum_path": "rgb/1305031108.843264.png",
+        "source_rgb_sha256": "ac3a83afb4e0cf4205b6da956353a382769b5123e7072572852de4b3790852c7"
+      },
+      {
+        "name": "frame_00026.png",
+        "t_tum_rgb_s": 1305031109.111282,
+        "original_tum_path": "rgb/1305031109.111282.png",
+        "source_rgb_sha256": "84d4489713798fb8df7a0fd67898c53e545f3273a02cd202b04eef59618326ec"
+      },
+      {
+        "name": "frame_00027.png",
+        "t_tum_rgb_s": 1305031109.375397,
+        "original_tum_path": "rgb/1305031109.375397.png",
+        "source_rgb_sha256": "8f516bfe340c52d969f2cbea0346668a493d33107d39794be4cf409ad1830629"
+      },
+      {
+        "name": "frame_00028.png",
+        "t_tum_rgb_s": 1305031109.643229,
+        "original_tum_path": "rgb/1305031109.643229.png",
+        "source_rgb_sha256": "b277eb9c96f3d2c15e2fbd9a24fd9e3b6d6f61a2ac450f650d694514eefec7fc"
+      },
+      {
+        "name": "frame_00029.png",
+        "t_tum_rgb_s": 1305031109.911265,
+        "original_tum_path": "rgb/1305031109.911265.png",
+        "source_rgb_sha256": "d9696026d2858baff93bdc353fb44d45e11151eef588aeecf7edfebc09e17c6b"
+      },
+      {
+        "name": "frame_00030.png",
+        "t_tum_rgb_s": 1305031110.175641,
+        "original_tum_path": "rgb/1305031110.175641.png",
+        "source_rgb_sha256": "79043b10bafe4b073574eed704bd3efecaa4badf59549c09ac24b022511a0cc3"
+      },
+      {
+        "name": "frame_00031.png",
+        "t_tum_rgb_s": 1305031110.44326,
+        "original_tum_path": "rgb/1305031110.443260.png",
+        "source_rgb_sha256": "20c947533dd459314003791823b93c6723e6888df9944ff91761fab663c40f9e"
+      },
+      {
+        "name": "frame_00032.png",
+        "t_tum_rgb_s": 1305031110.711412,
+        "original_tum_path": "rgb/1305031110.711412.png",
+        "source_rgb_sha256": "54a6995a8145ed3f6913eda696363ae8d45320b9cd8b9c390500c62bf7693a52"
+      },
+      {
+        "name": "frame_00033.png",
+        "t_tum_rgb_s": 1305031110.979345,
+        "original_tum_path": "rgb/1305031110.979345.png",
+        "source_rgb_sha256": "3f891575a31944df4bb7c40ad16c288acb7083a5ba7e6ad151cb74a5bdc593f4"
+      },
+      {
+        "name": "frame_00034.png",
+        "t_tum_rgb_s": 1305031111.243236,
+        "original_tum_path": "rgb/1305031111.243236.png",
+        "source_rgb_sha256": "2d1ffebcff486c06723e0d35eb0980e4ce11aff74d0c3f950d2ed26abfe8acc9"
+      },
+      {
+        "name": "frame_00035.png",
+        "t_tum_rgb_s": 1305031111.511264,
+        "original_tum_path": "rgb/1305031111.511264.png",
+        "source_rgb_sha256": "c959ae17895a931fd59a60d81645d67b1e5f0c2a7f77e872e602f77333875044"
+      },
+      {
+        "name": "frame_00036.png",
+        "t_tum_rgb_s": 1305031111.779423,
+        "original_tum_path": "rgb/1305031111.779423.png",
+        "source_rgb_sha256": "4a28a0a38aeaeaf984b54c13c0ed4dcdfb530b95a06e56423ab4a7520adf729b"
+      },
+      {
+        "name": "frame_00037.png",
+        "t_tum_rgb_s": 1305031112.04327,
+        "original_tum_path": "rgb/1305031112.043270.png",
+        "source_rgb_sha256": "33c3be01ab9f28655c823913187e83f0ab1efab82ad8b31dfd7406cef9b1fb5a"
+      },
+      {
+        "name": "frame_00038.png",
+        "t_tum_rgb_s": 1305031112.311312,
+        "original_tum_path": "rgb/1305031112.311312.png",
+        "source_rgb_sha256": "13c26a8c5ce69f4469a3e7956d3bb4b6a8d5e80fddf0ff81d02f9d921e98bb22"
+      },
+      {
+        "name": "frame_00039.png",
+        "t_tum_rgb_s": 1305031112.579252,
+        "original_tum_path": "rgb/1305031112.579252.png",
+        "source_rgb_sha256": "1003c67747ac9dd428a48e880cf3424f5fae939259c860ef0a93a212e8a15795"
+      },
+      {
+        "name": "frame_00040.png",
+        "t_tum_rgb_s": 1305031112.843286,
+        "original_tum_path": "rgb/1305031112.843286.png",
+        "source_rgb_sha256": "481cfeaf1d16b56b867317d5fa84a9206b7ae30d57144b7335f25859e3c0ae3f"
+      },
+      {
+        "name": "frame_00041.png",
+        "t_tum_rgb_s": 1305031113.111316,
+        "original_tum_path": "rgb/1305031113.111316.png",
+        "source_rgb_sha256": "fd1fd8795e8e1ed6fa40beddd53c153399840ab95c500f55ff1c946ad7cfd72d"
+      },
+      {
+        "name": "frame_00042.png",
+        "t_tum_rgb_s": 1305031113.379312,
+        "original_tum_path": "rgb/1305031113.379312.png",
+        "source_rgb_sha256": "dd0c37f9386e189977ace8cfca59d5b19edaf23499b1e0b569cc50b80a8ae706"
+      },
+      {
+        "name": "frame_00043.png",
+        "t_tum_rgb_s": 1305031113.643222,
+        "original_tum_path": "rgb/1305031113.643222.png",
+        "source_rgb_sha256": "de796e13351ecf4754971bf119c83ada8bd69e92dc61bba6869ddfda867d8b5e"
+      },
+      {
+        "name": "frame_00044.png",
+        "t_tum_rgb_s": 1305031113.91129,
+        "original_tum_path": "rgb/1305031113.911290.png",
+        "source_rgb_sha256": "85cc646a5ac231a34469af58c63f9bd695ffddfa28f6d8a4612b586cfddc2138"
+      },
+      {
+        "name": "frame_00045.png",
+        "t_tum_rgb_s": 1305031114.179337,
+        "original_tum_path": "rgb/1305031114.179337.png",
+        "source_rgb_sha256": "663e52eb57231619d101612d8d6bf914b592f01490bac91625764b22ef633576"
+      },
+      {
+        "name": "frame_00046.png",
+        "t_tum_rgb_s": 1305031114.443345,
+        "original_tum_path": "rgb/1305031114.443345.png",
+        "source_rgb_sha256": "6669dd78a695340863b9f5dc974b26443827592fbe2f0c61a7017fe9261f5040"
+      },
+      {
+        "name": "frame_00047.png",
+        "t_tum_rgb_s": 1305031114.711306,
+        "original_tum_path": "rgb/1305031114.711306.png",
+        "source_rgb_sha256": "3215d05b568d884cf8aff39e934042eea0aca11e1e6f0bc378ff8c0b7a75f246"
+      },
+      {
+        "name": "frame_00048.png",
+        "t_tum_rgb_s": 1305031114.97928,
+        "original_tum_path": "rgb/1305031114.979280.png",
+        "source_rgb_sha256": "627c23c66c6e451593b79a75112986a9d52f2c918d6feb0bdd26eb6a4a12d72c"
+      },
+      {
+        "name": "frame_00049.png",
+        "t_tum_rgb_s": 1305031115.243297,
+        "original_tum_path": "rgb/1305031115.243297.png",
+        "source_rgb_sha256": "5914e73a994f6fd34469619bc75e90f5e15171a07814b869a0bdcb00cb7c3040"
+      },
+      {
+        "name": "frame_00050.png",
+        "t_tum_rgb_s": 1305031115.511253,
+        "original_tum_path": "rgb/1305031115.511253.png",
+        "source_rgb_sha256": "ac1c63ab16df2ac07fddc21f3fa110885d91bc191543ca572ef1a88db58a45e3"
+      },
+      {
+        "name": "frame_00051.png",
+        "t_tum_rgb_s": 1305031115.779425,
+        "original_tum_path": "rgb/1305031115.779425.png",
+        "source_rgb_sha256": "a054e3bdd064269711383f7308ad564aa0977ccb9706251a13419e5a89b756de"
+      },
+      {
+        "name": "frame_00052.png",
+        "t_tum_rgb_s": 1305031116.043164,
+        "original_tum_path": "rgb/1305031116.043164.png",
+        "source_rgb_sha256": "814f7bbb7b279e3d5dc6f43b4fa93a83f3e5f33e2815b5584d4c446b2d687cc2"
+      },
+      {
+        "name": "frame_00053.png",
+        "t_tum_rgb_s": 1305031116.311336,
+        "original_tum_path": "rgb/1305031116.311336.png",
+        "source_rgb_sha256": "74b301dc97315c27742ba003d8c39b12cf71da635d3834cf8247c8a27d4826ed"
+      },
+      {
+        "name": "frame_00054.png",
+        "t_tum_rgb_s": 1305031116.579313,
+        "original_tum_path": "rgb/1305031116.579313.png",
+        "source_rgb_sha256": "0682fed5e34d179fd924294981a48aa1ab4284aeef3137703dfdf27f1b856f9e"
+      },
+      {
+        "name": "frame_00055.png",
+        "t_tum_rgb_s": 1305031116.846089,
+        "original_tum_path": "rgb/1305031116.846089.png",
+        "source_rgb_sha256": "2115334908d7d87ad1d0e2d03068b0bba92bba175e83210d56a50de7815a8096"
+      },
+      {
+        "name": "frame_00056.png",
+        "t_tum_rgb_s": 1305031117.111238,
+        "original_tum_path": "rgb/1305031117.111238.png",
+        "source_rgb_sha256": "c1cb0548504869b0ca45dd3dd007419e4ade8955f45a073393957edfbca7f0e1"
+      },
+      {
+        "name": "frame_00057.png",
+        "t_tum_rgb_s": 1305031117.379454,
+        "original_tum_path": "rgb/1305031117.379454.png",
+        "source_rgb_sha256": "db35ccd31ed402c04debedeef7d86aac4da147ce0cf398247fc8a29b2e464348"
+      },
+      {
+        "name": "frame_00058.png",
+        "t_tum_rgb_s": 1305031117.643252,
+        "original_tum_path": "rgb/1305031117.643252.png",
+        "source_rgb_sha256": "4e867fad5796e032546fd5baae5c42ab77c6bb9dad3be2bb5ee76918813d4955"
+      },
+      {
+        "name": "frame_00059.png",
+        "t_tum_rgb_s": 1305031117.911407,
+        "original_tum_path": "rgb/1305031117.911407.png",
+        "source_rgb_sha256": "711fd613992e67d3efa4f7e675478fd10a0fbd98c660c2f20e6f321e686cbfa6"
+      },
+      {
+        "name": "frame_00060.png",
+        "t_tum_rgb_s": 1305031118.179323,
+        "original_tum_path": "rgb/1305031118.179323.png",
+        "source_rgb_sha256": "f7e88c2d0125f35b8f58867b445cf9317e862aa052297efe79742946e9b7cd4f"
+      },
+      {
+        "name": "frame_00061.png",
+        "t_tum_rgb_s": 1305031118.445692,
+        "original_tum_path": "rgb/1305031118.445692.png",
+        "source_rgb_sha256": "d4a232452809ec33673beea46483f7c31af5f72f8584b418c864e618b7cc101e"
+      },
+      {
+        "name": "frame_00062.png",
+        "t_tum_rgb_s": 1305031118.711421,
+        "original_tum_path": "rgb/1305031118.711421.png",
+        "source_rgb_sha256": "8dba718d123a5f9344429250ce554eddb55a56e0ccc828b41851ec10b8804d4f"
+      },
+      {
+        "name": "frame_00063.png",
+        "t_tum_rgb_s": 1305031118.979374,
+        "original_tum_path": "rgb/1305031118.979374.png",
+        "source_rgb_sha256": "bb6f95900387f17969e5ca36e1b5af2ce201ccd623e93df1f2220d6aa6c44d68"
+      },
+      {
+        "name": "frame_00064.png",
+        "t_tum_rgb_s": 1305031119.247399,
+        "original_tum_path": "rgb/1305031119.247399.png",
+        "source_rgb_sha256": "f579b267c6023e20fafcdc53e7433247dc6a329be356b806b31a13f2c3c94956"
+      },
+      {
+        "name": "frame_00065.png",
+        "t_tum_rgb_s": 1305031119.51124,
+        "original_tum_path": "rgb/1305031119.511240.png",
+        "source_rgb_sha256": "5fa9a25fe45c1e331bb0c0bf63d1e7b93efee14881451f23aaba460b0e86eae7"
+      },
+      {
+        "name": "frame_00066.png",
+        "t_tum_rgb_s": 1305031119.779169,
+        "original_tum_path": "rgb/1305031119.779169.png",
+        "source_rgb_sha256": "47449d36ff25db2d12ecfa53201cf28d72c4b1c90f2eb248a715c6b5ba7df648"
+      },
+      {
+        "name": "frame_00067.png",
+        "t_tum_rgb_s": 1305031120.04729,
+        "original_tum_path": "rgb/1305031120.047290.png",
+        "source_rgb_sha256": "c44d873b738d2f411ab00e6e9dc5db60fe73431c0a12428ffa9f17d5576707f0"
+      },
+      {
+        "name": "frame_00068.png",
+        "t_tum_rgb_s": 1305031120.315196,
+        "original_tum_path": "rgb/1305031120.315196.png",
+        "source_rgb_sha256": "6277e3d9ad2656774dbd9f4b8015ef7e810d566f13e3c5d992360d77a3d8e112"
+      },
+      {
+        "name": "frame_00069.png",
+        "t_tum_rgb_s": 1305031120.579551,
+        "original_tum_path": "rgb/1305031120.579551.png",
+        "source_rgb_sha256": "6328d9a56e90e5f2a77f9a436acd02d893de014f89629fa624241de7adc0a13b"
+      },
+      {
+        "name": "frame_00070.png",
+        "t_tum_rgb_s": 1305031120.847921,
+        "original_tum_path": "rgb/1305031120.847921.png",
+        "source_rgb_sha256": "50273d725823e9451c577432fc5d4c0b98cfd156a88b5c32d875db2aaae1e9a4"
+      },
+      {
+        "name": "frame_00071.png",
+        "t_tum_rgb_s": 1305031121.114696,
+        "original_tum_path": "rgb/1305031121.114696.png",
+        "source_rgb_sha256": "7c86c39096f226d354e3457e938608e40b8a4e2512df77187e3cacb92e9eda34"
+      },
+      {
+        "name": "frame_00072.png",
+        "t_tum_rgb_s": 1305031121.383226,
+        "original_tum_path": "rgb/1305031121.383226.png",
+        "source_rgb_sha256": "3d81cbf5099e319cd568391a80b560a24122eb6b013b7c62a484fb60de790abc"
+      },
+      {
+        "name": "frame_00073.png",
+        "t_tum_rgb_s": 1305031121.647183,
+        "original_tum_path": "rgb/1305031121.647183.png",
+        "source_rgb_sha256": "edfe29bc822519a59e4758c4581fa5604895f040f4d39dadf87746c132a8f9cf"
+      },
+      {
+        "name": "frame_00074.png",
+        "t_tum_rgb_s": 1305031121.914931,
+        "original_tum_path": "rgb/1305031121.914931.png",
+        "source_rgb_sha256": "5266ae8168b48d4e8f83c8efe3c948e8a2c6b8a53db5ee527ba585bd2d029891"
+      },
+      {
+        "name": "frame_00075.png",
+        "t_tum_rgb_s": 1305031122.183042,
+        "original_tum_path": "rgb/1305031122.183042.png",
+        "source_rgb_sha256": "314c9fd09b4479631986b454d85c8eb9c7f0c8a7dcb6a89ad6c9f8796fbbfc6d"
+      },
+      {
+        "name": "frame_00076.png",
+        "t_tum_rgb_s": 1305031122.451257,
+        "original_tum_path": "rgb/1305031122.451257.png",
+        "source_rgb_sha256": "6cc72a3f69dc13e28148e514e0d07c968c4184a0dc828dc2110778694b2ab8b4"
+      },
+      {
+        "name": "frame_00077.png",
+        "t_tum_rgb_s": 1305031122.715208,
+        "original_tum_path": "rgb/1305031122.715208.png",
+        "source_rgb_sha256": "2d86099bb0d442f489d20b6b79e121ddb78ccbbce51393524ef2839b29e18d38"
+      },
+      {
+        "name": "frame_00078.png",
+        "t_tum_rgb_s": 1305031122.982815,
+        "original_tum_path": "rgb/1305031122.982815.png",
+        "source_rgb_sha256": "3a71a601313d61fc41cd42cfd9d657e0891e185d297583d2ab6ba74ff6cdda4e"
+      },
+      {
+        "name": "frame_00079.png",
+        "t_tum_rgb_s": 1305031123.250618,
+        "original_tum_path": "rgb/1305031123.250618.png",
+        "source_rgb_sha256": "c120f575111182c4f15f975bb1665703cba26379ba1c2ae695b4081b46f17bce"
+      },
+      {
+        "name": "frame_00080.png",
+        "t_tum_rgb_s": 1305031123.51136,
+        "original_tum_path": "rgb/1305031123.511360.png",
+        "source_rgb_sha256": "b003ccea6d6185a26398e8257605a27dedc631eca0202906005efd9c724d6e5f"
+      },
+      {
+        "name": "frame_00081.png",
+        "t_tum_rgb_s": 1305031123.783858,
+        "original_tum_path": "rgb/1305031123.783858.png",
+        "source_rgb_sha256": "4c9062a133e06080399035583edc2d8746210390c04272dd9120c6ad7e7b1a58"
+      },
+      {
+        "name": "frame_00082.png",
+        "t_tum_rgb_s": 1305031124.051505,
+        "original_tum_path": "rgb/1305031124.051505.png",
+        "source_rgb_sha256": "0ed036488acf7bf767d76e08f85d0acbafaaf2b9c89eeb4d2165a2a2c8f89718"
+      },
+      {
+        "name": "frame_00083.png",
+        "t_tum_rgb_s": 1305031124.311361,
+        "original_tum_path": "rgb/1305031124.311361.png",
+        "source_rgb_sha256": "9b59c08e566ca1ff5c5a189fad334f363f6bdebc5d2607fbd881197af9b03a06"
+      },
+      {
+        "name": "frame_00084.png",
+        "t_tum_rgb_s": 1305031124.579404,
+        "original_tum_path": "rgb/1305031124.579404.png",
+        "source_rgb_sha256": "12f010642b98bc7916091f8fcb644ad0d59ee49b19e488b0e02d2033669eebea"
+      },
+      {
+        "name": "frame_00085.png",
+        "t_tum_rgb_s": 1305031124.850535,
+        "original_tum_path": "rgb/1305031124.850535.png",
+        "source_rgb_sha256": "5c5100b3cbc5946393a40a492d17bf3746b040a0fde2feaf684a76b355216b09"
+      },
+      {
+        "name": "frame_00086.png",
+        "t_tum_rgb_s": 1305031125.111364,
+        "original_tum_path": "rgb/1305031125.111364.png",
+        "source_rgb_sha256": "a2063af1c4e355b2c091400789f41d1724d41c6ad83ebdbf83f5937c737016d1"
+      },
+      {
+        "name": "frame_00087.png",
+        "t_tum_rgb_s": 1305031125.379401,
+        "original_tum_path": "rgb/1305031125.379401.png",
+        "source_rgb_sha256": "8f43678dab47e91a3e501f0a3ef840453aeb107f62447c57c31882ba0bd47a1c"
+      },
+      {
+        "name": "frame_00088.png",
+        "t_tum_rgb_s": 1305031125.650575,
+        "original_tum_path": "rgb/1305031125.650575.png",
+        "source_rgb_sha256": "e8bd322648ba986a7a40fd1a98d64ea1c1b1f762bcd607986f603b9de01e06f3"
+      },
+      {
+        "name": "frame_00089.png",
+        "t_tum_rgb_s": 1305031125.911305,
+        "original_tum_path": "rgb/1305031125.911305.png",
+        "source_rgb_sha256": "a99d94b2d10dab1d2365ef3d5d4b99c3b3ed201dc65c00536709612e38760c74"
+      }
+    ]
+  },
+  "rgb_sfm_result": {
+    "frames_extracted": 90,
+    "frames_registered": 90,
+    "registration_fraction": 1.0,
+    "sparse_points": 9107,
+    "sfm_model_dir": "text-model-0",
+    "scale_is_metric": false,
+    "trajectory_sha256": "8586a388148295ee20127ed3dab2ece56c5089a23c2ed0ed809e8a33d744a125",
+    "model_images_txt_sha256": "1231e70d5e5854eb0252660d0da8dc08cb88dcf8f08f1fab6ec67feca782688e"
+  },
+  "sensor_depth_manifest": {
+    "calibration_indices": [
+      15,
+      45,
+      75
+    ],
+    "heldout_indices": [
+      5,
+      10,
+      25,
+      35,
+      55,
+      65,
+      85
+    ],
+    "total_measurement_frames": 10,
+    "max_rgb_depth_offset_s": 0.0168609619140625,
+    "measured_depth_source": "TUM Freiburg1 XYZ real registered RGB-D depth sensor (1/5000m PNG); externally measured, not RGB inferred",
+    "source_depth_index_sha256": "d5abcc12d67cd2f5ae6f405ab1459a416ab2c1cdfb16d9bbd137d5f77d3285df"
+  },
+  "metric_sensor_anchor": {
+    "scale_m_per_sfm_unit": 0.049078873963100136,
+    "anchors": [
+      {
+        "anchor_slot": 0,
+        "used_correspondences": 1147,
+        "median_meters_per_sfm_unit": 0.05026352098732589,
+        "relative_mad": 0.010775081828727561,
+        "ratio_p10": 0.0486607465641736,
+        "ratio_p90": 0.051630317411396676,
+        "name": "frame_00015.png",
+        "sensor_depth_sha256": "079d484572f7c3c2affc7b3856a51185989536073a653d5f0ef80c04e46a2b72",
+        "rgb_depth_timestamp_delta_s": -0.009203910827636719,
+        "observation_filter_counts": {
+          "colmap_tracked_2d_features": 1474,
+          "invalid_or_discontinuous_depth": 295,
+          "failed_reprojection_check": 32,
+          "used_correspondences": 1147
+        }
+      },
+      {
+        "anchor_slot": 1,
+        "used_correspondences": 918,
+        "median_meters_per_sfm_unit": 0.049078873963100136,
+        "relative_mad": 0.01185122959679705,
+        "ratio_p10": 0.04742491915691019,
+        "ratio_p90": 0.05024516596708651,
+        "name": "frame_00045.png",
+        "sensor_depth_sha256": "0010ff79b72d88de64d038909d450a4fae1d0f67c85ec38137eb34f6b2fcaf2d",
+        "rgb_depth_timestamp_delta_s": -0.00522303581237793,
+        "observation_filter_counts": {
+          "colmap_tracked_2d_features": 1060,
+          "invalid_or_discontinuous_depth": 121,
+          "failed_reprojection_check": 21,
+          "used_correspondences": 918
+        }
+      },
+      {
+        "anchor_slot": 2,
+        "used_correspondences": 867,
+        "median_meters_per_sfm_unit": 0.04885036842722305,
+        "relative_mad": 0.014801739219892687,
+        "ratio_p10": 0.047042991832453786,
+        "ratio_p90": 0.05062208047351962,
+        "name": "frame_00075.png",
+        "sensor_depth_sha256": "da057a1fdc0baba19e0b29ec5b38766424796032bb3a4c14469de811b6e09e9a",
+        "rgb_depth_timestamp_delta_s": 1.0013580322265625e-05,
+        "observation_filter_counts": {
+          "colmap_tracked_2d_features": 1046,
+          "invalid_or_discontinuous_depth": 159,
+          "failed_reprojection_check": 20,
+          "used_correspondences": 867
+        }
+      }
+    ],
+    "heldout": [
+      {
+        "name": "frame_00005.png",
+        "sensor_depth_sha256": "2d210bf2617d2b40f9b2053a80fd961db9626ea6be273da0e4a0dd55de95715e",
+        "rgb_depth_timestamp_delta_s": -0.0168609619140625,
+        "measured_valid_correspondences": 1235,
+        "counts": {
+          "colmap_tracked_2d_features": 1560,
+          "invalid_or_discontinuous_depth": 292,
+          "failed_reprojection_check": 33,
+          "used_correspondences": 1235
+        },
+        "status": "measured",
+        "mae_m": 0.019307499957180983,
+        "rmse_m": 0.0377819622129453,
+        "median_abs_m": 0.008523675472807413,
+        "p95_abs_m": 0.07215196768300337,
+        "signed_bias_m": 0.011510700197002163,
+        "fraction_error_at_most_0_05m": 0.9109311740890689
+      },
+      {
+        "name": "frame_00010.png",
+        "sensor_depth_sha256": "58a4e6143d49445f403e24945fcbf58c8e067e3446563496496cbb5f7e0b1b06",
+        "rgb_depth_timestamp_delta_s": -0.012296915054321289,
+        "measured_valid_correspondences": 688,
+        "counts": {
+          "colmap_tracked_2d_features": 812,
+          "invalid_or_discontinuous_depth": 94,
+          "failed_reprojection_check": 30,
+          "used_correspondences": 688
+        },
+        "status": "measured",
+        "mae_m": 0.08344276511803077,
+        "rmse_m": 0.1714794427929437,
+        "median_abs_m": 0.03046019639874431,
+        "p95_abs_m": 0.33874381977731455,
+        "signed_bias_m": 0.04150482429871901,
+        "fraction_error_at_most_0_05m": 0.6497093023255814
+      },
+      {
+        "name": "frame_00025.png",
+        "sensor_depth_sha256": "8aac42e7fba45a0b30e51a1c9e49b70a6d4be76241b8a9ef5e2737b7ce0cf04e",
+        "rgb_depth_timestamp_delta_s": -0.00810098648071289,
+        "measured_valid_correspondences": 379,
+        "counts": {
+          "colmap_tracked_2d_features": 483,
+          "invalid_or_discontinuous_depth": 99,
+          "failed_reprojection_check": 5,
+          "used_correspondences": 379
+        },
+        "status": "measured",
+        "mae_m": 0.05417431311022035,
+        "rmse_m": 0.12669342364450278,
+        "median_abs_m": 0.016261913392765504,
+        "p95_abs_m": 0.19971262140448906,
+        "signed_bias_m": 0.018530464904238764,
+        "fraction_error_at_most_0_05m": 0.7387862796833773
+      },
+      {
+        "name": "frame_00035.png",
+        "sensor_depth_sha256": "ca1361d948493f40ebdb794a1ca60dfe242fd987112479a1a352da3341c1d613",
+        "rgb_depth_timestamp_delta_s": -0.00773310661315918,
+        "measured_valid_correspondences": 636,
+        "counts": {
+          "colmap_tracked_2d_features": 703,
+          "invalid_or_discontinuous_depth": 39,
+          "failed_reprojection_check": 28,
+          "used_correspondences": 636
+        },
+        "status": "measured",
+        "mae_m": 0.05833459765796174,
+        "rmse_m": 0.16487581812202395,
+        "median_abs_m": 0.022052073874123,
+        "p95_abs_m": 0.1751925607739025,
+        "signed_bias_m": -0.01972639084099568,
+        "fraction_error_at_most_0_05m": 0.7311320754716981
+      },
+      {
+        "name": "frame_00055.png",
+        "sensor_depth_sha256": "3fd31b35245ff48a9aa1eb91279d9a21a439cd0e44d3a56f549647b979b848be",
+        "rgb_depth_timestamp_delta_s": -0.00571894645690918,
+        "measured_valid_correspondences": 172,
+        "counts": {
+          "colmap_tracked_2d_features": 201,
+          "invalid_or_discontinuous_depth": 20,
+          "failed_reprojection_check": 9,
+          "used_correspondences": 172
+        },
+        "status": "measured",
+        "mae_m": 0.06174413560172803,
+        "rmse_m": 0.12883678897410944,
+        "median_abs_m": 0.024874743112445086,
+        "p95_abs_m": 0.2698029353975482,
+        "signed_bias_m": 0.011452825409870283,
+        "fraction_error_at_most_0_05m": 0.75
+      },
+      {
+        "name": "frame_00065.png",
+        "sensor_depth_sha256": "8d4de81e071c7992300754542a812db185a13685856522a1f92a2ddb87c9195e",
+        "rgb_depth_timestamp_delta_s": 1.7881393432617188e-05,
+        "measured_valid_correspondences": 1421,
+        "counts": {
+          "colmap_tracked_2d_features": 1680,
+          "invalid_or_discontinuous_depth": 237,
+          "failed_reprojection_check": 22,
+          "used_correspondences": 1421
+        },
+        "status": "measured",
+        "mae_m": 0.023548204387661174,
+        "rmse_m": 0.0443728337725451,
+        "median_abs_m": 0.015327658272827782,
+        "p95_abs_m": 0.06684847273418337,
+        "signed_bias_m": -0.007173514520645344,
+        "fraction_error_at_most_0_05m": 0.9113300492610837
+      },
+      {
+        "name": "frame_00085.png",
+        "sensor_depth_sha256": "c9860c57bdbb608d40c75a00ec5d1e6eb8bc7d90a630fe352d4fa6ae35d9d7f8",
+        "rgb_depth_timestamp_delta_s": 2.4080276489257812e-05,
+        "measured_valid_correspondences": 931,
+        "counts": {
+          "colmap_tracked_2d_features": 1130,
+          "invalid_or_discontinuous_depth": 184,
+          "failed_reprojection_check": 15,
+          "used_correspondences": 931
+        },
+        "status": "measured",
+        "mae_m": 0.026688771393020626,
+        "rmse_m": 0.0877758891483619,
+        "median_abs_m": 0.011488023379189638,
+        "p95_abs_m": 0.07156471686187615,
+        "signed_bias_m": 0.0008408031166972227,
+        "fraction_error_at_most_0_05m": 0.9108485499462943
+      }
+    ],
+    "metric_output_sha256": "706dc7a26ebf377386d4c56b559cf30b765f79f317154f88265383a73cf18faa",
+    "was_gt_read_to_estimate_scale": false
+  },
+  "gt_loaded_only_after_metric_scale_was_locked": true,
+  "gt_groundtruth_txt_sha256": "aac0319a6ef4e1cdf61e779d2152b95aa7e9f7b1749d6d18717b43ddabffede2",
+  "gt_missing_frame_names": [
+    "frame_00025.png"
+  ],
+  "metric_se3_pose_evaluation": {
+    "evaluation_scope": "Only after sensor-scale solution is locked",
+    "gt_pose_used_for_origin_and_orientation_only": "frame_00015.png",
+    "gt_was_used_for_scale": false,
+    "rigid_se3_no_scaling": true,
+    "evaluated_nonanchor_frames": 88,
+    "heldout_position_rmse_m": 0.015376590713554138,
+    "heldout_position_median_m": 0.012964200700564973,
+    "heldout_position_p95_m": 0.024768199160220515,
+    "heldout_rotation_median_degrees": 0.747887334249328,
+    "heldout_rotation_p95_degrees": 1.8439530092278436
+  },
+  "reference_scale_for_audit_only": {
+    "posthoc_gt_sim3_scale_m_per_unit": 0.05041146989839715,
+    "sensor_scale_m_per_unit": 0.049078873963100136,
+    "relative_difference_sensor_vs_gt_sim3": -0.026434379675554398,
+    "gt_sim3_never_used_in_calibration": true
+  },
+  "report_hashes": {
+    "measured-depth-evidence.json": "e6dd674df7d824ae1d9a7912e3d2cf5deba667581cfcfc595ca34c52c8837d67",
+    "metric-trajectory-from-sensor.json": "706dc7a26ebf377386d4c56b559cf30b765f79f317154f88265383a73cf18faa",
+    "trajectory-scale-unknown.json": "8586a388148295ee20127ed3dab2ece56c5089a23c2ed0ed809e8a33d744a125"
+  },
+  "claimed_capability": "measured-depth-assisted metric trajectory; no estimated dense depth or mesh",
+  "elapsed_seconds": 183.867
+}
