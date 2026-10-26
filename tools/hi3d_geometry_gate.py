@@ -94,7 +94,12 @@ def score(shape, reference, count=3000, seed=0, tolerance=.03):
 
 def audit(manifest,root,count=3000):
     root=Path(root).resolve()
-    mf=checked(root,{"path":manifest,"sha256":file_hash((root/manifest).resolve())} )
+    rel=Path(manifest)
+    if rel.is_absolute() or ".." in rel.parts or not rel.parts:
+        raise AuditError("Unsafe manifest path")
+    mf=(root/rel).resolve()
+    if not mf.is_relative_to(root) or not mf.is_file() or mf.stat().st_size>2*1024*1024:
+        raise AuditError("Manifest outside root, missing or oversized")
     spec=json.loads(mf.read_text(encoding="utf-8"))
     if spec.get("version")!="echo-hi3d-audit-1" or spec.get("units")!="meters":
         raise AuditError("Expected explicit ECHO meter format")
