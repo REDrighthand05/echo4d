@@ -130,3 +130,9 @@ def test_units_not_claimed_without_meters(tmp_path):
     spec=fixture(tmp_path);spec["units"]="unknown";save(tmp_path,spec)
     with pytest.raises(AuditError,match="meter format"):
         audit("manifest.json",tmp_path)
+
+
+def test_manifest_path_escape_rejected(tmp_path):
+    fixture(tmp_path)
+    with pytest.raises(AuditError,match="Unsafe manifest"):
+        audit("../manifest.json",tmp_path)
