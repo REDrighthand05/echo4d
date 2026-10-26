@@ -75,6 +75,32 @@ def surface_distance(shape, points: np.ndarray, *, sample_count: int = 3000) -> 
     }
 
 
+def read_furniture_geometry(path: Path) -> tuple[np.ndarray, np.ndarray]:
+    """Use a distinct geometry-only contract, without weakening strict ECHO PLY.
+
+    The NPZ carries coordinates/faces only; its contents are NOT independently
+    authenticated sensor measurements, colors, normals, or a real-scale proof.
+    """
+    if path.suffix.lower() == '.ply':
+        return read_echo_ply(path)
+    if path.suffix.lower() != '.npz':
+        raise DataError('Furniture mesh must be strict ECHO PLY or geometry-only NPZ')
+    try:
+        with np.load(path, allow_pickle=False) as z:
+            if set(z.files) != {'vertices', 'faces'}:
+                raise DataError('Geometry-only NPZ requires exactly vertices and faces')
+            vertices=np.asarray(z['vertices'])
+            faces=np.asarray(z['faces'])
+    except (OSError, ValueError, TypeError, KeyError) as e:
+        raise DataError('Invalid geometry-only NPZ payload') from e
+    if (vertices.ndim!=2 or vertices.shape[1]!=3 or vertices.dtype.kind not in 'fiu'
+            or not 3<=len(vertices)<=2_000_000 or not np.isfinite(vertices).all()
+            or faces.ndim!=2 or faces.shape[1]!=3 or faces.dtype.kind not in 'iu'
+            or not 1<=len(faces)<=3_000_000 or faces.min()<0 or faces.max()>=len(vertices)):
+        raise DataError('Invalid geometry-only furniture vertices/faces')
+    return vertices.astype(np.float64), faces.astype(np.int64)
+
+
 def checked_file(root: Path, spec: dict, label: str) -> Path:
     if not isinstance(spec, dict) or set(spec) != {"path", "sha256"}:
         raise DataError(f"Missing file path/hash for {label}")
@@ -121,10 +147,10 @@ def evaluate(ledger_path: Path, proof_path: Path, root: Path) -> dict:
     # Not every plausible claim is genuine evidence; human check is separate.
     coarse_path = checked_file(root, proof["coarse_world_mesh"], "coarse")
     proposed_path = checked_file(root, proof["refined_world_mesh"], "refined")
-    if coarse_path == proposed_path or coarse_path.suffix != ".ply" or proposed_path.suffix != ".ply":
-        raise DataError("Two separate metric ECHO PLY assets required")
-    coarse = read_echo_ply(coarse_path)
-    refined = read_echo_ply(proposed_path)
+    if coarse_path == proposed_path or coarse_path.suffix.lower() not in ('.ply','.npz') or proposed_path.suffix.lower() not in ('.ply','.npz'):
+        raise DataError("Two separate, reviewed metric furniture geometry assets required")
+    coarse = read_furniture_geometry(coarse_path)
+    refined = read_furniture_geometry(proposed_path)
     original_dimensions = dimensions(coarse[0], axes)
     proposed_dimensions = dimensions(refined[0], axes)
     views = proof.get("views")
@@ -191,6 +217,8 @@ def evaluate(ledger_path: Path, proof_path: Path, root: Path) -> dict:
               "review_claim_not_cryptographically_authenticated": True,
               "hi3d_inference_claim_not_verified_by_this_cpu_tool": True,
               "raw_depth_units_per_metre": 5000,
+              "mesh_formats": {"coarse":coarse_path.suffix.lower(),"candidate":proposed_path.suffix.lower()},
+              "geometry_only_mesh_does_not_certify_physical_truth": True,
               "real_furniture_dimensions_source_claim": proof["independent_dimension_source"],
               "original_measured_dimensions_m": measure.tolist(),
               "per_frame": per_view,
