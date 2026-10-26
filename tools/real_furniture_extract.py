@@ -110,6 +110,43 @@ def vote(vertices,data,tolerance):
     bg[ids[matches&(mask[y,x]==0)]]=True
     return fg,bg
 
+def write_compatible_candidate_ply(path, vertices, faces):
+    """ECHO-reader-compatible interchange; normals/color are DERIVED, not measured."""
+    if len(vertices)>300000 or len(faces)>500000:
+        raise EvidenceError('Object exceeds strict downstream ECHO reader bounds')
+    v32=vertices.astype(np.float32)
+    if not np.isfinite(v32).all():
+        raise EvidenceError('Geometry exceeds float32 metric interchange range')
+    normals=np.asarray(trimesh.Trimesh(vertices=vertices,faces=faces,process=False).vertex_normals,
+                       dtype=np.float32)
+    if normals.shape != vertices.shape or not np.isfinite(normals).all():
+        raise EvidenceError('Cannot derive finite normals for interchange')
+    dtype=[(k,'<f4') for k in ('x','y','z','nx','ny','nz')]
+    dtype += [(k,'u1') for k in ('red','green','blue')]
+    encoded=np.empty(len(vertices),dtype=dtype)
+    for j,k in enumerate(('x','y','z')):
+        encoded[k]=v32[:,j]
+    for j,k in enumerate(('nx','ny','nz')):
+        encoded[k]=normals[:,j]
+    for k in ('red','green','blue'):
+        encoded[k]=128  # neutral placeholder, NEVER measured RGB
+    triangle=np.empty(len(faces),dtype=[('count','u1'),('indices','<i4',(3,))])
+    triangle['count']=3
+    triangle['indices']=faces
+    header=('ply\\nformat binary_little_endian 1.0\\n'
+            'comment ECHO candidate interchange; derived normals and synthetic neutral color\\n'
+            f'element vertex {len(vertices)}\\n'
+            'property float x\\nproperty float y\\nproperty float z\\n'
+            'property float nx\\nproperty float ny\\nproperty float nz\\n'
+            'property uchar red\\nproperty uchar green\\nproperty uchar blue\\n'
+            f'element face {len(faces)}\\n'
+            'property list uchar int vertex_indices\\nend_header\\n')
+    with path.open('xb') as stream:
+        stream.write(header.replace('\\n','\n').encode('ascii'))
+        stream.write(encoded.tobytes())
+        stream.write(triangle.tobytes())
+
+
 def extract(manifest,root,output):
     root=Path(root).resolve(strict=True)
     manifest=Path(manifest).resolve(strict=True)
@@ -139,8 +176,30 @@ def extract(manifest,root,output):
     positive=np.zeros(len(vertices),np.uint16)
     negative=np.zeros(len(vertices),np.uint16)
     receipts=[]
+    seen_rgb_paths=set()
+    seen_depth_paths=set()
+    seen_rgb_hashes=set()
+    seen_depth_hashes=set()
+    camera_views=[]
     for frame in frames:
-        fg,bg=vote(vertices,read_frame(root,frame),tolerance)
+        rgb_path=asset(root,frame['rgb'],('.png','.jpg','.jpeg'))
+        depth_path=asset(root,frame['depth'],('.npy',))
+        rgb_hash=frame['rgb']['sha256']
+        depth_hash=frame['depth']['sha256']
+        # Different manifest names or byte-for-byte copies never count as new evidence.
+        if (str(rgb_path) in seen_rgb_paths or str(depth_path) in seen_depth_paths or
+                rgb_hash in seen_rgb_hashes or depth_hash in seen_depth_hashes):
+            raise EvidenceError('Duplicate/aliased RGB-D observation; two source captures required')
+        data=read_frame(root,frame)
+        pose=data[-1]
+        if any(np.allclose(pose,previous,atol=1e-6) for previous in camera_views):
+            raise EvidenceError('Identical camera viewpoint cannot count as second independent view')
+        seen_rgb_paths.add(str(rgb_path))
+        seen_depth_paths.add(str(depth_path))
+        seen_rgb_hashes.add(rgb_hash)
+        seen_depth_hashes.add(depth_hash)
+        camera_views.append(pose)
+        fg,bg=vote(vertices,data,tolerance)
         positive+=fg
         negative+=bg
         receipts.append({'name':frame['name'],'rgb_sha256':frame['rgb']['sha256'],
@@ -154,7 +213,7 @@ def extract(manifest,root,output):
     v,f=vertices[used],rev.reshape(-1,3)
     output.mkdir(parents=True,exist_ok=False)
     try:
-        trimesh.Trimesh(vertices=v,faces=f,process=False).export(output/'observed-object-world.ply')
+        write_compatible_candidate_ply(output/'observed-object-world.ply',v,f)
         np.save(output/'selected-source-face-indices.npy',chosen)
         report={'status':'candidate_requires_independent_instance_review',
             'verified_furniture':False,'hi3d_inference_run':False,'occluded_shape_inferred':False,
@@ -167,6 +226,10 @@ def extract(manifest,root,output):
             'object_extent_as_declared_m':(v.max(axis=0)-v.min(axis=0)).tolist(),
             'world_transform':'identity_no_rescaling_no_repositioning','photo_mask_depth':receipts,
             'original_faces_preserved':True,
+            'mesh_interchange':'echo_reader_schema_candidate_only',
+            'normals':'derived_from_candidate_faces_not_measured',
+            'colors':'neutral_placeholder_not_measured',
+            'world_frame_id':'inherited_source_scene_frame_without_external_certification',
             'limitations':['External mask review and measured-scale declarations are not authenticated by software',
                            'No missing faces generated; this is an unclosed observed-only surface',
                            'No real furniture has been independently verified by a synthetic unit test']}
