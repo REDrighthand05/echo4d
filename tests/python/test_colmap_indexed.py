@@ -193,3 +193,15 @@ def test_symlink_alias_of_one_raw_depth_rejected(tmp_path, capsys):
         pytest.skip("Filesystem does not permit creating test symlinks")
     (tmp_path / "index.txt").write_text("a.png first.png\nb.png alias.png\n")
     failure(tmp_path, capsys, "same raw file")
+
+
+def test_hard_link_same_source_is_not_two_independent_depth_frames(tmp_path, capsys):
+    fixture(tmp_path)
+    alias = tmp_path / "raw" / "hardlink.png"
+    try:
+        import os
+        os.link(tmp_path / "raw" / "first.png", alias)
+    except (OSError, NotImplementedError):
+        pytest.skip("Filesystem does not permit creating hard links")
+    (tmp_path / "index.txt").write_text("a.png first.png\\nb.png hardlink.png\\n")
+    failure(tmp_path, capsys, "hard link")
