@@ -68,7 +68,8 @@ def assess_real_roundtrip(baseline: Path, indexed: Path, source: Path,
     for i, ((_, aa, ea), (_, bb, eb), assoc) in enumerate(
         zip(a.iter_frames(), b.iter_frames(), associations, strict=True)
     ):
-        name = PurePosixPath(ea["color"]).name
+        # iter_frames() yields a hash evidence record, not the source frame spec.
+        name = PurePosixPath(a.entries[i]["color"]).name
         item = items.get(name)
         if item is None or item["raw_depth"] != assoc["depth_path"]:
             raise DataError("Indexed raw depth does not match TUM ground source association")
