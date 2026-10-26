@@ -5,7 +5,9 @@ from pathlib import Path
 import sys
 import numpy as np
 import pytest
-import trimesh
+# Optional mesh IO is installed in the dedicated intake CI, not ECHO core.
+# The base platform matrix must still collect all other ECHO tests.
+trimesh = pytest.importorskip("trimesh", reason="Dedicated Hi3D intake workflow installs optional trimesh")
 from PIL import Image
 
 sys.path.insert(0,str(Path(__file__).resolve().parents[2]/'tools'))
