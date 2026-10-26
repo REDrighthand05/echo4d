@@ -145,8 +145,10 @@ def main(argv: list[str] | None = None) -> int:
             # One strict adapter. Uses #6 + #24 hardening, NOT the incompatible
             # second converter implementation from draft PR #19.
             if args.depth_index is None:
-                if args.depth_scale is not None or args.depth_unit is not None:
-                    raise DataError("--depth-scale/--depth-unit require --depth-index; ordinary NPY depth is already metres")
+                if args.depth_scale is not None:
+                    raise DataError("--depth-scale requires --depth-index; ordinary NPY depth is already metres")
+                if args.depth_unit is not None:
+                    raise DataError("--depth-unit requires --depth-index; ordinary NPY depth is already metres")
                 from .colmap import import_colmap
                 result = import_colmap(args)
             else:
