@@ -81,6 +81,11 @@ def import_colmap_indexed(args: argparse.Namespace) -> dict:
     divisor = args.depth_scale
     if divisor is None or not math.isfinite(divisor) or not 0 < divisor <= 1e9:
         raise DataError("Indexed input requires positive finite --depth-scale (raw units per metre)")
+    label = getattr(args, "depth_unit", None)
+    if label is not None and (
+        not isinstance(label, str) or not label.strip() or len(label.strip()) > 160
+    ):
+        raise DataError("--depth-unit must be a nonempty raw sensor unit label (max 160 characters)")
     destination = Path(args.output).resolve()
     if destination.exists():
         raise DataError("Output already exists; refusing to overwrite")
@@ -96,12 +101,18 @@ def import_colmap_indexed(args: argparse.Namespace) -> dict:
     image_root = Path(args.images).resolve()
     timestamps = _timestamps(Path(args.timestamps).resolve())
     evidence = []
+    # Text-distinct index paths can still alias the same underlying file.
+    # Check resolved identity before any public output is published.
+    used_raw_files: set[Path] = set()
     with tempfile.TemporaryDirectory(prefix="echo-colmap-depth-") as temporary:
         staged = Path(temporary) / "metric-depth"
         staged.mkdir()
         for name in sorted(names):
             raw_rel = mapping[name]
-            raw_path = safe_path(root, raw_rel)
+            raw_path = safe_path(root, raw_rel).resolve()
+            if raw_path in used_raw_files:
+                raise DataError("Multiple indexed depth entries resolve to the same raw file")
+            used_raw_files.add(raw_path)
             color_path = safe_path(image_root, name)
             color_hash = file_sha256(color_path)
             before = file_sha256(raw_path)
@@ -130,6 +141,8 @@ def import_colmap_indexed(args: argparse.Namespace) -> dict:
             provenance["indexed_depth"] = {
                 "index_sha256": index_hash,
                 "raw_units_per_metre": divisor,
+                "raw_depth_unit_label": label.strip() if label is not None else None,
+                "raw_unit_label_verified_independently": False,
                 "conversion": "raw camera-Z depth / raw_units_per_metre; no COLMAP pose-scale applied",
                 "frames": [
                     {**row, "metric_depth_sha256": file_sha256(
