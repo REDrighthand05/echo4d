@@ -20,6 +20,22 @@ RECEIPT = (
     / "docs/evidence/issue47-desk-v2-real-heldout-failure-20261027.json"
 )
 HELDOUT = (4, 9, 14, 19, 24, 29, 34, 39, 44, 49, 54, 59)
+# Pin the actual per-view depth identities, not merely their hash syntax.
+# These are historical claims from the immutable receipt, not a re-hash of PNGs.
+PINNED_DEPTH_SHA256 = (
+    "dc33d66b54f532c852b14e7b6b011297284887c269c95ac004a19143ae374cbd",
+    "94a2a87d474b86cf27da0c63fba441d61707e58395f07a6dcb4d9d26730ec533",
+    "86d68cf7afec872e78304d2cf1bb276086b3e064bebc51264b909e25f5949738",
+    "ec6921eee8875a48e009497be3389dcc0d8817f28c664ad5a6ccb26784fb8555",
+    "62523ae5582cefae2aacf4b8a75dc88c684cb37ff84a7ceaf81c979d1809ce93",
+    "e1c4e2cfe353d77645cbc764bee781e137b61e8e8c981e0c191c09604dfa3d1b",
+    "18c34b2e73a3607632d923cbd5f06e6466448ec3150bc405ae17f27bd6f27f4b",
+    "7072bb1598c07d0a9792b20b358a58bea332141b972bb64759440acda33c7d1b",
+    "8d6c07e69a598ad2e4a3c9d610d58c3f5b731e0e15260502610f69dc97586cb5",
+    "0b10abf770869f8aa1f65158276605a7956067f148d7b55954c84aa9e7fa8de9",
+    "1d5a6acd7ce6544169f1df74ce95866bdf1c6702dacb8fbcc94169b9b9f8926a",
+    "da25db93c295b37b39d43d150ceb64243e0d6288c8a727a5df76740259be3cf8",
+)
 FIELDS = (
     "holdout_index", "original_depth_png_sha256", "valid_pixels",
     "overlap_pixels", "coverage_rounded_6dp", "rmse_m_rounded_6dp",
@@ -76,6 +92,7 @@ def verify_receipt(data: dict) -> None:
     assert len(rows) == len(HELDOUT)
     assert tuple(row[0] for row in rows) == HELDOUT
     assert len({row[1] for row in rows}) == len(HELDOUT)
+    assert tuple(row[1] for row in rows) == PINNED_DEPTH_SHA256
     for row in rows:
         assert len(row) == len(FIELDS)
         _, depth_sha, valid, overlap, coverage, rmse, mae, p95 = row
@@ -137,7 +154,7 @@ def test_real_desk_v2_failure_receipt_is_internally_consistent():
 
 @pytest.mark.parametrize("mutation", (
     "missing_holdout", "duplicated_holdout", "faked_pass", "altered_rmse",
-    "altered_overlap", "wrong_mesh_hash", "altered_top_three",
+    "altered_overlap", "wrong_mesh_hash", "replaced_depth_hash", "altered_top_three",
     "changed_frozen_threshold",
 ))
 def test_desk_v2_receipt_tampering_fails_closed(mutation):
@@ -155,6 +172,9 @@ def test_desk_v2_receipt_tampering_fails_closed(mutation):
         data["per_view"][0][3] -= 1
     elif mutation == "wrong_mesh_hash":
         data["provenance"]["mesh_sha256"] = "0" * 64
+    elif mutation == "replaced_depth_hash":
+        # A distinct well-formed SHA used to pass the old uniqueness/syntax checks.
+        data["per_view"][0][1] = "f" * 64
     elif mutation == "altered_top_three":
         data["independent_checks"]["top_three_squared_error_frames"] = [9, 14, 34]
     elif mutation == "changed_frozen_threshold":
