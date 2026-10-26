@@ -24,7 +24,10 @@ def fixture(tmp_path,second_mask='foreground'):
     frames=[]
     for n in range(2):
         photo=root/f'photo{n}.png'
-        Image.new('RGB',(64,64),'white').save(photo)
+        image=Image.new('RGB',(64,64),'white')
+        if n==1:
+            image.putpixel((0,0),(254,255,255))  # same object, distinct source bytes
+        image.save(photo)
         mask=np.zeros((64,64),np.uint8)
         if n==0 or second_mask=='foreground':
             mask[20:45,20:45]=255
@@ -33,12 +36,17 @@ def fixture(tmp_path,second_mask='foreground'):
         Image.fromarray(mask).save(root/f'mask{n}.png')
         depth=np.zeros((64,64),np.float32)
         depth[20:45,20:45]=2
+        if n==1:
+            depth[0,0]=.7  # sensor file has its own identity outside the object
         np.save(root/f'depth{n}.npy',depth)
+        pose=np.eye(4)
+        if n==1:
+            pose[0,3]=.02  # distinct rigid viewpoint; same visible object surface
         frames.append({'name':f'view{n}','rgb':{'path':photo.name,'sha256':digest(photo)},
              'mask':{'path':f'mask{n}.png','sha256':digest(root/f'mask{n}.png')},
              'depth':{'path':f'depth{n}.npy','sha256':digest(root/f'depth{n}.npy')},
              'fx':20,'fy':20,'cx':32,'cy':32,
-             'camera_to_world_column_major':np.eye(4).flatten(order='F').tolist(),
+             'camera_to_world_column_major':pose.flatten(order='F').tolist(),
              'mask_annotation_source':'two reviewed source RGB instance masks',
              'reviewed_same_object':True})
     spec={'version':'echo-furniture-evidence-1',
@@ -155,3 +163,57 @@ def test_room_masquerading_as_object_rejected(tmp_path):
     with pytest.raises(EvidenceError,match='furniture'):
         extract(m,root,tmp_path/'out')
     assert not (tmp_path/'out').exists()
+
+
+def test_frame_renamed_cannot_count_as_independent_view(tmp_path):
+    import copy
+    root,m,s=fixture(tmp_path)
+    clone=copy.deepcopy(s['frames'][0])
+    clone['name']='renamed_duplicate'
+    s['frames']=[s['frames'][0],clone]
+    m.write_text(json.dumps(s))
+    with pytest.raises(EvidenceError,match='Repeated source'):
+        extract(m,root,tmp_path/'out')
+    assert not (tmp_path/'out').exists()
+
+
+def test_byte_copied_second_photo_denied_even_new_filename(tmp_path):
+    root,m,s=fixture(tmp_path)
+    duplicate=root/'copy_photo.png'
+    duplicate.write_bytes((root/'photo0.png').read_bytes())
+    s['frames'][1]['rgb']={'path':duplicate.name,'sha256':digest(duplicate)}
+    m.write_text(json.dumps(s))
+    with pytest.raises(EvidenceError,match='Repeated source'):
+        extract(m,root,tmp_path/'out')
+
+
+def test_byte_copied_second_depth_denied(tmp_path):
+    root,m,s=fixture(tmp_path)
+    duplicate=root/'copy_depth.npy'
+    duplicate.write_bytes((root/'depth0.npy').read_bytes())
+    s['frames'][1]['depth']={'path':duplicate.name,'sha256':digest(duplicate)}
+    m.write_text(json.dumps(s))
+    with pytest.raises(EvidenceError,match='Repeated source'):
+        extract(m,root,tmp_path/'out')
+
+
+def test_same_pose_not_a_distinct_view_even_different_bytes(tmp_path):
+    root,m,s=fixture(tmp_path)
+    s['frames'][1]['camera_to_world_column_major']=s['frames'][0]['camera_to_world_column_major']
+    m.write_text(json.dumps(s))
+    with pytest.raises(EvidenceError,match='Repeated camera pose'):
+        extract(m,root,tmp_path/'out')
+
+
+def test_export_geometry_only_npz_preserves_world_vertices_and_faces(tmp_path):
+    root,m,s=fixture(tmp_path)
+    result=extract(m,root,tmp_path/'out')
+    assert result['output_geometry_contract']=='geometry_only_npz_not_ECHO_TSDF'
+    p=tmp_path/'out/observed-object-world.npz'
+    assert digest(p)==result['output_geometry_npz_sha256']
+    with np.load(p,allow_pickle=False) as z:
+        assert set(z.files)=={'vertices','faces'}
+        assert z['vertices'].shape==(4,3)
+        assert z['faces'].shape==(2,3)
+        assert z['vertices'].dtype==np.float64
+        assert z['faces'].dtype==np.int64
