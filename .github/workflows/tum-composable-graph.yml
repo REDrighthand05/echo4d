@@ -12,6 +12,7 @@ on:
       - 'src/echo4d/graph_runner.py'
       - 'src/echo4d/output.py'
       - 'tests/python/test_projective_meshing.py'
+      - 'tests/python/test_graph_runner.py'
       - 'tests/python/test_tum_graph_projective_ab.py'
       - 'tests/python/test_tum_composable_graph.py'
       - 'tests/python/test_tum_graph_holdout.py'
