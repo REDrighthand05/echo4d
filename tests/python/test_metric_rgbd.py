@@ -146,3 +146,48 @@ def test_reject_downsample_too_small_for_echo_camera(tmp_path):
     with pytest.raises(DataError, match="Camera width"):
         convert_metric_sensor(*args, downsample=4)
     assert not args[-1].exists()
+
+
+def test_sfm_rgb_chain_checks_source_pixels_and_emitted_manifest(tmp_path):
+    from echo4d.metric_rgbd import verify_sensor_rgb_chain
+    args = _fixture(tmp_path)
+    convert_metric_sensor(*args, downsample=2)
+    receipt = verify_sensor_rgb_chain(tmp_path / "out", tmp_path / "images")
+    assert receipt["status"] == "PASS_SFM_RGB_CHAIN_ONLY"
+    assert receipt["verified_sfm_rgb_frames"] == 3
+    assert receipt["verified_emitted_depth_hashes"] == 3
+    assert receipt["original_camera_capture_authenticated"] is False
+    audit = json.loads((tmp_path / "out" / "sensor-provenance.json").read_text())
+    assert audit["recording_manifest_sha256"] == file_sha256(tmp_path / "out" / "recording.json")
+    assert audit["resolution_provenance"]["rgb_identity_scope"].startswith("SfM input")
+    assert all("emitted_color_sha256" in item and "emitted_depth_sha256" in item
+               for item in audit["train"])
+
+
+@pytest.mark.parametrize("mutation", [
+    "original_rgb", "emitted_rgb", "emitted_depth", "manifest",
+    "receipt_order", "sidecar_stride", "missing_original"
+])
+def test_sfm_rgb_chain_fails_closed_on_tamper(tmp_path, mutation):
+    from echo4d.metric_rgbd import verify_sensor_rgb_chain
+    args = _fixture(tmp_path)
+    convert_metric_sensor(*args, downsample=2)
+    root = tmp_path / "out"
+    if mutation == "original_rgb":
+        Image.new("RGB", (4, 4), (0, 0, 0)).save(tmp_path / "images" / "frame_00000.png")
+    elif mutation == "emitted_rgb":
+        Image.new("RGB", (2, 2), (0, 0, 0)).save(root / "color" / "00000.png")
+    elif mutation == "emitted_depth":
+        np.save(root / "depth" / "00000.npy", np.zeros((2, 2), dtype=np.float32))
+    elif mutation == "manifest":
+        _alter(root / "recording.json", lambda x: x.update(name="changed"))
+    elif mutation == "receipt_order":
+        _alter(root / "sensor-provenance.json",
+               lambda x: x["train"][0].update(emitted_frame_index=1))
+    elif mutation == "sidecar_stride":
+        _alter(root / "sensor-provenance.json",
+               lambda x: x["resolution_provenance"].update(rgb_and_depth_pixel_stride=1))
+    elif mutation == "missing_original":
+        (tmp_path / "images" / "frame_00000.png").unlink()
+    with pytest.raises(DataError):
+        verify_sensor_rgb_chain(root, tmp_path / "images")

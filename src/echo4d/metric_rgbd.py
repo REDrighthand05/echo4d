@@ -161,6 +161,9 @@ def convert_metric_sensor(
             receipts.append({"name": name, "sensor_depth_path": str(depth_path.relative_to(depth_root.resolve())),
                              "sensor_depth_sha256": file_sha256(depth_path),
                              "source_rgb_sha256": file_sha256(rgb_path),
+                             "emitted_frame_index": i,
+                             "emitted_color_sha256": file_sha256(rgb),
+                             "emitted_depth_sha256": file_sha256(z),
                              "rgb_depth_timestamp_delta_s": delta})
         write_json(target / "recording.json", {
             "version": "echo-dataset-1", "name": "sfm-with-real-sensor-depth",
@@ -172,6 +175,7 @@ def convert_metric_sensor(
         })
         write_json(target / "sensor-provenance.json", {
             "version": "echo-sensor-mesh-input-1",
+            "recording_manifest_sha256": file_sha256(target / "recording.json"),
             "metric_trajectory_sha256": file_sha256(metric_path),
             "sfm_trajectory_sha256": file_sha256(sfm_path),
             "depth_split_sha256": file_sha256(split_path),
@@ -182,6 +186,7 @@ def convert_metric_sensor(
                 "emitted_recording_px": {"width": camera.width, "height": camera.height},
                 "rgb_and_depth_pixel_stride": downsample,
                 "source_kind": "measured_registered_z_depth",
+                "rgb_identity_scope": "SfM input image files; not authenticated original TUM camera bytes",
                 "note": "Source dimensions verified against COLMAP and each RGB file; "
                         "emitted RGB and measured depth use the same pixel stride. "
                         "A later scene preview can downsample again."
@@ -197,6 +202,69 @@ def convert_metric_sensor(
             pass
     return {"output": str(output.resolve()), "training_frames": len(entries),
             "heldout_frames": len(withheld), "sensor_scale_m_per_sfm_unit": float(scale)}
+
+
+def verify_sensor_rgb_chain(dataset_dir: Path, sfm_image_root: Path) -> dict:
+    """Verify SfM RGB bytes -> B-path sampled RGB -> scene manifest linkage.
+
+    This requires the original *SfM input files* and fails closed if any are
+    missing. It does NOT authenticate original camera/TUM bytes, depth sensor
+    provenance, or geometric accuracy. scene.echo.json separately contains
+    provenance.manifest_sha256, which an auditor must compare with this result.
+    """
+    root = Path(dataset_dir)
+    manifest = safe_path(root, "recording.json")
+    sidecar = safe_path(root, "sensor-provenance.json")
+    recording = load_recording(manifest)
+    audit = json.loads(sidecar.read_text(encoding="utf-8"))
+    if (audit.get("version") != "echo-sensor-mesh-input-1"
+            or audit.get("recording_manifest_sha256") != recording.manifest_sha256):
+        raise DataError("Recording manifest SHA does not match sensor provenance")
+    provenance = audit.get("resolution_provenance")
+    if not isinstance(provenance, dict):
+        raise DataError("Missing resolution provenance")
+    factor = provenance.get("rgb_and_depth_pixel_stride")
+    source = provenance.get("source_rgb_px")
+    emitted = provenance.get("emitted_recording_px")
+    # Compare dimensions explicitly; camera.to_dict also includes focal data.
+    if (type(factor) is not int or not 1 <= factor <= 16
+            or not isinstance(source, dict) or not isinstance(emitted, dict)
+            or type(source.get("width")) is not int or type(source.get("height")) is not int
+            or source["width"] < 2 or source["height"] < 2
+            or emitted != {"width": recording.camera.width, "height": recording.camera.height}
+            or (source["width"] + factor - 1) // factor != recording.camera.width
+            or (source["height"] + factor - 1) // factor != recording.camera.height):
+        raise DataError("Source, stride or emitted RGB resolution mismatch")
+    receipts = audit.get("train")
+    if not isinstance(receipts, list) or len(receipts) != len(recording.entries):
+        raise DataError("Source receipt count does not match recording")
+    for i, (entry, receipt) in enumerate(zip(recording.entries, receipts)):
+        if not isinstance(receipt, dict) or receipt.get("emitted_frame_index") != i:
+            raise DataError("Source receipt order/index mismatch")
+        name = _frame_name(receipt.get("name"))
+        original = safe_path(sfm_image_root, name)
+        color = safe_path(root, entry["color"])
+        depth = safe_path(root, entry["depth"])
+        if file_sha256(original) != receipt.get("source_rgb_sha256"):
+            raise DataError(f"SfM input RGB SHA mismatch: {name}")
+        if file_sha256(color) != receipt.get("emitted_color_sha256"):
+            raise DataError(f"Emitted RGB SHA mismatch: {name}")
+        if file_sha256(depth) != receipt.get("emitted_depth_sha256"):
+            raise DataError(f"Emitted depth SHA mismatch: {name}")
+        with Image.open(original) as image:
+            source_pixels = np.asarray(image.convert("RGB"))
+        with Image.open(color) as image:
+            emitted_pixels = np.asarray(image.convert("RGB"))
+        if (source_pixels.shape != (source["height"], source["width"], 3)
+                or not np.array_equal(source_pixels[::factor, ::factor], emitted_pixels)):
+            raise DataError(f"SfM RGB downsample pixel mismatch: {name}")
+    return {"status": "PASS_SFM_RGB_CHAIN_ONLY",
+            "recording_manifest_sha256": recording.manifest_sha256,
+            "verified_sfm_rgb_frames": len(receipts),
+            "verified_emitted_depth_hashes": len(receipts),
+            "original_camera_capture_authenticated": False,
+            "original_sensor_depth_authenticated": False,
+            "independent_surface_truth": False}
 
 
 def main(argv: list[str] | None = None) -> int:
