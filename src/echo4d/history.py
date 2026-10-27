@@ -6,6 +6,7 @@ or surfaces. Only a real depth+calibrated pose adapter can enter the metric TSDF
 from __future__ import annotations
 
 import argparse
+import hashlib
 from datetime import datetime
 import json
 import math
@@ -23,16 +24,24 @@ TIMEBASE = "seconds_since_recording_start_monotonic"
 AUX_KINDS = ("measured_depth", "scan", "near_field_observation", "other")
 
 
-def _read_json(path: Path, max_bytes: int = 8 * 1024 * 1024) -> dict:
+def _json_snapshot(path: Path, max_bytes: int = 8 * 1024 * 1024) -> tuple[dict, bytes, str]:
     if not path.is_file() or path.is_symlink() or path.stat().st_size > max_bytes:
         raise DataError(f"Missing, symlinked, or oversized JSON: {path}")
     try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
+        with path.open('rb') as stream:
+            raw = stream.read(max_bytes + 1)
+        if len(raw) > max_bytes:
+            raise DataError(f"Oversized JSON: {path}")
+        payload = json.loads(raw.decode("utf-8"))
     except (UnicodeError, json.JSONDecodeError) as error:
         raise DataError(f"Invalid JSON: {path.name}") from error
     if not isinstance(payload, dict):
         raise DataError("Expected a JSON object")
-    return payload
+    return payload, raw, hashlib.sha256(raw).hexdigest()
+
+
+def _read_json(path: Path, max_bytes: int = 8 * 1024 * 1024) -> dict:
+    return _json_snapshot(path, max_bytes)[0]
 
 
 def _safe_basename(value: object) -> str:
@@ -110,8 +119,8 @@ def _validate_capture(capture: dict, media: Path) -> tuple[float, dict, dict]:
     return duration, meta, imu
 
 
-def _auxiliary(path: Path, duration: float) -> dict:
-    data = _read_json(path)
+def _auxiliary(path: Path, duration: float) -> tuple[dict, bytes, str]:
+    data, raw, digest = _json_snapshot(path)
     ident, kind = data.get("sensor_id"), data.get("kind")
     if (data.get("version") != AUX_VERSION or not isinstance(ident, str)
             or not re.fullmatch(r"[a-zA-Z0-9_-]{1,40}", ident)
@@ -128,7 +137,7 @@ def _auxiliary(path: Path, duration: float) -> dict:
     samples = _samples(data.get("samples"), duration if basis == TIMEBASE else 86400, imu=False)
     if not samples:
         raise DataError("Empty auxiliary stream")
-    return data
+    return data, raw, digest
 
 
 def import_history(
@@ -136,18 +145,19 @@ def import_history(
 ) -> dict:
     """Make a self-contained time-indexed archive; never infer geometry or motion."""
     capture_path, media_path, output = Path(capture_path), Path(media_path), Path(output)
-    capture = _read_json(capture_path)
+    capture, capture_raw, capture_sha = _json_snapshot(capture_path)
     duration, meta, imu = _validate_capture(capture, media_path)
-    sensors: list[tuple[Path, dict]] = []
+    media_sha = file_sha256(media_path)
+    sensors: list[tuple[Path, dict, bytes, str]] = []
     seen_ids = set()
     for path in sensor_paths:
         path = Path(path)
-        data = _auxiliary(path, duration)
+        data, raw, source_sha = _auxiliary(path, duration)
         ident = data["sensor_id"]
-        if ident in seen_ids:
+        if ident.casefold() in seen_ids:
             raise DataError("Repeated auxiliary sensor ID")
-        seen_ids.add(ident)
-        sensors.append((path, data))
+        seen_ids.add(ident.casefold())
+        sensors.append((path, data, raw, source_sha))
     if output.exists():
         raise DataError("Output already exists")
     with output_transaction(output) as folder:
@@ -156,13 +166,18 @@ def import_history(
         dest_media = folder / "media" / media_path.name
         shutil.copyfile(media_path, dest_media)
         digest = file_sha256(dest_media)
-        if dest_media.stat().st_size != meta["bytes"]:
+        if (dest_media.stat().st_size != meta["bytes"] or digest != media_sha
+                or file_sha256(media_path) != media_sha):
             raise DataError("Media changed during import")
-        write_json(folder / "capture-source.json", capture)
+        if file_sha256(capture_path) != capture_sha:
+            raise DataError("Capture JSON changed during import")
+        (folder / "capture-source.json").write_bytes(capture_raw)
         exported_sensors = []
-        for source, data in sensors:
+        for source, data, raw, source_sha in sensors:
             name = data["sensor_id"] + ".json"
-            write_json(folder / "sensors" / name, data)
+            if file_sha256(source) != source_sha:
+                raise DataError("Auxiliary JSON changed during import")
+            (folder / "sensors" / name).write_bytes(raw)
             basis = data["time_base"]
             exported_sensors.append({
                 "sensor_id": data["sensor_id"], "kind": data["kind"],
@@ -171,7 +186,7 @@ def import_history(
                 "clock_status": ("source_claim_same_clock_unverified"
                                  if basis == TIMEBASE else "unaligned"),
                 "file": "sensors/" + name,
-                "source_sha256": file_sha256(source),
+                "source_sha256": source_sha,
                 "samples": len(data["samples"]),
                 "first_t_s": data["samples"][0]["t_s"],
                 "last_t_s": data["samples"][-1]["t_s"],
@@ -179,6 +194,7 @@ def import_history(
         timeline = {
             "version": TIMELINE_VERSION, "started_utc": capture["created_utc"],
             "duration_s": duration, "time_base": TIMEBASE,
+            "capture_source": {"file": "capture-source.json", "sha256": capture_sha},
             "media": {
                 "file": media_path.name, "archive_relative_path": "media/" + media_path.name,
                 "mime_type": meta["mime_type"], "bytes": meta["bytes"],
@@ -196,6 +212,11 @@ def import_history(
             "notes": "Observed media+uncalibrated motion; no mesh or unknown geometry is invented.",
         }
         write_json(folder / "history.timeline.json", timeline)
+        # Refuse publication if any pinned source changed while the archive was built.
+        for source, expected in [(capture_path, capture_sha), (media_path, media_sha),
+                                 *((p, sha) for p, _, _, sha in sensors)]:
+            if file_sha256(source) != expected:
+                raise DataError("History input changed before publication")
     return {
         "output": str(output.resolve()), "version": TIMELINE_VERSION,
         "media_sha256": digest, "imu_samples": len(imu["samples"]),
