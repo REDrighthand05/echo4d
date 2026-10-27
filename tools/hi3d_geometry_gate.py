@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 import numpy as np
 from scipy.spatial import cKDTree
+from bounded_numeric_npz import read_numeric_npz
 
 class AuditError(ValueError):
     pass
@@ -36,10 +37,12 @@ def checked(root, obj):
 def mesh(path):
     if path.suffix != ".npz":
         raise AuditError("Expected numeric mesh .npz")
-    with np.load(path, allow_pickle=False) as z:
-        if set(z.files) != {"vertices","faces"}:
-            raise AuditError("Mesh must contain only vertices and faces")
-        v, f = np.asarray(z["vertices"]), np.asarray(z["faces"])
+    try:
+        z = read_numeric_npz(path, {"vertices": (3, 2000000, 3, "fiu"),
+                                    "faces": (1, 3000000, 3, "iu")})
+        v, f = z["vertices"], z["faces"]
+    except ValueError as exc:
+        raise AuditError('Mesh must contain valid bounded vertices and faces: ' + str(exc)) from exc
     if v.ndim!=2 or v.shape[1]!=3 or v.dtype.kind not in "fiu" or not 3<=len(v)<=2000000 or not np.isfinite(v).all():
         raise AuditError("Invalid mesh vertices")
     if f.ndim!=2 or f.shape[1]!=3 or f.dtype.kind not in "iu" or not 1<=len(f)<=3000000 or f.min()<0 or f.max()>=len(v):
@@ -49,10 +52,10 @@ def mesh(path):
 def measured(path):
     if path.suffix != ".npz":
         raise AuditError("Measured point source must be numeric .npz")
-    with np.load(path, allow_pickle=False) as z:
-        if set(z.files)!={"points_m"}:
-            raise AuditError("Invalid measured point field")
-        x=np.asarray(z["points_m"])
+    try:
+        x = read_numeric_npz(path, {"points_m": (32, 500000, 3, "fiu")})["points_m"]
+    except ValueError as exc:
+        raise AuditError('Invalid independent measured points: ' + str(exc)) from exc
     if x.ndim!=2 or x.shape[1]!=3 or x.dtype.kind not in "fiu" or not 32<=len(x)<=500000 or not np.isfinite(x).all():
         raise AuditError("Invalid independent measured points")
     return x.astype(np.float64)
