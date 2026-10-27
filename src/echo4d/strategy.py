@@ -382,7 +382,7 @@ def render_strategy_markdown(result: dict[str, Any]) -> str:
         lines.extend(["", "## 输入类型与核验", "",
                       "| 类型 | 需要核对 |", "|---|---|"])
         for item in result["input_catalog"]:
-            lines.append(f"| {item['label']} (\`{item['id']}\`) | {item['check']} |")
+            lines.append(f"| {item['label']} (`{item['id']}`) | {item['check']} |")
         return "\n".join(lines) + "\n"
     lines = ["# ECHO 选择路线前的输入情况", "",
              "这是**声明式路线候选分析**，未实际读取传感器、运行算法或通过视觉验收。",
