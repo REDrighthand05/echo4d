@@ -39,3 +39,36 @@
 优先把真正前向画面流、独立 IMU 流与可靠时间同步长期保存，支持持久写入与断点恢复；保留完整分辨率的原始记录。之后接入已有可运行的高信息场景融合（已知位姿＋实测深度＋其他已有几何），形成时变场景，再按需尝试减少传感器信息。可见范围之外的探测只经合法设备实测与独立几何校准后成为新的“有来源观测”，不能由假设自动成为真实 Mesh。
 
 首个直接有用的里程碑：**打开五分钟的真实记录，沿时间轴随时播放实际前方画面；对该时刻能关联已知移动与几何则展示，未知则明确留空。** 它不依赖最难的单视频三维还原先成功。
+
+## 已实现：录制数据进入可复用的历史档案
+
+浏览器第一人称录像结束后，手动下载视频文件和 JSON 清单。新增命令行工具将两者**按原数据保存**，并接入可选的第三方传感器数字记录：
+
+```bash
+echo4d import-history --capture recordings/echo-session.json --media recordings/echo-session.webm --output history/session-001
+# 可加入多个来自同一会话的其他传感器数值流：
+echo4d import-history --capture recordings/echo-session.json --media recordings/echo-session.webm --sensor recordings/depth.json --sensor recordings/near-field.json --output history/session-002
+```
+
+产出：`history.timeline.json`（第一人称原视频、可用IMU读数、其他数据流在时间轴上的目录）；`media/echo-session.webm`（按字节保存真实录像）；`capture-source.json`（原始采集声明）；`sensors/*.json`（有数值及原始时间标记的其他传感器记录）。重新打开 `dist/history.html`，从 `media/` 选择相应视频，再打开 `history.timeline.json`，即可沿原视频时间轴检查 IMU 数据。文件名必须和时间轴记录一致。
+
+附加传感器采用独立、极简的版本 `echo-history-aux-0.1`：
+
+```json
+{
+  "version": "echo-history-aux-0.1",
+  "sensor_id": "range-01",
+  "kind": "measured_depth",
+  "time_base": "seconds_since_recording_start_monotonic",
+  "spatial_calibration": "unknown",
+  "units": "m",
+  "samples": [
+    {"t_s": 0.1, "values": [1.2]},
+    {"t_s": 0.5, "values": [1.1]}
+  ]
+}
+```
+
+`kind` 可为 `measured_depth`、`scan`、`near_field_observation` 或 `other`。`time_base` 也允许 `device_clock_unaligned`：此时它的时间仅在该设备内部有效，**不能直接与视频的秒数相加或做同时间匹配**。即使传感器声明使用录制时钟，当前版本也只标注“同钟声明尚未独立校验”。`spatial_calibration: unknown` 表示还不知道它和眼镜摄像头在三维空间的相对位置；有外部标定资料可声明 `externally_supplied`，但本导入器并不自行验证标定或输出 Mesh。
+
+特别说明：这不是向旧 `echo-dataset-1` 填入伪深度的转换器。现有 TSDF 仍然需要经过真实标定的深度、相机位姿、单位和相机内参；新档案暂时负责保住原始历史、打通时间索引，为后续真实标定/融合模块准备可读取的来源。文件名、大小和哈希能检查文件一致性，但不能自行证明影像真实性或传感器精度。
