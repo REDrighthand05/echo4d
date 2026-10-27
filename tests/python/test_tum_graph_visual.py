@@ -90,3 +90,51 @@ def test_association_index_swap_rejected(tmp_path):
     association["frames"][4]["index"] = 3
     with pytest.raises(DataError, match="index"):
         verify_original_rgb(source, association, recording, 4)
+
+
+def test_vertex_rgb_interpolation_and_unknown_pixels():
+    from echo4d.model import Camera
+    from tum_graph_visual import rasterize_vertex_rgb
+    points = np.array([[0., 0., 2.], [8., 0., 2.], [0., 8., 2.]])
+    faces = np.array([[0, 1, 2]], dtype=np.int32)
+    colors = np.array([[255, 0, 0], [0, 255, 0], [0, 0, 255]], dtype=np.uint8)
+    image, count = rasterize_vertex_rgb(points, faces, colors, Camera(5, 5, 1., 1., 0., 0.), np.eye(4))
+    assert image[1, 1].tolist() == [128, 64, 64]
+    assert image[4, 4].tolist() == [0, 0, 0]
+    assert 0 < count < 25
+
+
+def test_vertex_rgb_zbuffer_and_perspective_correction():
+    from echo4d.model import Camera
+    from tum_graph_visual import rasterize_vertex_rgb
+    points = np.array([[0., 0., 2.], [8., 0., 4.], [0., 8., 2.]])
+    # x=8,z=4 projects to x=2, unlike x=4; set x=16 to preserve uv=4.
+    points[1, 0] = 16.
+    colors = np.array([[255, 0, 0], [0, 255, 0], [0, 0, 255]], dtype=np.uint8)
+    camera = Camera(5, 5, 1., 1., 0., 0.)
+    image, _ = rasterize_vertex_rgb(points, np.array([[0, 1, 2]], dtype=np.int32),
+                                     colors, camera, np.eye(4))
+    assert image[1, 1].tolist() == [146, 36, 73]
+    near_points = np.array([[0., 0., 1.], [4., 0., 1.], [0., 4., 1.]])
+    all_points = np.vstack((points, near_points))
+    all_colors = np.vstack((colors, np.full((3, 3), [0, 255, 0], dtype=np.uint8)))
+    for faces in (np.array([[0, 1, 2], [3, 4, 5]], dtype=np.int32),
+                  np.array([[3, 4, 5], [0, 1, 2]], dtype=np.int32)):
+        image, _ = rasterize_vertex_rgb(all_points, faces, all_colors, camera, np.eye(4))
+        assert image[1, 1].tolist() == [0, 255, 0]
+
+
+def test_vertex_rgb_invalid_source_and_pose_fail_closed():
+    from echo4d.model import Camera
+    from tum_graph_visual import rasterize_vertex_rgb
+    points = np.array([[0., 0., 2.], [8., 0., 2.], [0., 8., 2.]])
+    faces = np.array([[0, 1, 2]], dtype=np.int32)
+    colors = np.zeros((3, 3), dtype=np.uint8)
+    camera = Camera(5, 5, 1., 1., 0., 0.)
+    with pytest.raises(DataError, match="RGB render inputs"):
+        rasterize_vertex_rgb(points, faces, colors.astype(float), camera, np.eye(4))
+    with pytest.raises(DataError, match="rigid"):
+        rasterize_vertex_rgb(points, faces, colors, camera, np.diag([-1., 1., 1., 1.]))
+    points[0, 2] = .01
+    image, count = rasterize_vertex_rgb(points, faces, colors, camera, np.eye(4))
+    assert count == 0 and not image.any()

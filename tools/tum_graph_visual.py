@@ -56,6 +56,87 @@ def depth_image(depth: np.ndarray) -> Image.Image:
     return Image.fromarray(pixels, mode="L")
 
 
+
+def read_vertex_rgb(path: Path, vertex_count: int) -> np.ndarray:
+    """Recover training-derived RGB from an already strict-validated ECHO PLY."""
+    with Path(path).open("rb") as stream:
+        header = bytearray()
+        while not header.endswith(b"end_header\\n"):
+            line = stream.readline()
+            if not line or len(header) + len(line) > 4096:
+                raise DataError("Invalid bounded ECHO PLY header")
+            header.extend(line)
+        dtype = np.dtype([(k, "<f4") for k in ("x", "y", "z", "nx", "ny", "nz")]
+                         + [(k, "u1") for k in ("red", "green", "blue")])
+        values = np.fromfile(stream, dtype=dtype, count=vertex_count)
+    if len(values) != vertex_count:
+        raise DataError("Truncated Mesh vertex colors")
+    return np.column_stack([values[k] for k in ("red", "green", "blue")])
+
+
+def rasterize_vertex_rgb(vertices: np.ndarray, faces: np.ndarray, colors: np.ndarray,
+                         camera: Camera, camera_to_world: np.ndarray,
+                         near: float = NEAR_M, far: float = FAR_M) -> tuple[np.ndarray, int]:
+    """Conservative triangle z-buffer with perspective-correct vertex RGB.
+
+    No texture from held-out RGB, no hole filling, no claim of photo accuracy.
+    """
+    points, triangles, rgb = np.asarray(vertices), np.asarray(faces), np.asarray(colors)
+    if (points.ndim != 2 or points.shape[1:] != (3,) or not 3 <= len(points) <= 300000
+            or not np.isfinite(points).all() or triangles.ndim != 2
+            or triangles.shape[1:] != (3,) or triangles.dtype.kind not in "iu"
+            or not 1 <= len(triangles) <= 500000
+            or np.any(triangles < 0) or np.any(triangles >= len(points))
+            or rgb.shape != (len(points), 3) or rgb.dtype != np.uint8
+            or not 0 < near < far <= 100 or not np.isfinite([near, far]).all()):
+        raise DataError("Invalid bounded Mesh RGB render inputs")
+    pose = np.asarray(camera_to_world, dtype=float)
+    if pose.shape != (4, 4) or not np.isfinite(pose).all():
+        raise DataError("Invalid RGB render pose")
+    pose = rigid_matrix(pose.flatten(order="F"))
+    local = (points - pose[:3, 3]) @ pose[:3, :3]
+    zbuffer = np.full((camera.height, camera.width), np.inf)
+    image = np.zeros((camera.height, camera.width, 3), dtype=np.uint8)
+    for face in triangles:
+        p = local[face]
+        if np.any(p[:, 2] <= near):
+            continue  # no clipping/invented near-plane surfaces
+        uv = np.column_stack((camera.fx * p[:, 0] / p[:, 2] + camera.cx,
+                              camera.fy * p[:, 1] / p[:, 2] + camera.cy))
+        x0 = max(0, int(np.ceil(np.min(uv[:, 0]) - 1e-9)))
+        x1 = min(camera.width - 1, int(np.floor(np.max(uv[:, 0]) + 1e-9)))
+        y0 = max(0, int(np.ceil(np.min(uv[:, 1]) - 1e-9)))
+        y1 = min(camera.height - 1, int(np.floor(np.max(uv[:, 1]) + 1e-9)))
+        if x0 > x1 or y0 > y1:
+            continue
+        a, b, c = uv
+        denominator = ((b[1] - c[1]) * (a[0] - c[0])
+                       + (c[0] - b[0]) * (a[1] - c[1]))
+        if abs(denominator) < 1e-11:
+            continue
+        xx, yy = np.meshgrid(np.arange(x0, x1 + 1), np.arange(y0, y1 + 1))
+        w0 = ((b[1] - c[1]) * (xx - c[0]) + (c[0] - b[0]) * (yy - c[1])) / denominator
+        w1 = ((c[1] - a[1]) * (xx - c[0]) + (a[0] - c[0]) * (yy - c[1])) / denominator
+        w2 = 1. - w0 - w1
+        inside = (w0 >= -1e-9) & (w1 >= -1e-9) & (w2 >= -1e-9)
+        inv_z = w0 / p[0, 2] + w1 / p[1, 2] + w2 / p[2, 2]
+        valid = inside & (inv_z > 0) & (inv_z >= 1. / far)
+        if not np.any(valid):
+            continue
+        depth = 1. / np.maximum(inv_z, 1e-100)
+        region = zbuffer[y0:y1 + 1, x0:x1 + 1]
+        closer = valid & (depth < region)
+        if not np.any(closer):
+            continue
+        weighted = (w0[..., None] * rgb[face[0]] / p[0, 2]
+                    + w1[..., None] * rgb[face[1]] / p[1, 2]
+                    + w2[..., None] * rgb[face[2]] / p[2, 2])
+        region[closer] = depth[closer]
+        image[y0:y1 + 1, x0:x1 + 1][closer] = np.clip(
+            np.rint(weighted[closer] / inv_z[closer, None]), 0, 255).astype(np.uint8)
+    return image, int(np.count_nonzero(np.isfinite(zbuffer)))
+
+
 def verify_original_rgb(dataset_root: Path, association: dict, recording, index: int) -> dict:
     """Bind a 640x480 TUM RGB PNG to the actual imported 160x120 pixels."""
     entry = association["frames"][index]
@@ -120,6 +201,7 @@ def render(args: argparse.Namespace) -> dict:
             or execution.get("outputs", {}).get(target_port, {}).get("sha256") != mesh_sha):
         raise DataError("Graph receipt does not pin this Mesh")
     vertices, faces = read_echo_ply(mesh_path)
+    vertex_rgb = read_vertex_rgb(mesh_path, len(vertices))
     camera = Camera(640, 480, full.camera.fx * 4, full.camera.fy * 4,
                     full.camera.cx * 4, full.camera.cy * 4)
     if not np.isfinite(vertices).all() or not set(VIEWS).issubset(set(HOLDOUT)):
@@ -133,7 +215,14 @@ def render(args: argparse.Namespace) -> dict:
                                                  near=NEAR_M, far=FAR_M)
             name = f"heldout-{index:02d}-mesh-depth.png"
             depth_image(depth).save(output / name)
-            views.append({"kind": "heldout_original_camera", "frame_index": index,
+            color_image, color_pixels = rasterize_vertex_rgb(vertices, faces, vertex_rgb, camera, pose)
+            if color_pixels != stats["predicted_pixels"]:
+                raise DataError("RGB and depth Mesh coverage disagree")
+            color_name = f"heldout-{index:02d}-mesh-vertex-rgb.png"
+            Image.fromarray(color_image, mode="RGB").save(output / color_name)
+            views.append({"kind": "heldout_original_camera",
+                          "vertex_rgb_render": color_name,
+                          "vertex_rgb_sha256": file_sha256(output / color_name), "frame_index": index,
                           "t_s": full.entries[index]["t"], "rgb": rgb,
                           "camera_to_world_column_major": pose.flatten(order="F").tolist(),
                           "render": name, "render_sha256": file_sha256(output / name),
@@ -147,7 +236,14 @@ def render(args: argparse.Namespace) -> dict:
                                                  near=NEAR_M, far=FAR_M)
             name = f"free-{j}-mesh-depth.png"
             depth_image(depth).save(output / name)
-            views.append({"kind": "free_third_person", "camera_to_world_column_major":
+            color_image, color_pixels = rasterize_vertex_rgb(vertices, faces, vertex_rgb, camera, pose)
+            if color_pixels != stats["predicted_pixels"]:
+                raise DataError("RGB and depth Mesh coverage disagree")
+            color_name = f"free-{j}-mesh-vertex-rgb.png"
+            Image.fromarray(color_image, mode="RGB").save(output / color_name)
+            views.append({"kind": "free_third_person",
+                          "vertex_rgb_render": color_name,
+                          "vertex_rgb_sha256": file_sha256(output / color_name), "camera_to_world_column_major":
                           pose.flatten(order="F").tolist(), "target_world_m": center.tolist(),
                           "render": name, "render_sha256": file_sha256(output / name),
                           "predicted_pixels": stats["predicted_pixels"],
@@ -160,7 +256,8 @@ def render(args: argparse.Namespace) -> dict:
                    "train_manifest_sha256": file_sha256(train_path),
                    "mesh_sha256": mesh_sha, "graph_receipt_sha256": file_sha256(args.execution),
                    "holdout_diagnostic_sha256": file_sha256(args.diagnostic),
-                   "render_type": "fixed-scale camera-Z grayscale, not textured or photorealistic",
+                   "render_type": "fixed-scale camera-Z grayscale plus z-buffered Mesh training-vertex RGB; not photorealistic",
+                   "color_source": "training 160x120 imported RGB embedded in Mesh; heldout RGB not used for texture",
                    "unknown_pixels": "black; not inferred surfaces",
                    "source_original_rgb": "hash-verified and locally compared; not redistributed",
                    "views": views, "human_visual_review": False,
