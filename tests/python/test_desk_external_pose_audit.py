@@ -104,7 +104,7 @@ def test_first_17_ineligible_and_raw_stride_counterexample():
 
 
 def test_original_timestamp_bracketing_not_artificial_mp4_time():
-    rgb = [[str(1305031000. + i*.01), f'rgb/{i}.png'] for i in range(600)]
+    rgb = [[str(1305031000. + i*.01), f'rgb/{i}.png'] for i in range(650)]
     gt = [[str(1305031000. + i*.05), '0', '0', '0', '0', '0', '0', '1'] for i in range(120)]
     plan = eligible_v2_plan(rgb)
     poses, ledger = audit.reference_poses(rgb, gt, ['frame_00004.png'], plan)
@@ -121,7 +121,7 @@ def test_original_timestamp_bracketing_not_artificial_mp4_time():
 
 
 def test_rejects_nonfinite_or_nonunit_mocap_quaternion():
-    rgb = [[str(1000. + i*.01), f'rgb/{i}.png'] for i in range(600)]
+    rgb = [[str(1000. + i*.01), f'rgb/{i}.png'] for i in range(650)]
     gt = [[str(1000. + i*.05), '0', '0', '0', '0', '0', '0', '1'] for i in range(120)]
     gt[0][-1] = '2'
     with pytest.raises(DataError, match='quaternion'):
