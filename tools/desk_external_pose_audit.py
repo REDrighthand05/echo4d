@@ -32,6 +32,7 @@ EVIDENCE_ZIP_SHA = 'df328812537ea4e4667f36ec7cdd9f901ff5c7fe25a1b37022daf81c2053
 MESH_SHA = '320da61fcd421c0e55aa6fc014750aeaa3e6e2d98b607e9feaae268f83d2a939'
 METRIC_TRACK_SHA = '5d60549557d38ef2e7a3f864c4f6dac52ccb7e88574a9fe97c9f1080b80af392'
 RGB_INDEX_SHA = 'd1bc510ecca08540e03be8df55af8857753b614d8a5c38526bc669ce6c802284'
+SOURCE_COHORT_SHA = '368546ed7f3137078992289b0d4f23ce2ac03bf471e87ddedbe325bbdf2e95f2'
 ROOT = 'rgbd_dataset_freiburg1_desk/'
 HOLDOUT_INDICES = (4, 9, 14, 19, 24, 29, 34, 39, 44, 49, 54, 59)
 GT_BRACKET_MAX_S = 0.1  # predeclared; no posthoc tuning
@@ -69,11 +70,43 @@ def parse_index(data: bytes, columns: int) -> list[list[str]]:
     return rows
 
 
-def reference_poses(rgb: list[list[str]], gt: list[list[str]], names: list[str]) -> tuple[dict, list[dict]]:
-    """Timestamp-only association, never uses synthetic 4fps MP4 timebase."""
-    selected = rgb[::8][:75]
-    if len(selected) != 75:
-        raise DataError('Wrong frozen source RGB cohort')
+def validated_source_cohort(rgb: list[list[str]], plan: dict) -> list[dict]:
+    """Verify the frozen V2 name/index/path/time ledger against original rgb.txt.
+
+    V2 samples every eighth *eligible* RGB frame, not raw rgb[::8].
+    The caller pins the plan bytes to the original archived SHA256.
+    """
+    if (not isinstance(plan, dict) or plan.get('mode') != 'v2-source-paired'
+            or plan.get('stride_domain') != 'eligible_rgb_index'
+            or plan.get('selection_complete') is not True
+            or plan.get('source_stride') != 8 or plan.get('required_frames') != 75
+            or not isinstance(plan.get('source_index_sha256'), dict)
+            or plan['source_index_sha256'].get('rgb.txt') != RGB_INDEX_SHA):
+        raise DataError('Wrong frozen V2 source-cohort metadata')
+    selected = plan.get('selected_frames')
+    if not isinstance(selected, list) or len(selected) != 75:
+        raise DataError('Wrong frozen V2 75-frame source cohort')
+    previous = -1
+    for i, row in enumerate(selected):
+        name = f'frame_{i:05d}.png'
+        if not isinstance(row, dict) or row.get('name') != name:
+            raise DataError(f'Frozen source-cohort name/order mismatch at {name}')
+        index = row.get('source_rgb_index')
+        if type(index) is not int or index <= previous or index >= len(rgb):
+            raise DataError(f'Frozen source RGB index invalid/reused at {name}')
+        path, stamp = row.get('original_tum_path'), row.get('t_tum_rgb_s')
+        if (not isinstance(path, str) or not path.startswith('rgb/')
+                or type(stamp) not in (int, float) or not math.isfinite(stamp)
+                or path != rgb[index][1] or float(stamp) != float(rgb[index][0])):
+            raise DataError(f'Frozen source RGB index/path/time mismatch at {name}')
+        previous = index
+    return selected
+
+
+def reference_poses(rgb: list[list[str]], gt: list[list[str]], names: list[str],
+                    source_plan: dict) -> tuple[dict, list[dict]]:
+    """Original V2 source-cohort association, never synthetic MP4 or raw stride."""
+    selected = validated_source_cohort(rgb, source_plan)
     a = np.asarray(gt, dtype=float)
     if not np.isfinite(a).all() or np.any(abs(np.linalg.norm(a[:, 4:8], axis=1) - 1) > .01):
         raise DataError('Nonfinite or non-unit TUM mocap quaternion')
@@ -86,7 +119,8 @@ def reference_poses(rgb: list[list[str]], gt: list[list[str]], names: list[str])
         i = int(match.group(1))
         if i >= 60:
             raise DataError('Outside original first-60 frozen geometry cohort')
-        t = float(selected[i][0])
+        source = selected[i]
+        t = float(source['t_tum_rgb_s'])
         at = int(np.searchsorted(a[:, 0], t))
         exact = at < len(a) and abs(a[at, 0] - t) < 1e-9
         if not exact and (at == 0 or at == len(a) or a[at, 0] - a[at-1, 0] > GT_BRACKET_MAX_S):
@@ -95,8 +129,9 @@ def reference_poses(rgb: list[list[str]], gt: list[list[str]], names: list[str])
         if p is None:
             raise DataError(f'No synchronized mocap pose for {name}')
         out[name] = p
-        ledger.append({'name': name, 'original_rgb_timestamp_s': t,
-                       'original_rgb_path': selected[i][1],
+        ledger.append({'name': name, 'source_rgb_index': source['source_rgb_index'],
+                       'original_rgb_timestamp_s': t,
+                       'original_rgb_path': source['original_tum_path'],
                        'gt_low_timestamp_s': float(a[at if exact else at-1, 0]),
                        'gt_high_timestamp_s': float(a[at, 0]),
                        'interpolated': not exact})
@@ -166,8 +201,12 @@ def run(tum_archive: Path, evidence_zip: Path) -> dict:
         mesh = z.read('frozen-inputs/mesh/mesh.ply')
         track = z.read('frozen-inputs/metric-trajectory-from-sensor.json')
         split_bytes = z.read('frozen-inputs/desk-48train-12holdout.json')
+        plan_bytes = z.read('frozen-inputs/source-cohort-plan.json')
     if sha(mesh) != MESH_SHA or sha(track) != METRIC_TRACK_SHA:
         raise DataError('Frozen Mesh or metric trajectory changed')
+    if sha(plan_bytes) != SOURCE_COHORT_SHA:
+        raise DataError('Frozen V2 source-cohort plan SHA mismatch')
+    source_plan = json.loads(plan_bytes)
     split = json.loads(split_bytes)
     def names(role):
         return [v['name'] if isinstance(v, dict) else v for v in split[role]]
@@ -180,14 +219,24 @@ def run(tum_archive: Path, evidence_zip: Path) -> dict:
     est = {p['name']: rigid_matrix(p['camera_to_metric_sfm_world']) for p in traj['frames']}
     if len(est) != len(traj['frames']):
         raise DataError('Duplicate estimated frame names')
-    ref, ledger = reference_poses(rgb, gt, train + held)
+    ref, ledger = reference_poses(rgb, gt, train + held, source_plan)
+    by_name = {row['name']: row for row in source_plan['selected_frames']}
+    for row in split['train'] + split['holdout']:
+        if isinstance(row, dict):
+            source = by_name[row['name']]
+            if ('source_rgb_time_s' in row and
+                    float(row['source_rgb_time_s']) != float(source['t_tum_rgb_s'])):
+                raise DataError('Frozen split/source-cohort timestamp mismatch')
+            if ('depth' in row and row['depth'] != source['source_depth_path']):
+                raise DataError('Frozen split/source-cohort depth identity mismatch')
     comparison = align_train_only(est, ref, train, held)
     return {'version': 'desk-v2-external-mocap-pose-diagnostic-v1',
             'status': 'POSE_DIAGNOSTIC_ONLY_NOT_MESH_ACCEPTANCE',
             'tum_archive_sha256': TUM_ARCHIVE_SHA, 'rgb_index_sha256': sha(rgb_bytes),
             'mocap_index_sha256': sha(gt_bytes), 'frozen_experiment_zip_sha256': EVIDENCE_ZIP_SHA,
             'mesh_sha256': MESH_SHA, 'metric_trajectory_sha256': METRIC_TRACK_SHA,
-            'split_sha256': sha(split_bytes), 'source_timestamps': ledger,
+            'split_sha256': sha(split_bytes), 'source_cohort_plan_sha256': sha(plan_bytes),
+            'source_timestamps': ledger,
             'max_mocap_bracket_span_s': GT_BRACKET_MAX_S,
             'comparison': comparison,
             'limitations': ['Independent TUM mocap trajectory is not independent surface truth.',
