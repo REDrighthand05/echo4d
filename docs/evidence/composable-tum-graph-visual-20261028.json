@@ -1,0 +1,81 @@
+{
+  "schema": "echo4d-real-mesh-visual-evidence-1",
+  "experiment": "tum-fr1-xyz-fixed60-typed-graph-tsdf-v1",
+  "tested_checkout_sha": "3dfb2617fb3ac2032b9ecaf45a38b7ce89de6da1",
+  "workflow": "https://github.com/REDrighthand05/echo4d/actions/runs/40574050494",
+  "workflow_status": "completed_success",
+  "artifact": "https://github.com/REDrighthand05/echo4d/actions/runs/40574050494/artifacts/12766891150",
+  "artifact_zip_sha256": "59275f7ff7ed6357edf21d901c3dee67caf94e488f1948b5d630b84286b13743",
+  "visual_receipt_sha256": "36030584eb8c6c9f584a52615c2f2b078c173ab42f3470db7b3d61054bd30861",
+  "holdout_receipt_sha256": "7dba2484014eac82f8ac6f49f73b475d2bab2316513d708e715175c0f743b707",
+  "mesh_sha256": "82d049d99f7b1fa82dabfa0a02e3847896b51de7647f382144c619fba784e658",
+  "official_source": "https://cvg.cit.tum.de/rgbd/dataset/freiburg1/rgbd_dataset_freiburg1_xyz.tgz",
+  "official_archive_sha256": "a0236d97b8c30cd93b653656d2b6c293ff7c982a4130ef2a1a8beecdb124ef98",
+  "rendering": "fixed-scale 0.15-20m grayscale camera-Z, not textured RGB; black=missing; 640x480 output from real Mesh; no source RGB republished",
+  "same_mesh_views": [
+    {
+      "kind": "heldout_camera",
+      "frame_index": 4,
+      "original_rgb_sha256": "965eefeeb53c411760fdcf86f588b4d6bdca31c914a3fbcbcc9debf97543ac87",
+      "original_rgb_resolution": [
+        640,
+        480
+      ],
+      "render": "visual/heldout-04-mesh-depth.png",
+      "render_sha256": "f2ea18406ec6ad7262ff9dd824e408e4e2385bb067935591f464e3480bfcf442",
+      "predicted_pixels": 306072
+    },
+    {
+      "kind": "heldout_camera",
+      "frame_index": 24,
+      "original_rgb_sha256": "4a28a0a38aeaeaf984b54c13c0ed4dcdfb530b95a06e56423ab4a7520adf729b",
+      "original_rgb_resolution": [
+        640,
+        480
+      ],
+      "render": "visual/heldout-24-mesh-depth.png",
+      "render_sha256": "133c9bee99c69a732a9267d1e8fcb426105a4c39e015d3fa2ec9dba72b28a045",
+      "predicted_pixels": 305768
+    },
+    {
+      "kind": "heldout_camera",
+      "frame_index": 55,
+      "original_rgb_sha256": "91f469505a185f5e98ee6e82a7776b0c263b46241eb493bd534071da2e9e84b2",
+      "original_rgb_resolution": [
+        640,
+        480
+      ],
+      "render": "visual/heldout-55-mesh-depth.png",
+      "render_sha256": "b7fda4e863a55acce871d3e4e99fa2bd7803a42f2202243e80be534b1a52a745",
+      "predicted_pixels": 279780
+    },
+    {
+      "kind": "free_third_person",
+      "index": 1,
+      "render": "visual/free-1-mesh-depth.png",
+      "render_sha256": "fe470ff8ab102259cb35980eb2037a5d9a278dba9084c1842ba77c5521dba3f4",
+      "predicted_pixels": 26338
+    },
+    {
+      "kind": "free_third_person",
+      "index": 2,
+      "render": "visual/free-2-mesh-depth.png",
+      "render_sha256": "09a591a192726cd06651caf8ce14019aad7fb22e0b8319c2ec140378b04cedb9",
+      "predicted_pixels": 26981
+    }
+  ],
+  "verification": {
+    "zip_downloaded_and_sha256_checked": true,
+    "all_five_render_file_hashes_checked": true,
+    "source_rgb_sha_and_exact_downsample_checked_by_real_workflow": true,
+    "source_rgb_republished": false,
+    "independent_surface_truth": false,
+    "human_visual_review": false,
+    "overall_accepted": false
+  },
+  "status": "rendered_unreviewed",
+  "visual_assessment": "not_accepted; grayscale depth alone and fragmentary free views do not establish recognizable real space",
+  "historical_desk_v2": "FAIL 16.7779 cm > 15 cm; unchanged",
+  "issue_74": "FAIL / NOT ACCEPTED",
+  "next": "Review original licensed RGB locally side by side with corresponding Mesh render; improve informative color/shape rendering if needed, then seek independent human structural review; do not tune on frozen holdout."
+}
