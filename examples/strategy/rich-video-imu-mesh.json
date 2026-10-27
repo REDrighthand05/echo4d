@@ -1,0 +1,40 @@
+{
+  "version": "echo-strategy-profile-1",
+  "goal": "reconstruct_scene",
+  "inputs": {
+    "rgb_video": {
+      "status": "present",
+      "notes": "原始清晰视频；需要实际核对原图、VFR PTS及SHA"
+    },
+    "imu": {
+      "status": "present",
+      "notes": "原始陀螺与加速度；尚未检查外参和时钟"
+    },
+    "existing_mesh": {
+      "status": "present",
+      "notes": "旧有建筑模型；来源、尺度、与当前视频配准均尚未确认"
+    },
+    "camera_calibration": {
+      "status": "present",
+      "notes": "宣称有相机内参，待按设备模式逐项核对"
+    },
+    "time_sync": {
+      "status": "present",
+      "notes": "初步声称可同步，还没有测漂移"
+    },
+    "sensor_depth": {
+      "status": "present",
+      "notes": "同设备传感器原始深度；相机Z/单位/配准须核对"
+    },
+    "mesh_alignment": {
+      "status": "absent"
+    },
+    "independent_truth": {
+      "status": "absent"
+    }
+  },
+  "choice": {
+    "primary": "rich_video_imu_depth_mesh",
+    "backup": "video_sensor_scaled_tsdf"
+  }
+}
