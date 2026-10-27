@@ -89,6 +89,11 @@ def test_real_sensor_depth_emitted_and_holdout_never_loaded(tmp_path):
     assert audit["holdout_names_not_loaded"] == ["frame_00003.png"]
     assert len(audit["train"]) == 3
     assert all("sensor_depth_sha256" in v for v in audit["train"])
+    resolution = audit["resolution_provenance"]
+    assert resolution["source_rgb_px"] == {"width": 4, "height": 4}
+    assert resolution["emitted_recording_px"] == {"width": 2, "height": 2}
+    assert resolution["rgb_and_depth_pixel_stride"] == 2
+    assert resolution["source_kind"] == "measured_registered_z_depth"
 
 
 @pytest.mark.parametrize("mutation", [
