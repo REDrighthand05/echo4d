@@ -4,11 +4,16 @@ from echo4d.composable import ArtifactType, ModuleSpec, compose
 
 
 def a(kind, frame="none", scale="none", clock="none", evidence="measured", partition="train",
-      *, scene_id="fixture", coordinate_id=None, time_id=None):
+      *, scene_id="fixture", coordinate_id=None, time_id=None,
+      length_unit=None, time_unit=None, handedness=None, pose_direction=None):
     return ArtifactType(
         kind, frame, scale, clock, evidence, partition, scene_id,
         ("fixture_space" if frame != "none" else "none") if coordinate_id is None else coordinate_id,
         ("fixture_clock" if clock != "none" else "none") if time_id is None else time_id,
+        ("m" if scale == "metric" else "none") if length_unit is None else length_unit,
+        ("s" if clock != "none" else "none") if time_unit is None else time_unit,
+        ("right" if frame != "none" else "none") if handedness is None else handedness,
+        ("camera_to_world" if kind == "poses" else "none") if pose_direction is None else pose_direction,
     )
 
 
@@ -113,7 +118,8 @@ def test_limits_reject_non_positive_or_wrong_types(bad):
 def test_untrusted_port_type_metadata_rejected(kwargs):
     with pytest.raises(ValueError):
         ArtifactType("depth_z", scene_id="fixture", coordinate_id="fixture_space",
-                     time_id="none", **kwargs)
+                     time_id="none", length_unit="none", time_unit="none",
+                     handedness="right", pose_direction="none", **kwargs)
 
 
 def test_original_asset_and_generated_mesh_cannot_become_measured_mesh():
@@ -178,3 +184,77 @@ def test_unpinned_revision_rejected(bad):
 def test_missing_or_unknown_domain_identity_is_rejected(context):
     with pytest.raises(ValueError):
         a("depth_z", frame="camera", scale="metric", clock="frame_pts", **context)
+
+
+def test_centimetre_depth_cannot_silently_feed_metre_fusion():
+    centimetres = a("depth_z", frame="camera", scale="metric", clock="frame_pts",
+                    length_unit="cm")
+    tsdf = mod("tsdf", [POSE_MET, DEPTH_MET], [MESH_MET])
+    assert not compose((POSE_MET, centimetres), (tsdf,), MESH_MET).routes
+    convert = mod("centimetres_to_metres", [centimetres], [DEPTH_MET])
+    assert [r.modules for r in compose((POSE_MET, centimetres), (convert, tsdf), MESH_MET).routes] == [
+        ("centimetres_to_metres", "tsdf")
+    ]
+
+
+def test_millisecond_pts_cannot_silently_feed_second_based_fusion():
+    milliseconds = a("depth_z", frame="camera", scale="metric", clock="frame_pts",
+                     time_unit="ms")
+    tsdf = mod("tsdf", [POSE_MET, DEPTH_MET], [MESH_MET])
+    assert not compose((POSE_MET, milliseconds), (tsdf,), MESH_MET).routes
+    align = mod("pts_ms_to_seconds", [milliseconds], [DEPTH_MET])
+    assert [r.modules for r in compose((POSE_MET, milliseconds), (align, tsdf), MESH_MET).routes] == [
+        ("pts_ms_to_seconds", "tsdf")
+    ]
+
+
+def test_left_handed_depth_cannot_silently_feed_right_handed_fusion():
+    left = a("depth_z", frame="camera", scale="metric", clock="frame_pts",
+             handedness="left")
+    assert not compose((POSE_MET, left),
+                       (mod("tsdf", [POSE_MET, DEPTH_MET], [MESH_MET]),), MESH_MET).routes
+
+
+def test_world_to_camera_poses_require_explicit_inversion():
+    inverse = a("poses", frame="world", scale="metric", clock="frame_pts",
+                evidence="estimated", pose_direction="world_to_camera")
+    tsdf = mod("tsdf", [POSE_MET, DEPTH_MET], [MESH_MET])
+    assert not compose((inverse, DEPTH_MET), (tsdf,), MESH_MET).routes
+    invert = mod("invert_pose", [inverse], [POSE_MET])
+    assert [r.modules for r in compose((inverse, DEPTH_MET), (invert, tsdf), MESH_MET).routes] == [
+        ("invert_pose", "tsdf")
+    ]
+
+
+@pytest.mark.parametrize("field,value", [
+    ("length_unit", "none"), ("length_unit", "feet"),
+    ("time_unit", "none"), ("time_unit", "minutes"),
+    ("handedness", "none"), ("handedness", "up"),
+    ("pose_direction", "none"), ("pose_direction", "world"),
+])
+def test_spatial_pose_metadata_must_be_explicit_and_supported(field, value):
+    kwargs = {field: value}
+    with pytest.raises(ValueError):
+        a("poses", frame="world", scale="metric", clock="frame_pts",
+          evidence="estimated", **kwargs)
+
+
+def test_nonmetric_and_nonspatial_ports_cannot_claim_units_or_orientation():
+    with pytest.raises(ValueError, match="length unit"):
+        a("rgb_video", clock="frame_pts", length_unit="m")
+    with pytest.raises(ValueError, match="handedness"):
+        a("rgb_video", clock="frame_pts", handedness="right")
+    with pytest.raises(ValueError, match="transform direction"):
+        a("rgb_video", clock="frame_pts", pose_direction="camera_to_world")
+
+
+def test_route_id_changes_when_port_convention_changes():
+    left = a("depth_z", frame="camera", scale="metric", clock="frame_pts",
+             handedness="left")
+    right_route = compose((POSE_MET, DEPTH_MET),
+                          (mod("tsdf", [POSE_MET, DEPTH_MET], [MESH_MET]),), MESH_MET)
+    left_route = compose((POSE_MET, left),
+                         (mod("convert", [left], [DEPTH_MET]),
+                          mod("tsdf", [POSE_MET, DEPTH_MET], [MESH_MET])), MESH_MET)
+    assert len(right_route.routes) == len(left_route.routes) == 1
+    assert right_route.routes[0].path_id != left_route.routes[0].path_id

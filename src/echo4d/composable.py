@@ -17,6 +17,10 @@ Clock = Literal["none", "frame_pts", "sensor_synced"]
 Evidence = Literal["measured", "estimated", "generated", "unknown"]
 Partition = Literal["train", "holdout", "unassigned"]
 Phase = Literal["build", "evaluate"]
+LengthUnit = Literal["none", "m", "cm", "mm"]
+TimeUnit = Literal["none", "s", "ms", "us", "ns"]
+Handedness = Literal["none", "right", "left"]
+PoseDirection = Literal["none", "camera_to_world", "world_to_camera"]
 
 _ID = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
 
@@ -37,6 +41,10 @@ class ArtifactType:
     scene_id: str
     coordinate_id: str
     time_id: str
+    length_unit: LengthUnit
+    time_unit: TimeUnit
+    handedness: Handedness
+    pose_direction: PoseDirection
 
     def __post_init__(self) -> None:
         if not isinstance(self.kind, str) or not _ID.fullmatch(self.kind):
@@ -47,6 +55,10 @@ class ArtifactType:
             "clock": {"none", "frame_pts", "sensor_synced"},
             "evidence": {"measured", "estimated", "generated", "unknown"},
             "partition": {"train", "holdout", "unassigned"},
+            "length_unit": {"none", "m", "cm", "mm"},
+            "time_unit": {"none", "s", "ms", "us", "ns"},
+            "handedness": {"none", "right", "left"},
+            "pose_direction": {"none", "camera_to_world", "world_to_camera"},
         }
         for key, allowed in fields.items():
             value = getattr(self, key)
@@ -62,6 +74,14 @@ class ArtifactType:
             raise ValueError("coordinate_id must be explicit for spatial ports, none otherwise")
         if (self.clock == "none") != (self.time_id == "none"):
             raise ValueError("time_id must be explicit for timed ports, none otherwise")
+        if (self.scale == "metric") != (self.length_unit != "none"):
+            raise ValueError("metric scale requires an explicit length unit; nonmetric ports cannot claim units")
+        if (self.clock == "none") != (self.time_unit == "none"):
+            raise ValueError("timed ports require an explicit timestamp unit")
+        if (self.frame == "none") != (self.handedness == "none"):
+            raise ValueError("spatial ports require explicit coordinate handedness")
+        if (self.kind == "poses") != (self.pose_direction != "none"):
+            raise ValueError("pose ports require explicit camera/world transform direction")
         if self.kind in {"depth_z", "depth_ray"} and self.frame != "camera":
             raise ValueError("depth ports must explicitly use camera frame")
         if self.kind == "depth_z" and self.scale == "none":
@@ -70,7 +90,9 @@ class ArtifactType:
     def label(self) -> str:
         return "/".join((self.kind, self.frame, self.scale,
                          self.clock, self.evidence, self.partition,
-                         self.scene_id, self.coordinate_id, self.time_id))
+                         self.scene_id, self.coordinate_id, self.time_id,
+                         self.length_unit, self.time_unit, self.handedness,
+                         self.pose_direction))
 
 
 @dataclass(frozen=True)

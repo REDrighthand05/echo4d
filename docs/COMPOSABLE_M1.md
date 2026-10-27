@@ -2,7 +2,7 @@
 
 This independent development branch implements typed, bounded PLANNING, not a new reconstruction pipeline or a claim of improved Mesh quality. Link it to the #75 M0 catalog after separate review.
 
-- ArtifactType makes kind, frame, scale, clock, evidence class, train/holdout split, **scene cohort ID, coordinate-domain ID and clock-domain ID** part of exact port identity. Two streams both called `frame_pts` or `world` are not automatically synchronized/aligned. No implicit unit, reference-frame, timestamp or evidence-grade conversion. These declared IDs do NOT authenticate raw source SHA.
+- ArtifactType makes kind, frame, scale, clock, evidence class, train/holdout split, **scene cohort ID, coordinate-domain ID and clock-domain ID** part of exact port identity. Spatial ports now additionally require explicit **right/left handedness**; pose ports require **camera_to_world/world_to_camera direction**; metric ports declare **m/cm/mm** and timed ports **s/ms/us/ns**. The planner rejects mismatches unless a separately registered typed conversion module is provided. Two streams both called `frame_pts` or `world` are not automatically synchronized/aligned. No implicit unit, reference-frame, timestamp or evidence-grade conversion. These declared IDs do NOT authenticate raw source SHA.
 - ModuleSpec declares input/output, budget and a mandatory 40/64-hex revision pin. A route fingerprint covers selected module revisions and port contracts; this is **not** an experiment ID until input bytes, runtime configuration and checkout are independently pinned by M2. Its installed flag is a caller assertion, not verified source/runtime. Build-phase adapters reject heldout and unassigned ports.
 - compose enumerates alternate paths with stable graph IDs and limits for cost, steps, state count and routes; paths are always not_executed. No actual model runtime, data provenance verifier, GPU execution or independent-scene truth is implemented.
 
@@ -11,7 +11,7 @@ This independent development branch implements typed, bounded PLANNING, not a ne
     python -m pytest -q tests/python/test_composable.py
     python tools/verify.py
 
-Synthetic tests cover algorithm alternatives, metric/relative depth, incompatible timestamps and **clock domains**, coordinate-domain and scene-cohort collisions, revision fingerprint changes, pose frames, generated-vs-measured geometry, holdout/unassigned leakage, invalid metadata, loops, cost and search bounds.
+Synthetic tests cover algorithm alternatives, metric/relative depth, **cm-vs-m and ms-vs-s unit mismatches, left-vs-right handedness and camera/world pose inversion**, incompatible timestamps and clock domains, coordinate-domain and scene-cohort collisions, revision fingerprint changes, pose frames, generated-vs-measured geometry, holdout/unassigned leakage, invalid metadata, loops, cost and search bounds. A declared conversion module is still a plan, not proof the conversion was run or correct.
 
 ## Deferred, not completed
 
