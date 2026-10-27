@@ -122,6 +122,10 @@ def build_parser() -> argparse.ArgumentParser:
     hist.add_argument("--media", type=Path, required=True, help="Unmodified recording video")
     hist.add_argument("--sensor", type=Path, action="append", default=[], help="Additional timed sensor JSON (repeatable)")
     hist.add_argument("--output", type=Path, required=True, help="New portable history archive directory")
+    hist_rgbd = sub.add_parser("import-history-rgbd", help="Decode archived video using externally synchronized measured depth and known poses")
+    hist_rgbd.add_argument("--history", type=Path, required=True, help="Imported ECHO history archive")
+    hist_rgbd.add_argument("--alignment", type=Path, required=True, help="External calibrated frame/depth/pose assignments")
+    hist_rgbd.add_argument("--output", type=Path, required=True, help="New metric RGB-D reconstruction input directory")
     return parser
 
 
@@ -149,6 +153,9 @@ def main(argv: list[str] | None = None) -> int:
         elif args.command == "import-history":
             from .history import import_history
             result = import_history(args.capture, args.media, args.output, tuple(args.sensor))
+        elif args.command == "import-history-rgbd":
+            from .history_rgbd import prepare_history_rgbd
+            result = prepare_history_rgbd(args.history, args.alignment, args.output)
         elif args.command == "import-colmap":
             # One strict adapter. Uses #6 + #24 hardening, NOT the incompatible
             # second converter implementation from draft PR #19.
