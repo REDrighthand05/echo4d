@@ -229,7 +229,7 @@ def validate_profile(payload: dict[str, Any]) -> dict[str, Any]:
     if set(payload) - {"version", "goal", "inputs", "choice"}:
         raise DataError("Unrecognized strategy profile fields")
     goal = payload.get("goal", "investigate_limits")
-    if goal not in GOALS:
+    if not isinstance(goal, str) or goal not in GOALS:
         raise DataError("Unknown strategy goal")
     given = payload.get("inputs")
     if not isinstance(given, dict) or not given:
@@ -241,7 +241,7 @@ def validate_profile(payload: dict[str, Any]) -> dict[str, Any]:
         if not isinstance(value, dict) or set(value) - {"status", "evidence", "notes"}:
             raise DataError(f"Invalid input declaration: {key}")
         status = value.get("status")
-        if status not in STATUSES:
+        if not isinstance(status, str) or status not in STATUSES:
             raise DataError(f"Input {key} must be absent, present, or checked")
         evidence = value.get("evidence", "")
         notes = value.get("notes", "")
@@ -259,7 +259,8 @@ def validate_profile(payload: dict[str, Any]) -> dict[str, Any]:
     choice = payload.get("choice", {})
     if not isinstance(choice, dict) or set(choice) - {"primary", "backup"}:
         raise DataError("choice supports only primary and backup")
-    if any(key in choice and choice[key] not in _ROUTE_IDS for key in ("primary", "backup")):
+    if any(key in choice and (not isinstance(choice[key], str) or choice[key] not in _ROUTE_IDS)
+           for key in ("primary", "backup")):
         raise DataError("User selected an unknown strategy route")
     if choice.get("primary") and choice.get("primary") == choice.get("backup"):
         raise DataError("Primary and backup routes must differ")

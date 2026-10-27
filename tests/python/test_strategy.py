@@ -151,3 +151,22 @@ def test_cli_catalog_and_profile_usable_without_running_reconstruction(tmp_path,
     assert main(["strategy", "--profile", str(tmp_path / "missing.json")]) == 2
     error = json.loads(capsys.readouterr().err)
     assert error["type"] == "DataError"
+
+
+@pytest.mark.parametrize("field", ["goal", "status", "primary", "backup"])
+def test_array_in_enum_field_returns_structured_cli_error(tmp_path, capsys, field):
+    data = profile(["rgb_video"])
+    if field == "goal":
+        data["goal"] = []
+    elif field == "status":
+        data["inputs"]["rgb_video"]["status"] = []
+    else:
+        data["choice"] = {field: []}
+    with pytest.raises(DataError):
+        validate_profile(data)
+    path = tmp_path / "invalid-profile.json"
+    path.write_text(json.dumps(data), encoding="utf-8")
+    assert main(["strategy", "--profile", str(path)]) == 2
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert json.loads(captured.err)["type"] == "DataError"
