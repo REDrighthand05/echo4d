@@ -309,7 +309,7 @@ def test_projective_provider_rejects_wrong_source_and_relative_depth(tmp_path):
     from dataclasses import replace
     with pytest.raises(GraphBlocked, match="metric"):
         projective_recording_adapter("p", Path(projective_meshing.__file__),
-            replace(inp, scale="relative"), out)
+            replace(inp, scale="relative", length_unit="none"), out)
     with pytest.raises(GraphBlocked, match="pixel_stride"):
         projective_recording_adapter("p", Path(projective_meshing.__file__),
             inp, out, pixel_stride=17)
