@@ -72,3 +72,44 @@ echo4d import-history --capture recordings/echo-session.json --media recordings/
 `kind` 可为 `measured_depth`、`scan`、`near_field_observation` 或 `other`。`time_base` 也允许 `device_clock_unaligned`：此时它的时间仅在该设备内部有效，**不能直接与视频的秒数相加或做同时间匹配**。即使传感器声明使用录制时钟，当前版本也只标注“同钟声明尚未独立校验”。`spatial_calibration: unknown` 表示还不知道它和眼镜摄像头在三维空间的相对位置；有外部标定资料可声明 `externally_supplied`，但本导入器并不自行验证标定或输出 Mesh。
 
 特别说明：这不是向旧 `echo-dataset-1` 填入伪深度的转换器。现有 TSDF 仍然需要经过真实标定的深度、相机位姿、单位和相机内参；新档案暂时负责保住原始历史、打通时间索引，为后续真实标定/融合模块准备可读取的来源。文件名、大小和哈希能检查文件一致性，但不能自行证明影像真实性或传感器精度。
+
+## 从历史视频真正进入原生 TSDF Mesh
+
+新增 \`echo4d import-history-rgbd\`。与仅归档源数据的 \`import-history\` 不同，这一步**实际从归档录像解码彩色图像**，再将逐帧外部实测深度及已知相机位姿组合为可由 ECHO 原生 \`reconstruct\` 使用的 \`echo-dataset-1\`，无需重新录制原始画面、无须先攻克仅普通视频重建。
+
+**必要真实资料**：已经通过 \`import-history\` 创建的目录、FFmpeg/FFprobe、每个被选视频帧对应的**同分辨率且正确配准的实测相机 Z 深度 NPY（米）**、相机像素内参，以及具有坐标依据的刚体 \`cameraToWorld\` 世界位姿。原浏览器 IMU 本身不能产生这些已知位姿；深度雷达原始反射也不能直接视作这个二维测深图。
+
+示例：先准备 \`calibration/align.json\`：
+
+\`\`\`json
+{
+  "version": "echo-history-rgbd-alignment-1",
+  "source_media_sha256": "用真实历史视频 SHA-256 的64位十六进制字符串替换",
+  "clock_sync": {"video_to_history_offset_s": 0, "source": "写明如何独立测量相机视频PTS与历史时钟的偏移"},
+  "depth_kind": "measured_registered_camera_z",
+  "depth_source": "写明深度传感器、配准和标定来源",
+  "pose_source": "写明独立提供的相机世界位姿来源及坐标系",
+  "intrinsics": {"width": 640, "height": 480, "fx": 525, "fy": 525, "cx": 319.5, "cy": 239.5},
+  "frames": [
+    {"video_frame_index": 0, "video_pts_s": 0.0, "t_s": 0.0, "depth_t_s": 0.0, "pose_t_s": 0.0,
+     "depth": "depth_000.npy", "cameraToWorld": [1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1]},
+    {"video_frame_index": 1, "video_pts_s": 0.033, "t_s": 0.033, "depth_t_s": 0.033, "pose_t_s": 0.033,
+     "depth": "depth_001.npy", "cameraToWorld": [1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1]}
+  ]
+}
+\`\`\`
+
+以上仅是**格式示意**，不是现成实测标定。帧号是视频解码顺序（从0开始），PTS 是从首帧开始计算的播放时间。源码用 FFprobe 逐帧核对真实 PTS，要求深度、姿态和历史时间不超过30毫秒误差，提取分辨率必须和内参、深度一致。姿态方向是明确的相机→世界矩阵（列优先），不可借用浏览器没有校准的 IMU 直接填入。**相机是否已去畸变且深度是否已经对齐 RGB 的事实，必须由外部标定给出；仅填写文案不构成标定证据。** 模块自己不进行时间校准或相机标定。
+
+然后执行：
+
+\`\`\`bash
+echo4d import-history-rgbd --history history/session-001 --alignment calibration/align.json --output outputs/history-rgbd
+echo4d validate outputs/history-rgbd/recording.json
+# bounds 仅为命令格式示意；必须根据该历史场景的实际测量设置六个数字
+echo4d reconstruct outputs/history-rgbd/recording.json --output outputs/history-mesh --bounds -1 -1 0 1 1 2 --voxel 0.04
+\`\`\`
+
+实质结果是 \`outputs/history-rgbd/color/*.png\`（由保存的历史视频真实解码）、\`depth/*.npy\`（来自已配准实测深度）、\`recording.json\`（有已知位姿的 ECHO 原生输入），以及 \`history-alignment.json\`（两条路径对应关系）。随后 \`reconstruct\` 使用现有 CPU TSDF 提取场景 Mesh；真实保存的第一人称视频仍留在历史档案中独立播放。
+
+没有外部测深/位姿时，历史视频仍有第一人称回放价值，但这条几何桥会明确拒绝运行，不会把推断的假深度冒充真实测距。当前自动化测试会用**由 FFmpeg 真正编码的合成视频、合成测深、合成世界位姿**完成从视频解码到 TSDF 实际产生三角网格的烟测；这只验证代码执行链，**不能证明任何实拍历史场景目前已被还原**。
