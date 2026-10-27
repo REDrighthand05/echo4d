@@ -68,13 +68,14 @@ const $ = (id) => document.getElementById(id);
 const maxRecordingSeconds = 180;
 let stream=null, recorder=null, startClock=0, startedUtc="", endSeconds=0;
 let parts=[], mediaBlob=null, mediaName="", manifest=null, mediaUrl=null;
-let motionEnabled=false, motionSamples=[], timer=null;
-let seekDuration=0, boundVideoFile=null;
+let motionEnabled=false, motionSamples=[], timer=null, starting=false;
+let seekDuration=0, boundVideoFile=null, manifestReadRevision=0;
 function status(message){$("notice").textContent=message;}
 function timestamp(seconds){return (Number.isFinite(seconds)?seconds:0).toFixed(2)+" s";}
 function updatePosition(t,d){$("position").textContent=timestamp(t)+" / "+timestamp(d);}
 function positiveDuration(value){return Number.isFinite(value)&&value>0?value:0;}
 function displayReplay(blob,name){
+  manifestReadRevision++;
   if(mediaUrl)URL.revokeObjectURL(mediaUrl);
   mediaUrl=URL.createObjectURL(blob);
   $("replay").src=mediaUrl;$("replay").hidden=false;$("noReplay").hidden=true;
@@ -153,6 +154,10 @@ $("motionBtn").addEventListener("click",async()=>{
   }catch(err){status("IMU 不可用："+err.message+"。视频仍可独立录制。");}
 });
 $("startBtn").addEventListener("click",async()=>{
+  if(starting||recorder)return;
+  starting=true;$("startBtn").disabled=true;
+  manifestReadRevision++;
+  $("videoImport").disabled=true;$("manifestImport").disabled=true;
   let newStream;
   try{
     if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia)
@@ -187,7 +192,11 @@ $("startBtn").addEventListener("click",async()=>{
   }catch(err){
     if(newStream)newStream.getTracks().forEach((t)=>t.stop());
     stream=null;recorder=null;
+    $("startBtn").disabled=false;
+    $("videoImport").disabled=false;$("manifestImport").disabled=false;
     status("无法开始录制："+err.message);
+  }finally{
+    starting=false;
   }
 });
 function stopRecording(){
@@ -202,6 +211,7 @@ function stopRecording(){
 $("stopBtn").addEventListener("click",stopRecording);
 function finishRecording(){
   $("startBtn").disabled=false;$("useAudio").disabled=false;
+  $("videoImport").disabled=false;$("manifestImport").disabled=false;
   if(stream){stream.getTracks().forEach((t)=>t.stop());stream=null;}
   if(!parts.length){status("录制结束，但浏览器没有返回视频数据。");recorder=null;return;}
   const type=recorder.mimeType||parts[0].type||"video/webm";
@@ -244,15 +254,21 @@ $("downloadManifest").addEventListener("click",()=>{
   if(manifest)download(JSON.stringify(manifest,null,2)+"\n",mediaName.replace(/\.[^.]+$/,"")+".json","application/json");
 });
 $("videoImport").addEventListener("change",()=>{
+  if(starting||recorder)return;
   const file=$("videoImport").files?.[0];
   if(!file)return;
+  // Changing media invalidates the previous sensor association, even for the same name.
+  manifest=null;setSeekDuration(0);
   displayReplay(file,file.name);
   const declared=manifest?.media?.file;
   status("已本地打开视频："+file.name+(declared&&declared!==file.name?"；注意：文件名与清单不一致。":""));
   $("metadata").textContent="本地视频："+file.name+"；未上传至服务器。";
 });
 $("manifestImport").addEventListener("change",async()=>{
+  if(starting||recorder)return;
   const file=$("manifestImport").files?.[0];if(!file)return;
+  const expectedVideo=boundVideoFile;
+  const readRevision=++manifestReadRevision;
   try{
     if(file.size>8*1024*1024)throw new Error("清单超过此实验台的8 MiB读取限制");
     const obj=JSON.parse(await file.text());
@@ -260,6 +276,25 @@ $("manifestImport").addEventListener("change",async()=>{
       throw new Error("清单不是受支持的 Echo 历史记录版本");
     if(typeof obj.duration_s!=="number"||!Number.isFinite(obj.duration_s)||obj.duration_s<0)
       throw new Error("清单时间不合法");
+    if(obj.imu.samples.length>20000)throw new Error("运动样本超过20000条限制");
+    let previous=-1;
+    for(const s of obj.imu.samples){
+      if(!s||!Number.isFinite(s.t_s)||s.t_s<previous||s.t_s<0||s.t_s>obj.duration_s+1)
+        throw new Error("运动样本时间无效或未排序");
+      previous=s.t_s;
+      for(const key of ["acceleration_including_gravity_m_s2","acceleration_without_gravity_m_s2"]){
+        const v=s[key];
+        if(v!=null&&(!Array.isArray(v)||v.length!==3||!v.every(Number.isFinite)))
+          throw new Error("运动加速度读数不合法");
+      }
+      const g=s.rotation_rate_deg_s;
+      if(g!=null&&["alpha","beta","gamma"].some(k=>g[k]!==null&&!Number.isFinite(g[k])))
+        throw new Error("运动角速度读数不合法");
+    }
+    if(starting||recorder||boundVideoFile!==expectedVideo||readRevision!==manifestReadRevision)
+      throw new Error("读取期间视频已切换，请重新选择清单");
+    if(boundVideoFile&&obj.media.file!==boundVideoFile)
+      throw new Error("文件名不匹配，不能关联运动读数");
     manifest=obj;
     $("metadata").textContent="清单："+obj.created_utc+"；运动样本："+obj.imu.samples.length+
       "；空间几何状态："+String(obj.geometry_status||"unknown");
