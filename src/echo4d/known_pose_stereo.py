@@ -29,6 +29,14 @@ def rectify_geometry(camera: Camera, pose_left: np.ndarray, pose_right: np.ndarr
     rect = cv2.stereoRectify(k, zeros, k, zeros, (camera.width, camera.height),
                              r, t, flags=cv2.CALIB_ZERO_DISPARITY, alpha=0)
     r1, r2, p1, p2, q = rect[:5]
+    # Nearly axial pairs can pass the baseline/angle gates while OpenCV's
+    # alpha=0 rectification returns a negative focal length. Reject before
+    # selecting/ranking the pair, rather than aborting after stereo inference.
+    if not all(np.isfinite(x).all() for x in (r1, r2, p1, p2, q)):
+        raise DataError('Stereo rectification contains nonfinite values')
+    for projection in (p1, p2):
+        Camera(camera.width, camera.height, float(projection[0, 0]),
+               float(projection[1, 1]), float(projection[0, 2]), float(projection[1, 2]))
     if abs(p2[1, 3]) > 1e-7 or p2[0, 3] >= -1e-6:
         raise DataError('Stereo pair is vertical or has negative expected disparity')
     return r1, r2, p1, p2, q, baseline, angle

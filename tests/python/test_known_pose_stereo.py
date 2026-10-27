@@ -46,3 +46,28 @@ def test_wrong_resolution_and_invalid_disparity_rejected():
         infer_stereo(rgb[:200],rgb,camera,a,b)
     with pytest.raises(DataError):
         infer_stereo(rgb,rgb,camera,a,b,num_disparities=63)
+
+
+def test_nearly_axial_pair_rejected_before_selection():
+    camera=Camera(320,240,262.5,262.5,159.75,119.75)
+    # Deterministic synthetic rigid pose: baseline and angle pass the original
+    # gates, but OpenCV 4.12 alpha=0 returns fx=-8.3552855 for this pair.
+    right=np.array([
+        [.9807764929526009,.1643240072202502,-.1052382607357041,-.009400549307721306],
+        [-.17928489248086166,.9717427437529457,-.153534905775928,-.007716478028937172],
+        [.07703504526981696,.16945105669359628,.9825232522366588,.0716123446644652],
+        [0,0,0,1]])
+    with pytest.raises(DataError,match='Focal lengths'):
+        rectify_geometry(camera,np.eye(4),right)
+
+
+def test_nonfinite_rectification_rejected(monkeypatch):
+    camera,a,b=setup()
+    original=cv2.stereoRectify
+    def broken(*args,**kwargs):
+        result=list(original(*args,**kwargs))
+        result[4]=result[4].copy();result[4][0,0]=np.nan
+        return tuple(result)
+    monkeypatch.setattr(cv2,'stereoRectify',broken)
+    with pytest.raises(DataError,match='nonfinite'):
+        rectify_geometry(camera,a,b)
