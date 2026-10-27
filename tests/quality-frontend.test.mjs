@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 const html = readFileSync(new URL("../dist/quality.html", import.meta.url), "utf8");
 const js = readFileSync(new URL("../dist/quality.mjs", import.meta.url), "utf8");
 const readme = readFileSync(new URL("../docs/PRODUCT_NORTH_STAR.md", import.meta.url), "utf8");
@@ -15,5 +16,5 @@ test("new quality UI has a usable source/mesh comparison layout", () => {
   assert.match(readme, /42条/);
 });
 test("quality script parses on Node 22 without imports or network dependencies", () => {
-  execFileSync(process.execPath, ["--check", new URL("../dist/quality.mjs", import.meta.url).pathname]);
+  execFileSync(process.execPath, ["--check", fileURLToPath(new URL("../dist/quality.mjs", import.meta.url))]);
 });

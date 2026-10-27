@@ -18,8 +18,17 @@ jobs:
       - name: Install shared frontend in ephemeral preview worktree
         shell: bash
         run: |
-          git show origin/main:tools/install_frontend.py > /tmp/echo-install-frontend.py
-          python /tmp/echo-install-frontend.py --source origin/main --force
+          if git cat-file -e origin/main:tools/install_frontend.py 2>/dev/null; then
+            git show origin/main:tools/install_frontend.py > /tmp/echo-install-frontend.py
+          else
+            cp tools/install_frontend.py /tmp/echo-install-frontend.py
+          fi
+          if git cat-file -e origin/main:dist/quality.html 2>/dev/null; then
+            source_ref=origin/main
+          else
+            source_ref=HEAD
+          fi
+          python /tmp/echo-install-frontend.py --source "$source_ref" --force
           node --check dist/quality.mjs
       - name: Check static assets
         shell: bash
