@@ -353,9 +353,18 @@ async function load(data, isDemo = false) {
       : `${recording.source === "synthetic" ? "◇ 导入合成记录" : "◇ 导入实拍记录"}${nativeScene ? " · TSDF" : ""}`,
   );
   text("sessionName", recording.name || "导入记录");
+  const previewInfo = nativeScene ? recording.preview_provenance : null;
+  const loadedSize = previewInfo?.loaded_recording_resolution_px;
+  const exportedSize = previewInfo?.exported_preview_resolution_px;
+  const sizes = [loadedSize?.width, loadedSize?.height, exportedSize?.width, exportedSize?.height];
+  const resolutionNote = nativeScene
+    ? sizes.every((n) => Number.isSafeInteger(n) && n > 0)
+      ? ` · 加载记录 ${loadedSize.width}×${loadedSize.height} → 检查预览 ${exportedSize.width}×${exportedSize.height}（非原始拍摄）`
+      : " · 降采样检查预览（非原始拍摄）"
+    : "";
   text(
     "sessionMeta",
-    `${recording.duration.toFixed(1)} 秒 / ${recording.frames.length} 帧${nativeScene ? "预览" : "深度"}`,
+    `${recording.duration.toFixed(1)} 秒 / ${recording.frames.length} 帧${nativeScene ? "预览" : "深度"}${resolutionNote}`,
   );
   text(
     "viewName",
@@ -371,7 +380,7 @@ async function load(data, isDemo = false) {
     isDemo
       ? "房间与骨架均为合成数据。"
       : nativeScene
-        ? "本地 TSDF 网格；深度帧是降采样预览。真实精度需要独立参考。"
+        ? "本地 TSDF 网格；深度帧是降采样检查预览，不是原始照片。原图清晰度和真实几何精度需另行验证。"
         : "来源由输入文件声明，不构成设备或身份验证。",
   );
   text(
