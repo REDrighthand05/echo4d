@@ -9,6 +9,7 @@ from tum_highres_tsdf import CONFIGS, VIEWS, contact_sheet, verify_same_source
 
 def source(root: Path, downsample: int, offset: float = 0.) -> None:
     root.mkdir()
+    (root / "unused.npy").write_bytes(b"fixture-not-read")
     camera = Camera(640, 480, 525., 525., 319.5, 239.5).scaled(downsample)
     frames = [{"t": float(i) + offset,
                "cameraToWorld": np.eye(4).flatten(order="F").tolist(),
