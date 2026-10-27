@@ -94,7 +94,17 @@ def preview_recording(recording: Recording, max_frames: int = 24, max_width: int
         frames.append(entry)
     return {"version": "echo-1", "name": recording.name, "source": recording.source, "units": "meters",
             "duration": recording.duration, "intrinsics": camera.to_dict(), "frames": frames,
-            "entities": recording.entities or [], "notes": "Downsampled preview; preserve the original dataset."}
+            "entities": recording.entities or [],
+            "preview_provenance": {
+                "loaded_recording_resolution_px": {"width": c.width, "height": c.height},
+                "exported_preview_resolution_px": {"width": camera.width, "height": camera.height},
+                "pixel_stride_xy": [sx, sy], "frame_stride": stride,
+                "original_capture_resolution_px": None,
+                "is_original_capture": False,
+                "warning": "This is a sampled inspection preview, not the original RGB capture. "
+                           "The loaded recording may already have been downsampled upstream."
+            },
+            "notes": "Downsampled inspection preview; source capture resolution is not inferred."}
 
 
 def write_scene(path: Path, recording: Recording, mesh: Mesh, report: dict) -> None:
