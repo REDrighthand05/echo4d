@@ -7,6 +7,12 @@ on:
     paths:
       - 'tools/tum_composable_graph.py'
       - 'tools/tum_graph_holdout.py'
+      - 'tools/tum_graph_projective_ab.py'
+      - 'src/echo4d/projective_meshing.py'
+      - 'src/echo4d/graph_runner.py'
+      - 'src/echo4d/output.py'
+      - 'tests/python/test_projective_meshing.py'
+      - 'tests/python/test_tum_graph_projective_ab.py'
       - 'tests/python/test_tum_composable_graph.py'
       - 'tests/python/test_tum_graph_holdout.py'
       - '.github/workflows/tum-composable-graph.yml'
@@ -38,7 +44,7 @@ jobs:
         env:
           PYTHONPATH: tools
         run: |
-          python -m pytest -q tests/python/test_tum_composable_graph.py tests/python/test_tum_graph_holdout.py tests/python/test_graph_runner.py tests/python/test_tum_graph_visual.py
+          python -m pytest -q tests/python/test_tum_composable_graph.py tests/python/test_tum_graph_holdout.py tests/python/test_graph_runner.py tests/python/test_tum_graph_visual.py tests/python/test_projective_meshing.py tests/python/test_tum_graph_projective_ab.py
       - name: Execute real pinned public TUM graph
         env:
           ECHO_HEAD_SHA: ${{ github.sha }}
@@ -57,6 +63,15 @@ jobs:
             --execution artifacts/tum-composable-graph/graph-execution.json \
             --report artifacts/tum-composable-graph/report.json \
             --output artifacts/tum-composable-graph/heldout-view-consistency.json
+      - name: Execute independent projective triangles on identical TUM train split and score A/B
+        env:
+          PYTHONPATH: tools
+        run: |
+          python tools/tum_graph_projective_ab.py \
+            --work "$RUNNER_TEMP/echo-tum-graph" \
+            --baseline artifacts/tum-composable-graph \
+            --alternative artifacts/tum-composable-graph/projective-alternative \
+            --pixel-stride 4
       - name: Render three frozen RGB-aligned views and two free Mesh views (unreviewed)
         env:
           PYTHONPATH: tools
@@ -71,6 +86,14 @@ jobs:
             --association "$RUNNER_TEMP/echo-tum-graph/imported/association.json" \
             --dataset-root "$RUNNER_TEMP/echo-tum-graph/dataset/rgbd_dataset_freiburg1_xyz" \
             --output artifacts/tum-composable-graph/visual
+      - name: Report second-provider A/B as diagnostic only
+        if: always()
+        run: |
+          if [ -f artifacts/tum-composable-graph/projective-alternative/ab-diagnostic.json ]; then
+            python -c 'import json; d=json.load(open("artifacts/tum-composable-graph/projective-alternative/ab-diagnostic.json")); print("Two real algorithms, one fixed TUM 48/12 split; diagnostic only. TSDF RMSE(m):",d["tsdf"]["rmse_m"],"Projective RMSE(m):",d["projective"]["rmse_m"],"No independent surface truth or #74 PASS.")' >> "$GITHUB_STEP_SUMMARY"
+          elif [ -f artifacts/tum-composable-graph/projective-alternative/ab-failure.json ]; then
+            cat artifacts/tum-composable-graph/projective-alternative/ab-failure.json >> "$GITHUB_STEP_SUMMARY"
+          fi
       - name: Report execution separately from quality
         if: always()
         run: |

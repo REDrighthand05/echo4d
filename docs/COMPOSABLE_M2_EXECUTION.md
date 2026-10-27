@@ -20,3 +20,15 @@ Next: run a pinned public TUM recording through this graph runner, then a **diff
 ## Concurrent development note
 
 A separate M1 branch update introduced `composable_runtime.py` while this child branch was being written. That existing CLI already runs one typed CPU TSDF route; this branch is an **experimental generic multi-provider graph executor**, not a second distinct reconstruction algorithm. Keep the implementations separate pending review and deduplicate the TSDF binding before integration. Do not count them as two real strategies.
+
+## Two different algorithm providers (experimental, not accepted)
+
+The projective provider is imported from independent branch `research/projective-depth-mesh-provider-m2-20261028` at `050e0a00e5a578f0cadd16d61887ff86fe1d38f8`. It triangulates per-frame observed depth rather than fusing TSDF; its stride>1 unsampled-hole rejection remains intact. `projective_recording_adapter` pins the actual algorithm source, uses the same typed metric input contract and emits a distinct provider report and Mesh.
+
+The existing pinned TUM workflow now runs the projective provider **after** the original TSDF on the same imported 48 train/12 holdout split, using the same checkout and source. `tum_graph_projective_ab.py` refuses a mismatched baseline and scores both actual Mesh outputs with the existing frozen holdout scorer. This is a same-sensor *diagnostic*, not independent truth or a generalization win. A run counts as real A/B **only after** the corresponding Actions job succeeds and both Mesh SHA and diagnostic JSON are verified. On failure, inspect `projective-alternative/ab-failure.json`; do not call this an executed second real route.
+
+```sh
+python -m pytest -q tests/python/test_graph_runner.py tests/python/test_projective_meshing.py tests/python/test_tum_graph_projective_ab.py
+```
+
+Historical desk V2 16.7779cm > 15cm and #74 visual acceptance remain FAIL. Avoid reusing the same heldout data to select a winner without a new independent frozen scene.

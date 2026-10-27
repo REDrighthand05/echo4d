@@ -262,3 +262,54 @@ def test_adapter_cannot_mutate_prior_intermediate_and_publish(tmp_path):
     assert not (tmp_path / "run").exists()
     failure = json.loads((tmp_path / "run.failed.json").read_text())
     assert failure["status"] == "failed" and failure["attempted_module"] == "last"
+
+def test_projective_and_tsdf_are_distinct_executed_mesh_providers(tmp_path):
+    """Actual synthetic meshes, not a claim of a real-scene A/B result."""
+    from echo4d import projective_meshing
+    from echo4d.graph_runner import projective_recording_adapter
+    manifest = synthetic_input(tmp_path)
+    inp, out = ports()
+    tsdf_source = Path(__import__("echo4d.graph_runner", fromlist=["x"]).__file__)
+    projective_source = Path(projective_meshing.__file__)
+    a = spec("known_pose_tsdf", inp, out, tsdf_source)
+    b = spec("observed_projective", inp, out, projective_source)
+    routes = compose((inp,), (a, b), out).routes
+    assert len(routes) == 2 and len({r.path_id for r in routes}) == 2
+    adapters = {
+        a.module_id: tsdf_recording_adapter(a.module_id, tsdf_source, inp, out,
+            bounds=(-1.8, -.2, -1.9, 1.8, 2.2, 1.8)),
+        b.module_id: projective_recording_adapter(b.module_id, projective_source, inp, out,
+            pixel_stride=2, max_vertices=300_000, max_faces=500_000),
+    }
+    receipts = {}
+    for route in routes:
+        name = route.modules[0]
+        receipt = execute_graph(route, (a, b), adapters,
+            {inp: InputFile(manifest, file_sha256(manifest))}, out,
+            tmp_path / name, checkout_sha=checkout())
+        mesh = receipt["outputs"][out.label()]
+        assert mesh["bytes"] > 200
+        assert file_sha256(tmp_path / name / mesh["path"]) == mesh["sha256"]
+        assert receipt["quality"] == "not_evaluated"
+        receipts[name] = receipt
+    assert receipts[a.module_id]["experiment_id"] != receipts[b.module_id]["experiment_id"]
+    assert receipts[a.module_id]["outputs"][out.label()]["sha256"] != receipts[b.module_id]["outputs"][out.label()]["sha256"]
+    provider_receipt = json.loads((tmp_path / b.module_id /
+        "00_observed_projective" / "provider-report.json").read_text())
+    assert provider_receipt["fusion"] is False
+    assert provider_receipt["algorithm"] == "per-frame-projective-triangles-v1"
+
+
+def test_projective_provider_rejects_wrong_source_and_relative_depth(tmp_path):
+    from echo4d import projective_meshing
+    from echo4d.graph_runner import projective_recording_adapter
+    inp, out = ports()
+    with pytest.raises(GraphBlocked, match="actual algorithm source"):
+        projective_recording_adapter("p", tmp_path / "pretend.py", inp, out)
+    from dataclasses import replace
+    with pytest.raises(GraphBlocked, match="metric"):
+        projective_recording_adapter("p", Path(projective_meshing.__file__),
+            replace(inp, scale="relative"), out)
+    with pytest.raises(GraphBlocked, match="pixel_stride"):
+        projective_recording_adapter("p", Path(projective_meshing.__file__),
+            inp, out, pixel_stride=17)

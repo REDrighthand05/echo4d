@@ -33,9 +33,12 @@ def output_transaction(destination: str | Path) -> Iterator[Path]:
         raise
 
 
-def write_ply(path: Path, mesh: Mesh) -> None:
+def write_ply(path: Path, mesh: Mesh, *, comment: str = "ECHO TSDF; metres; known camera poses") -> None:
     mesh.validate()
-    header = ("ply\nformat binary_little_endian 1.0\ncomment ECHO TSDF; metres; known camera poses\n"
+    if (not isinstance(comment, str) or not comment or len(comment) > 120
+            or not comment.isascii() or any(c in comment for c in "\r\n")):
+        raise DataError("PLY comment must be one bounded ASCII line")
+    header = ("ply\nformat binary_little_endian 1.0\n" + f"comment {comment}\n"
               f"element vertex {len(mesh.vertices)}\n"
               "property float x\nproperty float y\nproperty float z\n"
               "property float nx\nproperty float ny\nproperty float nz\n"

@@ -292,3 +292,84 @@ def tsdf_recording_adapter(
 
     return Adapter(module_id, Path(source_file), invoke, config)
 
+
+
+def projective_recording_adapter(
+    module_id: str,
+    source_file: Path,
+    recording_port: ArtifactType,
+    mesh_port: ArtifactType,
+    *,
+    pixel_stride: int = 4,
+    frame_stride: int = 1,
+    max_depth: float = 6.0,
+    max_depth_jump: float = 0.12,
+    max_edge_length: float = 0.30,
+    max_vertices: int = 300_000,
+    max_faces: int = 500_000,
+) -> Adapter:
+    """Bind independent per-frame depth triangles; never claim TSDF fusion.
+
+    The adapter source must be pinned to projective_meshing.py, not this
+    orchestration module. Runtime source files remain pinned by execute_graph.
+    """
+    from . import projective_meshing
+    from .model import DataError
+    from .output import mesh_summary, write_ply
+    if Path(source_file).resolve() != Path(projective_meshing.__file__).resolve():
+        raise GraphBlocked("Projective provider must pin the actual algorithm source")
+    if recording_port.kind != "echo_recording" or mesh_port.kind != "mesh":
+        raise GraphBlocked("Projective binding requires echo_recording -> mesh")
+    if (recording_port.scale != "metric" or mesh_port.scale != "metric"
+            or recording_port.length_unit != "m" or mesh_port.length_unit != "m"
+            or recording_port.scene_id != mesh_port.scene_id
+            or recording_port.coordinate_id != mesh_port.coordinate_id
+            or recording_port.handedness != "right" or mesh_port.handedness != "right"
+            or recording_port.partition != "train" or mesh_port.partition != "train"):
+        raise GraphBlocked("Projective binding requires aligned right-handed metric train data")
+    config = {
+        "algorithm": "per-frame-projective-triangles-v1",
+        "pixel_stride": pixel_stride, "frame_stride": frame_stride,
+        "max_depth": max_depth, "max_depth_jump": max_depth_jump,
+        "max_edge_length": max_edge_length, "max_vertices": max_vertices,
+        "max_faces": max_faces,
+    }
+    # Reject invalid configurations at binding time; do not defer to a 450MB run.
+    for key in ("pixel_stride", "frame_stride", "max_vertices", "max_faces"):
+        if type(config[key]) is not int or config[key] < 1:
+            raise GraphBlocked(f"Invalid projective {key}")
+    if pixel_stride > 16:
+        raise GraphBlocked("Projective pixel_stride exceeds limit")
+    import math
+    for key in ("max_depth", "max_depth_jump", "max_edge_length"):
+        value = config[key]
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value <= 0:
+            raise GraphBlocked(f"Invalid projective {key}")
+    if max_depth > 100:
+        raise GraphBlocked("Invalid projective max_depth")
+
+    def invoke(data: Mapping[ArtifactType, Path], work: Path) -> Mapping[ArtifactType, Path]:
+        recording = load_recording(data[recording_port])
+        mesh, dependencies = projective_meshing.projective_mesh(
+            recording, pixel_stride=pixel_stride, frame_stride=frame_stride,
+            max_depth=max_depth, max_depth_jump=max_depth_jump,
+            max_edge_length=max_edge_length, max_vertices=max_vertices,
+            max_faces=max_faces)
+        mesh_path = work / "mesh.ply"
+        write_ply(mesh_path, mesh,
+                  comment="ECHO per-frame projective depth triangles; metres; known poses")
+        write_json(work / "provider-report.json", {
+            "schema": "echo-projective-graph-provider-1",
+            "status": "executed_unscored", "quality": "not_evaluated",
+            "algorithm": "per-frame-projective-triangles-v1",
+            "fusion": False, "source_claim": recording.source,
+            "source_dependencies_sha256": dependencies,
+            "geometry": mesh_summary(mesh),
+            "mesh_sha256": file_sha256(mesh_path),
+            "parameters": config,
+            "independent_surface_truth": False,
+            "human_visual_review": False,
+        })
+        return {mesh_port: mesh_path}
+
+    return Adapter(module_id, Path(source_file), invoke, config)
