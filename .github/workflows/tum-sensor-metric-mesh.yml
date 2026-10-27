@@ -63,6 +63,8 @@ jobs:
             artifacts/tum-sensor-metric-mesh/report.json
             artifacts/tum-sensor-metric-mesh/SUMMARY.md
             artifacts/tum-sensor-metric-mesh/b-48train-12holdout.json
+            artifacts/tum-sensor-metric-mesh/b-training-recording.json
+            artifacts/tum-sensor-metric-mesh/b-sensor-provenance.json
             artifacts/tum-sensor-metric-mesh/metric/*.json
             artifacts/tum-sensor-metric-mesh/mesh-heldout-depth.json
             artifacts/tum-sensor-metric-mesh/mesh/report.json
