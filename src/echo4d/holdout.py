@@ -9,7 +9,7 @@ import math
 from pathlib import Path
 import numpy as np
 
-from .model import Camera, DataError, Frame
+from .model import Camera, DataError, Frame, rigid_matrix
 
 
 def read_echo_ply(path: str | Path) -> tuple[np.ndarray, np.ndarray]:
@@ -80,6 +80,9 @@ def rasterize_mesh_depth(vertices: np.ndarray, faces: np.ndarray,
         raise DataError('Invalid rasterizer mesh')
     if pose.shape != (4, 4) or not np.isfinite(pose).all():
         raise DataError('Invalid rasterizer camera pose')
+    # Direct callers must meet the same right-handed SE(3) contract as Recording.
+    # A finite scale, shear or reflection would silently distort held-out depth.
+    pose = rigid_matrix(pose.flatten(order='F'), 'rasterizer camera pose')
     if not (math.isfinite(near) and math.isfinite(far) and 0 < near < far <= 100):
         raise DataError('Invalid rasterizer clipping distances')
     cam = (points - pose[:3, 3]) @ pose[:3, :3]
