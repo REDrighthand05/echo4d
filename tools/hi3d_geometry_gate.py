@@ -72,7 +72,13 @@ def similarity(flat):
     return m,scale
 
 def surface_sample(vertices,faces,count,seed=0):
-    tris=vertices[faces]
+    # Stable for triangle-list permutations and winding reversals. Without this,
+    # identical indexed geometry can receive different random surface samples
+    # and flip a near-threshold CPU acceptance result. This does NOT eliminate
+    # Monte Carlo uncertainty between genuinely different surfaces.
+    canonical=np.sort(faces,axis=1)
+    order=np.lexsort((canonical[:,2],canonical[:,1],canonical[:,0]))
+    tris=vertices[canonical[order]]
     weights=np.linalg.norm(np.cross(tris[:,1]-tris[:,0],tris[:,2]-tris[:,0]),axis=1)/2
     if not np.isfinite(weights).all() or weights.sum()<=1e-12:
         raise AuditError("Degenerate surface")
