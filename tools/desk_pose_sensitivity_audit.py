@@ -15,6 +15,10 @@ import numpy as np
 from echo4d.holdout import read_echo_ply, rasterize_mesh_depth
 from echo4d.model import Camera, rigid_matrix
 
+# Input and baseline integrity guards below use assert; never permit -O to disable them.
+if not __debug__:
+    raise RuntimeError('Evidence audit must not run with Python -O (asserts disabled)')
+
 ZIP_SHA = 'df328812537ea4e4667f36ec7cdd9f901ff5c7fe25a1b37022daf81c20538104'
 MESH_SHA = '320da61fcd421c0e55aa6fc014750aeaa3e6e2d98b607e9feaae268f83d2a939'
 
