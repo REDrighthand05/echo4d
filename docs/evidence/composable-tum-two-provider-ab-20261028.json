@@ -1,0 +1,134 @@
+{
+  "schema": "echo4d-composable-tum-two-provider-ab-evidence-1",
+  "evidence_created_utc": "2026-10-27T21:06:00Z",
+  "status": "diagnostic_only",
+  "tested_checkout_sha": "185c984d8fd17173fef31b69d4f5e7761d5fd36f",
+  "source_branch": "research/composable-graph-execution-m2-20261028",
+  "workflow_url": "https://github.com/REDrighthand05/echo4d/actions/runs/40583462761",
+  "workflow_conclusion": "completed_success",
+  "artifact_url": "https://github.com/REDrighthand05/echo4d/actions/runs/40583462761/artifacts/12769239597",
+  "artifact_zip_sha256": "61d0bcb8926097a808550c4b4714097bfe17d9fe5afb14dd7f2d6507b41e11f9",
+  "artifact_zip_crc": "pass",
+  "artifact_retention_days": 14,
+  "artifact_file_sha256": {
+    "report.json": "d4c717943c7e4fcb5bccfc590c8bb3a45a6624eeec36f7e131e40798d17e50e6",
+    "graph-execution.json": "77e0fe9a449c3ba7b1d6ea01628fcc1b30053eef159fd5be53b07ba1f25a54ac",
+    "heldout-view-consistency.json": "46c18b405f4589c0085dd581d0e9cb420851b3859f7a8313f6b33189cfb980cd",
+    "projective-alternative/ab-diagnostic.json": "93b09110cae8e1d1ede7094f84b79a76111e911fdc1cf46a65ff1532d159eca4",
+    "projective-alternative/report.json": "85d6d9b7eceb90c6d08447a221fc86a074c90cc1478a666a423da1810cd1654c",
+    "projective-alternative/graph-execution.json": "7ea45f74bb82fb596458b7300aad967953e8878978b1551cd41af1f3604c0700",
+    "projective-alternative/heldout-view-consistency.json": "9f92188dd52a785eb4447b15e2d823d61426669e9993fa00552a9e0655fe1a70"
+  },
+  "source": {
+    "dataset": "TUM Freiburg1 XYZ known-pose RGB-D",
+    "archive_sha256": "a0236d97b8c30cd93b653656d2b6c293ff7c982a4130ef2a1a8beecdb124ef98",
+    "full_manifest_sha256": "eb82d91f6282b231f4fa30ffe851f97c97eb536cb5494e35554d61fc24ba17f5",
+    "train_manifest_sha256": "dbe1a78503a5f16638905d9419ad58a1c4644b14721c44e5b8a16678d3283357",
+    "association_sha256": "23aa2a725a93187023e5d69b29b4264040f734f89e0d7cbb3bc28918aafce530",
+    "raw_rgb_resolution": [
+      640,
+      480
+    ],
+    "imported_rgbd_resolution": [
+      160,
+      120
+    ],
+    "train_frames": 48,
+    "holdout_frames": 12,
+    "holdout_indices": [
+      4,
+      5,
+      9,
+      10,
+      14,
+      19,
+      24,
+      25,
+      29,
+      34,
+      35,
+      55
+    ],
+    "source_dependency_files_per_graph": 96
+  },
+  "comparison": {
+    "tsdf": {
+      "algorithm": "projective-tsdf-v1",
+      "mesh_sha256": "82d049d99f7b1fa82dabfa0a02e3847896b51de7647f382144c619fba784e658",
+      "vertices": 7704,
+      "faces": 12906,
+      "face_connected_components": 65,
+      "largest_component_faces": 4372,
+      "largest_component_fraction": 0.3387571672090501,
+      "valid_pixels": 176486,
+      "overlap_pixels": 175288,
+      "coverage": 0.9932119261584488,
+      "rmse_m": 0.11471287437489365,
+      "mae_m": 0.031520663499750544,
+      "graph_seconds": 1.519
+    },
+    "projective": {
+      "algorithm": "per-frame-projective-triangles-v1",
+      "predeclared_config": {
+        "pixel_stride": 4,
+        "frame_stride": 1,
+        "max_depth_m": 6,
+        "max_depth_jump_m": 0.12,
+        "max_edge_length_m": 0.3
+      },
+      "mesh_sha256": "044fd70d3ea77153d88ab22db1fb8fe5b7bd4e277ff512388d0541eb87498447",
+      "vertices": 32218,
+      "faces": 50197,
+      "face_connected_components": 391,
+      "largest_component_faces": 1194,
+      "largest_component_fraction": 0.02378628204872801,
+      "valid_pixels": 176486,
+      "overlap_pixels": 165519,
+      "coverage": 0.9378590936391555,
+      "rmse_m": 0.12046230890947726,
+      "mae_m": 0.04047105842699436,
+      "p95_abs_m": 0.11946029663085948,
+      "graph_seconds": 0.387,
+      "graph_experiment_id": "156c993a758dd76b9333e2113ed00af7b06dd4517934ff8041711a87b6305d59"
+    }
+  },
+  "independent_checks": {
+    "zip_crc_pass": true,
+    "exact_12_holdout_indices_verified": true,
+    "mesh_sha256_matches_execution_and_score_receipts": true,
+    "per_frame_weighted_rmse_and_mae_recomputed": true,
+    "largest_absolute_difference": 1.4e-17,
+    "connected_components_recomputed_with_separate_union_find_on_PLY_face_vertices": true,
+    "note": "Independent numerical and topological implementations, not independent scanned surface truth or human review"
+  },
+  "verification": {
+    "source_sha_verify_run": "https://github.com/REDrighthand05/echo4d/actions/runs/40583463050",
+    "matrix": "Linux/Windows Python3.12/3.13 4/4 PASS",
+    "ubuntu_python_312": "434 passed, 5 skipped",
+    "initial_failed_test_run": "https://github.com/REDrighthand05/echo4d/actions/runs/40583227820",
+    "initial_failure": "Invalid negative-test relative port; fixed test without weakening production contract"
+  },
+  "other_concurrent_real_projective": {
+    "evidence_url": "https://github.com/REDrighthand05/echo4d/blob/c5c0114c4da9ff6b5c6ac1c5c7a9ee20fe97369d/docs/evidence/tum-projective-real-20261028.json",
+    "mesh_sha256": "8ec6f867c626e166f15efe0a3bde803a4c9f14d8deda4a6c1e8f9dd161247238",
+    "parameters": "pixel_stride2,max_depth8m; NOT the same projective config as this stride4/max_depth6m graph run"
+  },
+  "acceptance": {
+    "two_real_algorithms_same_frozen_input": "EXECUTION_PASS",
+    "sensor_holdout": "DIAGNOSTIC_ONLY",
+    "independent_surface_truth": "NOT_AVAILABLE",
+    "issue74_visual": "FAIL_NOT_ACCEPTED",
+    "desk_v2_frozen": "FAIL_16.7779cm_gt_15cm_different_scene",
+    "winner_selected": false,
+    "limitations": [
+      "TSDF has higher coverage and lower overlap RMSE in these two configs; not a global algorithm ranking.",
+      "Projective patches have many more disconnected face components and are not visually accepted.",
+      "Holdout inspection cannot justify a generalization winner without a new frozen scene.",
+      "No RGB-only reconstruction, independent surface scan, or human #74 acceptance."
+    ]
+  },
+  "reproduce": [
+    "PYTHONPATH=tools python -m pytest -q tests/python/test_graph_runner.py tests/python/test_projective_meshing.py tests/python/test_tum_graph_projective_ab.py",
+    "See .github/workflows/tum-composable-graph.yml at tested_checkout_sha for pinned TUM import, two graph executions, and 12-frame scoring"
+  ]
+}
