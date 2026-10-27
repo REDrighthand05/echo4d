@@ -36,6 +36,30 @@ For every original **overlap** pixel, backproject its predicted camera-Z using t
 
 Low-support pixels have a higher conditional tail rate (72/369 = **19.51%**) than ≥3 (5,391/158,482 = **3.40%**), but are only **0.232%** of overlap. One of 12 holdout frames has no low-support pixels; among the other 11, low-support tail rate is greater in **7**, lower in **4**. No stable per-frame negative association is established. Counts, tails, and SSE conserve over the original 12 frames.
 
+
+### Archived raw output and per-frame counterexample check
+
+The exact **original** 12-frame output is now committed as [`desk-v2-training-view-support-20261027.json`](desk-v2-training-view-support-20261027.json), SHA256 `b219388ece3a09f89793e69ff8b91b6467cfa27ac1eca1d2e25481e4fde7dab0` (Git blob `f566526acb814837ba09aa91058a6779463f7da4`). It is not the independently replayed JSON, which had SHA256 `1470b925e7e57f9d34728dbbfcd911b69597d188ddd9cd11c71d3f893485c040` despite identical headline counts. The original local Python/NumPy versions were not recorded; the separately executed reviewer replay used **Python 3.12.14 / NumPy 2.2.6**. Do not conflate these environments or infer byte-for-byte determinism from equal counts.
+
+Pre-specified low-support (0–2) minus ≥3-support **within-frame ≥30cm tail-rate difference**, in percentage points; `N/A` means zero low-support pixels:
+
+| Holdout frame | Low-support n | Low-support ≥30cm tails | ≥3-support n | ≥3-support tails | Tail-rate difference (pp) |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| frame_00004.png | 6 | 3 | 13071 | 957 | 42.6784 |
+| frame_00009.png | 15 | 9 | 13230 | 98 | 59.2593 |
+| frame_00014.png | 4 | 0 | 15323 | 58 | -0.3785 |
+| frame_00019.png | 2 | 0 | 13593 | 509 | -3.7446 |
+| frame_00024.png | 1 | 0 | 12677 | 153 | -1.2069 |
+| frame_00029.png | 72 | 9 | 12297 | 707 | 6.7506 |
+| frame_00034.png | 0 | 0 | 15295 | 0 | N/A |
+| frame_00039.png | 41 | 27 | 14765 | 176 | 64.6617 |
+| frame_00044.png | 23 | 7 | 10604 | 715 | 23.6920 |
+| frame_00049.png | 13 | 2 | 13359 | 411 | 12.3080 |
+| frame_00054.png | 186 | 13 | 10514 | 904 | -1.6088 |
+| frame_00059.png | 6 | 2 | 13754 | 703 | 28.2221 |
+
+Among 11 comparable frames, 7 differences are positive and 4 negative; observed range **−3.7446 to +64.6617 pp**. The low-support group is extremely small (369 pixels overall). These frame-wise counterexamples limit any cross-frame association claim and do not alter the narrow error-mass conclusion or original geometry FAIL.
+
 ## Limits, review, rollback
 
 This support proxy is **not independent surface truth**: the same Mesh and estimated camera poses define both the original prediction and the support test. A geometrically wrong surface may be visible from many training views. Nearest-pixel rounding, the 5cm threshold, self-occlusion and heavily overlapping cameras affect the result. Do **not** conclude that poses, occlusion, geometry or depth are correct; the narrow low-support error-*mass* hypothesis is all this falsifies.
