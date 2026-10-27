@@ -159,12 +159,11 @@ def compose(
     max_routes: int = 12,
     budget_units: int = 30,
 ) -> SearchResult:
-    """Enumerate different legal DAG paths, bounded by depth, states, cost.
+    """Enumerate distinct dependency DAGs with bounded search and cost.
 
-    This is an exact-type planner: no implicit meter conversion, clock sync,
-    pose inversion, inferred depth-to-measurement promotion, or holdout leakage.
-    Plan order is stable, independent of module registration order.
-    A route has no scores until an independently implemented runner executes it.
+    Two legal schedules of the same producer/dependency graph are ONE route.
+    Providers, pinned revisions and typed input edges remain part of identity.
+    Planning is not execution and never supplies reconstruction quality scores.
     """
     if not isinstance(available, tuple) or not all(isinstance(x, ArtifactType) for x in available):
         raise ValueError("available must be a tuple of ArtifactType")
@@ -187,7 +186,64 @@ def compose(
                               key=lambda m: m.module_id))
     module_by_id = {m.module_id: m for m in candidates}
     origin = frozenset(available)
-    queue = deque([(origin, (), 0)])
+
+    def canonical_route(producers: dict[ArtifactType, str]) -> Route:
+        # Only modules on the actual dependency ancestry of the target count.
+        # Unrelated side branches are not additional reconstruction strategies.
+        used: set[str] = set()
+        order: list[str] = []
+
+        def visit(module_id: str) -> None:
+            if module_id in used:
+                return
+            used.add(module_id)
+            module = module_by_id[module_id]
+            for port in sorted(module.inputs, key=lambda p: p.label()):
+                parent = producers.get(port)
+                if parent is not None:
+                    visit(parent)
+            order.append(module_id)
+
+        root = producers.get(target)
+        if root is not None:
+            visit(root)
+        nodes = sorted(used)
+        edges = sorted(
+            (parent, module_id, port.label())
+            for module_id in nodes
+            for port in module_by_id[module_id].inputs
+            for parent in (producers.get(port),)
+            if parent is not None
+        )
+        descriptor = json.dumps(
+            {
+                "starting_ports": sorted(port.label() for port in origin),
+                "target": target.label(),
+                "nodes": [
+                    {
+                        "id": module_id,
+                        "revision": module_by_id[module_id].revision,
+                        "inputs": sorted(p.label() for p in module_by_id[module_id].inputs),
+                        "outputs": sorted(p.label() for p in module_by_id[module_id].outputs),
+                        "estimated_units": module_by_id[module_id].estimated_units,
+                    }
+                    for module_id in nodes
+                ],
+                "edges": edges,
+            },
+            ensure_ascii=True, sort_keys=True, separators=(",", ":"),
+        )
+        return Route(
+            tuple(order),
+            sum(module_by_id[module_id].estimated_units for module_id in nodes),
+            hashlib.sha256(descriptor.encode()).hexdigest(),
+        )
+
+    # Producer provenance is tracked per artifact, rather than assuming that
+    # equal output port types imply the same algorithm or dependency graph.
+    queue = deque([(origin, (), 0, {})])
+    seen_states = {(origin, frozenset(), frozenset())}
+    seen_routes: set[str] = set()
     routes: list[Route] = []
     visited = 0
     truncated = False
@@ -195,33 +251,42 @@ def compose(
         if visited >= max_states or len(routes) >= max_routes:
             truncated = True
             break
-        types, steps, spent = queue.popleft()
+        types, steps, spent, producers = queue.popleft()
         visited += 1
         if target in types:
-            descriptor = json.dumps({"starting_ports": sorted(x.label() for x in origin),
-                                     "target": target.label(),
-                                     "modules": [
-                                         {"id": module_id,
-                                          "revision": module_by_id[module_id].revision,
-                                          "inputs": sorted(x.label() for x in module_by_id[module_id].inputs),
-                                          "outputs": sorted(x.label() for x in module_by_id[module_id].outputs),
-                                          "estimated_units": module_by_id[module_id].estimated_units}
-                                         for module_id in steps]},
-                                    ensure_ascii=True, sort_keys=True, separators=(",", ":"))
-            routes.append(Route(steps, spent, hashlib.sha256(descriptor.encode()).hexdigest()))
+            route = canonical_route(producers)
+            if route.path_id not in seen_routes:
+                seen_routes.add(route.path_id)
+                routes.append(route)
             continue
         if len(steps) >= max_steps:
             continue
-        for m in candidates:
-            if m.module_id in steps or spent + m.estimated_units > budget_units:
+        for module in candidates:
+            if module.module_id in steps or spent + module.estimated_units > budget_units:
                 continue
-            if not set(m.inputs).issubset(types):
+            if not set(module.inputs).issubset(types):
                 continue
-            produced = frozenset(m.outputs)
-            if not (produced - types):
-                continue  # Repeating a transformation does not add knowledge.
-            if any(out.partition == "holdout" for out in produced):
+            newly_produced = frozenset(module.outputs) - types
+            if not newly_produced:
                 continue
-            queue.append((types | produced, steps + (m.module_id,),
-                          spent + m.estimated_units))
+            if any(port.partition == "holdout" for port in newly_produced):
+                continue
+            new_types = types | newly_produced
+            new_steps = steps + (module.module_id,)
+            new_producers = dict(producers)
+            new_producers.update({port: module.module_id for port in newly_produced})
+            # Different schedules with the same selected producers are one
+            # intermediate state; different providers remain distinguishable.
+            state_key = (
+                new_types, frozenset(new_steps), frozenset(new_producers.items()),
+            )
+            if state_key in seen_states:
+                continue
+            if len(seen_states) >= max_states:
+                truncated = True
+                continue
+            seen_states.add(state_key)
+            queue.append((
+                new_types, new_steps, spent + module.estimated_units, new_producers,
+            ))
     return SearchResult(tuple(routes), visited, truncated)

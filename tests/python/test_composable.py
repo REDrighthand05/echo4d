@@ -258,3 +258,70 @@ def test_route_id_changes_when_port_convention_changes():
                           mod("tsdf", [POSE_MET, DEPTH_MET], [MESH_MET])), MESH_MET)
     assert len(right_route.routes) == len(left_route.routes) == 1
     assert right_route.routes[0].path_id != left_route.routes[0].path_id
+
+
+def test_independent_dag_topological_orders_count_once_not_twice():
+    seed, left, right = a("seed"), a("left"), a("right")
+    modules = (
+        mod("left_stage", [seed], [left]),
+        mod("right_stage", [seed], [right]),
+        mod("join", [left, right], [MESH_MET]),
+    )
+    result = compose((seed,), modules, MESH_MET)
+    assert len(result.routes) == 1
+    assert result.routes[0].modules == ("left_stage", "right_stage", "join")
+    assert result.routes[0].estimated_units == 3
+    assert not result.truncated
+
+
+def test_real_alternate_provider_not_discarded_by_dag_dedup():
+    seed, left, right = a("seed"), a("left"), a("right")
+    modules = (
+        mod("left_a", [seed], [left]),
+        mod("left_b", [seed], [left]),
+        mod("right_stage", [seed], [right]),
+        mod("join", [left, right], [MESH_MET]),
+    )
+    result = compose((seed,), modules, MESH_MET, max_routes=3)
+    assert len(result.routes) == 2
+    assert {r.modules for r in result.routes} == {
+        ("left_a", "right_stage", "join"),
+        ("left_b", "right_stage", "join"),
+    }
+    assert len({r.path_id for r in result.routes}) == 2
+
+
+def test_unrelated_side_branch_is_not_a_distinct_mesh_route():
+    seed, unused = a("seed"), a("unused")
+    modules = (
+        mod("direct", [seed], [MESH_MET]),
+        mod("sidecar", [seed], [unused]),
+    )
+    result = compose((seed,), modules, MESH_MET)
+    assert len(result.routes) == 1
+    assert result.routes[0].modules == ("direct",)
+    assert result.routes[0].estimated_units == 1
+
+
+def test_canonical_graph_identity_is_independent_of_catalog_order():
+    seed, left, right = a("seed"), a("left"), a("right")
+    modules = (
+        mod("left_stage", [seed], [left]),
+        mod("right_stage", [seed], [right]),
+        mod("join", [left, right], [MESH_MET]),
+    )
+    forward = compose((seed,), modules, MESH_MET)
+    backward = compose((seed,), tuple(reversed(modules)), MESH_MET)
+    assert forward.routes == backward.routes
+
+
+def test_max_states_bounds_unique_enqueued_states_and_marks_truncation():
+    seed, left, right = a("seed"), a("left"), a("right")
+    modules = (
+        mod("left_stage", [seed], [left]),
+        mod("right_stage", [seed], [right]),
+        mod("join", [left, right], [MESH_MET]),
+    )
+    limited = compose((seed,), modules, MESH_MET, max_states=2)
+    assert limited.visited_states <= 2
+    assert limited.truncated
