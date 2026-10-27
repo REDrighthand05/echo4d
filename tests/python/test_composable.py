@@ -3,8 +3,13 @@ import pytest
 from echo4d.composable import ArtifactType, ModuleSpec, compose
 
 
-def a(kind, frame="none", scale="none", clock="none", evidence="measured", partition="train"):
-    return ArtifactType(kind, frame, scale, clock, evidence, partition)
+def a(kind, frame="none", scale="none", clock="none", evidence="measured", partition="train",
+      *, scene_id="fixture", coordinate_id=None, time_id=None):
+    return ArtifactType(
+        kind, frame, scale, clock, evidence, partition, scene_id,
+        ("fixture_space" if frame != "none" else "none") if coordinate_id is None else coordinate_id,
+        ("fixture_clock" if clock != "none" else "none") if time_id is None else time_id,
+    )
 
 
 VIDEO = a("rgb_video", clock="frame_pts")
@@ -18,8 +23,8 @@ MESH_MET = a("mesh", frame="world", scale="metric", evidence="estimated")
 HOLDOUT = a("depth_z", frame="camera", scale="metric", clock="frame_pts", partition="holdout")
 
 
-def mod(name, ins, outs, cost=1, installed=True):
-    return ModuleSpec(name, tuple(ins), tuple(outs), cost, installed)
+def mod(name, ins, outs, cost=1, installed=True, revision="a" * 40):
+    return ModuleSpec(name, tuple(ins), tuple(outs), cost, installed, revision)
 
 
 def catalog():
@@ -107,7 +112,8 @@ def test_limits_reject_non_positive_or_wrong_types(bad):
 ])
 def test_untrusted_port_type_metadata_rejected(kwargs):
     with pytest.raises(ValueError):
-        ArtifactType("depth_z", **kwargs)
+        ArtifactType("depth_z", scene_id="fixture", coordinate_id="fixture_space",
+                     time_id="none", **kwargs)
 
 
 def test_original_asset_and_generated_mesh_cannot_become_measured_mesh():
@@ -121,3 +127,54 @@ def test_explicit_adapter_can_bridge_different_clock_but_cannot_fake_execution()
     out = compose((POSE_MET, synced), (align, mod("tsdf", [POSE_MET, DEPTH_MET], [MESH_MET])), MESH_MET)
     assert [r.modules for r in out.routes] == [("timestamp_alignment", "tsdf")]
     assert out.routes[0].status == "not_executed"
+
+
+def test_same_kind_from_another_scene_cannot_enter_fusion():
+    other = a("depth_z", frame="camera", scale="metric", clock="frame_pts", scene_id="other_scene")
+    assert not compose((POSE_MET, other), (mod("tsdf", [POSE_MET, DEPTH_MET], [MESH_MET]),), MESH_MET).routes
+
+
+def test_same_clock_type_different_domain_requires_adapter():
+    other = a("depth_z", frame="camera", scale="metric", clock="frame_pts", time_id="other_clock")
+    assert not compose((POSE_MET, other), (mod("tsdf", [POSE_MET, DEPTH_MET], [MESH_MET]),), MESH_MET).routes
+
+
+def test_same_world_label_different_coordinate_domain_requires_adapter():
+    other = a("poses", frame="world", scale="metric", clock="frame_pts",
+              evidence="estimated", coordinate_id="other_world")
+    assert not compose((other, DEPTH_MET), (mod("tsdf", [POSE_MET, DEPTH_MET], [MESH_MET]),), MESH_MET).routes
+
+
+def test_module_revision_changes_route_fingerprint_without_changing_ports():
+    before = compose((VIDEO, ANCHOR, DEPTH_MET), catalog(), MESH_MET)
+    changed = tuple(mod(m.module_id, m.inputs, m.outputs, m.estimated_units, m.installed,
+                        revision="b" * 40 if m.module_id == "sfm_a" else m.revision)
+                    for m in catalog())
+    after = compose((VIDEO, ANCHOR, DEPTH_MET), changed, MESH_MET)
+    assert [r.modules for r in before.routes] == [r.modules for r in after.routes]
+    assert before.routes[0].path_id != after.routes[0].path_id
+    assert before.routes[1].path_id == after.routes[1].path_id
+
+
+def test_unassigned_data_must_be_split_before_build():
+    raw = a("rgb_video", clock="frame_pts", partition="unassigned")
+    with pytest.raises(ValueError, match="unassigned"):
+        mod("unsafe_decode", [raw], [FRAMES])
+    with pytest.raises(ValueError, match="unassigned"):
+        mod("unsafe_output", [VIDEO], [a("mesh", partition="unassigned")])
+
+
+@pytest.mark.parametrize("bad", ["main", "", "g" * 40, "0" * 39])
+def test_unpinned_revision_rejected(bad):
+    with pytest.raises(ValueError, match="revision"):
+        mod("unversioned", [VIDEO], [FRAMES], revision=bad)
+
+
+@pytest.mark.parametrize("context", [
+    {"scene_id": "none"},
+    {"coordinate_id": "none"},
+    {"time_id": "none"},
+])
+def test_missing_or_unknown_domain_identity_is_rejected(context):
+    with pytest.raises(ValueError):
+        a("depth_z", frame="camera", scale="metric", clock="frame_pts", **context)

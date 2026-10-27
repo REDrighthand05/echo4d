@@ -34,6 +34,9 @@ class ArtifactType:
     clock: Clock
     evidence: Evidence
     partition: Partition
+    scene_id: str
+    coordinate_id: str
+    time_id: str
 
     def __post_init__(self) -> None:
         if not isinstance(self.kind, str) or not _ID.fullmatch(self.kind):
@@ -49,6 +52,16 @@ class ArtifactType:
             value = getattr(self, key)
             if not isinstance(value, str) or value not in allowed:
                 raise ValueError(f"unsupported artifact {key}: {value!r}")
+        for key in ("scene_id", "coordinate_id", "time_id"):
+            value = getattr(self, key)
+            if not isinstance(value, str) or not _ID.fullmatch(value):
+                raise ValueError(f"invalid {key}: {value!r}")
+        if self.scene_id in {"none", "unknown", "unassigned"}:
+            raise ValueError("scene_id must identify a declared scene cohort")
+        if (self.frame == "none") != (self.coordinate_id == "none"):
+            raise ValueError("coordinate_id must be explicit for spatial ports, none otherwise")
+        if (self.clock == "none") != (self.time_id == "none"):
+            raise ValueError("time_id must be explicit for timed ports, none otherwise")
         if self.kind in {"depth_z", "depth_ray"} and self.frame != "camera":
             raise ValueError("depth ports must explicitly use camera frame")
         if self.kind == "depth_z" and self.scale == "none":
@@ -56,7 +69,8 @@ class ArtifactType:
 
     def label(self) -> str:
         return "/".join((self.kind, self.frame, self.scale,
-                         self.clock, self.evidence, self.partition))
+                         self.clock, self.evidence, self.partition,
+                         self.scene_id, self.coordinate_id, self.time_id))
 
 
 @dataclass(frozen=True)
@@ -72,6 +86,7 @@ class ModuleSpec:
     outputs: tuple[ArtifactType, ...]
     estimated_units: int
     installed: bool
+    revision: str
     phase: Phase = "build"
 
     def __post_init__(self) -> None:
@@ -88,10 +103,12 @@ class ModuleSpec:
             raise ValueError("estimated_units must be a positive integer")
         if type(self.installed) is not bool:
             raise ValueError("installed must be an explicit boolean")
+        if not isinstance(self.revision, str) or not re.fullmatch(r"[0-9a-f]{40}|[0-9a-f]{64}", self.revision):
+            raise ValueError("module revision must be a pinned 40/64-character hexadecimal digest")
         if self.phase not in ("build", "evaluate"):
             raise ValueError("phase must be build or evaluate")
-        if self.phase == "build" and any(a.partition == "holdout" for a in self.inputs):
-            raise ValueError("build modules must never consume heldout artifacts")
+        if self.phase == "build" and any(a.partition != "train" for a in self.inputs + self.outputs):
+            raise ValueError("build modules must reject heldout or unassigned ports")
 
 
 @dataclass(frozen=True)
@@ -146,6 +163,7 @@ def compose(
     from collections import deque
     candidates = tuple(sorted((m for m in modules if m.installed and m.phase == "build"),
                               key=lambda m: m.module_id))
+    module_by_id = {m.module_id: m for m in candidates}
     origin = frozenset(available)
     queue = deque([(origin, (), 0)])
     routes: list[Route] = []
@@ -159,7 +177,14 @@ def compose(
         visited += 1
         if target in types:
             descriptor = json.dumps({"starting_ports": sorted(x.label() for x in origin),
-                                     "target": target.label(), "modules": steps},
+                                     "target": target.label(),
+                                     "modules": [
+                                         {"id": module_id,
+                                          "revision": module_by_id[module_id].revision,
+                                          "inputs": sorted(x.label() for x in module_by_id[module_id].inputs),
+                                          "outputs": sorted(x.label() for x in module_by_id[module_id].outputs),
+                                          "estimated_units": module_by_id[module_id].estimated_units}
+                                         for module_id in steps]},
                                     ensure_ascii=True, sort_keys=True, separators=(",", ":"))
             routes.append(Route(steps, spent, hashlib.sha256(descriptor.encode()).hexdigest()))
             continue

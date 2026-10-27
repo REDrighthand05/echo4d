@@ -1,5 +1,7 @@
 # B 路输入桥接：实测深度 + 传感器定尺度的 SfM 相机轨迹
 
+> **棋盘模块标注（2026-10-27）：M01/M02/M06。** 实测深度/尺度共享桥接，服务含S的路线；V/N与混合来源必须分层，不能冒充实测。 [路线策略](STRATEGY_CHESSBOARD.md) · [模块合同](STRATEGY_MODULES.md) · [逐格验证](STRATEGY_VALIDATION.md)。下文历史状态/数字不因该标注改变，最新证据以GitHub为准。
+
 状态：**可运行的数据适配器 + 数值/错误反例测试**，不是已验收的真实 Mesh，也不是单目 RGB 自带深度。属于 [Issue #15](https://github.com/REDrighthand05/echo4d/issues/15) 的 B 路首阶段，叠在 [PR #17](https://github.com/REDrighthand05/echo4d/pull/17) 之上。
 
 ## 原理与来源纪律
