@@ -22,20 +22,17 @@
 
 不能用 E2 替代 E3，不把 E3 的同一设备留出深度误差宣称为独立实物几何 E4。主分支依赖 **已知 TUM 位姿** 的 TSDF 不等于自动定位；单目 COLMAP 的事后 Sim(3) ATE 不等于已测得物理米制尺度。美观截图不能代替数值、失败和独立观测。
 
-## 当前必须小心的依赖（核对日期 2026-10-25）
+## 当前依赖与研究责任（2026-10-27 整合快照）
 
-- `main`：已知位姿 + 米制深度 → TSDF/Mesh。
-- [Draft PR #6](https://github.com/REDrighthand05/echo4d/pull/6)：COLMAP text + **外部测量的尺度和已配准的真实深度** 适配器；base 是 `main`。
-- [Draft PR #8](https://github.com/REDrighthand05/echo4d/pull/8) 叠在 #6 上，[Draft PR #10](https://github.com/REDrighthand05/echo4d/pull/10) 再叠在 #8 上；**不是互相独立的 main PR**。
-- [Draft PR #12](https://github.com/REDrighthand05/echo4d/pull/12) 与 [Draft PR #13](https://github.com/REDrighthand05/echo4d/pull/13) 都从 #6 出发，实现彼此重叠的视频 SfM 代码/文档/测试，需先选择或整合一个方案，不能双向直接合并覆盖。
-- [Issue #14](https://github.com/REDrighthand05/echo4d/issues/14) 已有三帧外部尺度锚点具体预注册实验；[Issue #15](https://github.com/REDrighthand05/echo4d/issues/15) 是更广的 B/C 路实验总门禁。不要重复实现。
-- [Draft PR #16](https://github.com/REDrighthand05/echo4d/pull/16) 是研究文档，不是新重建功能。
-
-以上全部是**快照**，下一回合务必重新核对 GitHub。
+- 当前主干已接收统一 COLMAP/实测深度入口、源 PTS、米制尺度与 A/B 静态 Mesh 链。不要重新开发另一套导入器、评分器或 C→D 交换格式。
+- #15 是 A/B/C 重建总门禁，#2 跟踪普通视频/原生设备输入，#3 跟踪独立几何真值；#47 协调下一阶段。历史 #7/#11/#14 实验的完成不能替代这些研究门槛。
+- desk V1 原冻结名单配对失败；V2 Mesh 已生成，原12帧覆盖93.7357%、RMSE16.7779cm，15cm筛选仍FAIL。工具接收、CPU单测与CI通过不改变几何结论。
+- #42 Hi3D/家具只作辅助研究。CPU接口、安全工具通过不代表GPU推理、真实家具或独立尺度验收。
+- 逐PR的接收/替代依据与未完成责任以 #47 最新整合交接和GitHub实时状态为准；历史工作台保留在 docs/WORKBENCH.md，旧日期的分支状态不是当前指令。
 
 ## 提交和验证纪律
 
-- 普通开发使用独立分支、**Draft PR**，引用 Issue 与父 PR 依赖；不直接改稳定 `main`，不自动 merge、关闭任务或绕过失败。
+- 普通开发使用独立分支、**Draft PR**，引用 Issue 与父 PR 依赖；不直接改稳定 `main`，合并和结案按用户明确授权执行，始终遵守保护规则，不绕过必需检查、不伪造第二位审查者。
 - 不把 CI 绿色等同算法准确；区分代码检查、真实运行与外部真值评分。特别保留首次失败、完整注册率、无数据区域和异常长尾。
 - 每个结论尽量带源代码文件、提交 SHA、数据哈希、可复现命令、版本、输入分组、阈值、相机约定、运行成本和原始失败链接。声明未测量的内容。
 - 估计位姿与真值位姿、实测深度与模型预测深度、评估用尺度与可部署尺度，必须分离存储与展示。

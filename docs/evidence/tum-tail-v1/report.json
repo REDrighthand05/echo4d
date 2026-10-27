@@ -1,0 +1,860 @@
+{
+  "experiment": "TUM-12-heldout-depth-error-tail-attribution-v1",
+  "status": "passed_execution_not_causal_proof",
+  "timestamp_utc": "2026-10-25T12:12:13.165546+00:00",
+  "git_sha": "df9c91871364369bb14a5d71bfb3d4c7612fd557",
+  "github_run_url": "https://github.com/REDrighthand05/echo4d/actions/runs/40192049030",
+  "source_url": "https://cvg.cit.tum.de/rgbd/dataset/freiburg1/rgbd_dataset_freiburg1_xyz.tgz",
+  "source_sha256": "a0236d97b8c30cd93b653656d2b6c293ff7c982a4130ef2a1a8beecdb124ef98",
+  "preregistered_parameters": {
+    "training_frames": 48,
+    "never_fused_frames": 12,
+    "heldout_indices": [
+      0,
+      5,
+      10,
+      15,
+      20,
+      25,
+      30,
+      35,
+      40,
+      45,
+      50,
+      55
+    ],
+    "depth_discontinuity_threshold_m": 0.1,
+    "region_dilation_radius_pixels": 2,
+    "absolute_error_thresholds_m": [
+      0.03,
+      0.05,
+      0.1,
+      0.3,
+      0.5,
+      1.0
+    ],
+    "scoring": "Use overlap pixels for residuals and all valid measured pixels for coverage",
+    "no_fusion_change_or_hyperparameter_sweep": true
+  },
+  "original_experiment": {
+    "manifest_sha256": "eb82d91f6282b231f4fa30ffe851f97c97eb536cb5494e35554d61fc24ba17f5",
+    "training_manifest_sha256": "326c9fb44dd602ce9322583a6e9e01657f0156084b1c592b8d9cffff0ddd6563",
+    "heldout_indices": [
+      0,
+      5,
+      10,
+      15,
+      20,
+      25,
+      30,
+      35,
+      40,
+      45,
+      50,
+      55
+    ],
+    "training_frames": 48,
+    "mesh_sha256": "16aa524c1bdc04e474f59a33f70dd441a2261f0b76c78dd2f720f9bea4471922",
+    "run_status": "completed"
+  },
+  "verification": {
+    "original_holdout_metrics_matched": true,
+    "threshold_difference_absolute": 1e-10
+  },
+  "diagnostic": {
+    "method": "post-hoc depth-discontinuity stratification; no heldout pixels used to fit mesh",
+    "parameters": {
+      "step_m": 0.1,
+      "band_pixels": 2,
+      "depth_valid_range_m": [
+        0.15,
+        4.0
+      ]
+    },
+    "sensor_valid_pixels": 174284,
+    "overlap_pixels": 167097,
+    "missing_surface_pixels": 7187,
+    "coverage": 0.9587627091414014,
+    "mae_m": 0.031813785377855425,
+    "rmse_m": 0.11331471183612706,
+    "p95_abs_m": 0.08107573986053465,
+    "median_abs_m": 0.010678768157958984,
+    "bias_m": 0.005645263336079731,
+    "tails": {
+      "over_3cm": {
+        "pixels": 34679,
+        "fraction_of_overlap": 0.20753813653147574,
+        "squared_error_share": 0.9908453303191084,
+        "sign_positive_fraction": 0.5612906946567087
+      },
+      "over_5cm": {
+        "pixels": 18375,
+        "fraction_of_overlap": 0.10996606761342215,
+        "squared_error_share": 0.9791862890407332,
+        "sign_positive_fraction": 0.5783945578231292
+      },
+      "over_10cm": {
+        "pixels": 5880,
+        "fraction_of_overlap": 0.035189141636295086,
+        "squared_error_share": 0.95117829140812,
+        "sign_positive_fraction": 0.616156462585034
+      },
+      "over_30cm": {
+        "pixels": 2706,
+        "fraction_of_overlap": 0.016194186610172533,
+        "squared_error_share": 0.9145267859703705,
+        "sign_positive_fraction": 0.5764966740576497
+      },
+      "over_50cm": {
+        "pixels": 1999,
+        "fraction_of_overlap": 0.011963111246760864,
+        "squared_error_share": 0.860831297996612,
+        "sign_positive_fraction": 0.5547773886943472
+      },
+      "over_100cm": {
+        "pixels": 678,
+        "fraction_of_overlap": 0.004057523474389127,
+        "squared_error_share": 0.5495415003648351,
+        "sign_positive_fraction": 0.7920353982300885
+      }
+    },
+    "regions": {
+      "depth_step_band": {
+        "valid_sensor_pixels": 32540,
+        "overlap_pixels": 30568,
+        "within_region_coverage": 0.9393976644130301,
+        "pixels": 30568,
+        "mae_m": 0.09537149622775097,
+        "rmse_m": 0.22804725304887244,
+        "p95_abs_m": 0.4979642271995543,
+        "bias_m": 0.012047535957497035,
+        "squared_error_share": 0.7409270750169996
+      },
+      "missing_depth_band": {
+        "valid_sensor_pixels": 18956,
+        "overlap_pixels": 17507,
+        "within_region_coverage": 0.9235598227474151,
+        "pixels": 17507,
+        "mae_m": 0.040696989620420315,
+        "rmse_m": 0.1430502807999532,
+        "p95_abs_m": 0.09223204255104066,
+        "bias_m": 0.016837288169372754,
+        "squared_error_share": 0.16697363846842952
+      },
+      "image_border": {
+        "valid_sensor_pixels": 3322,
+        "overlap_pixels": 2715,
+        "within_region_coverage": 0.8172787477423239,
+        "pixels": 2715,
+        "mae_m": 0.01775985870572085,
+        "rmse_m": 0.08728311085101076,
+        "p95_abs_m": 0.023273813724517815,
+        "bias_m": 0.0068424564259706505,
+        "squared_error_share": 0.00964026598643898
+      },
+      "interior": {
+        "valid_sensor_pixels": 119466,
+        "overlap_pixels": 116307,
+        "within_region_coverage": 0.9735573301190297,
+        "pixels": 116307,
+        "mae_m": 0.01410037216094376,
+        "rmse_m": 0.03900199157197976,
+        "p95_abs_m": 0.04189831018447875,
+        "bias_m": 0.0022499919638751436,
+        "squared_error_share": 0.08245902052813672
+      }
+    },
+    "per_frame": [
+      {
+        "index": 0,
+        "valid_sensor_pixels": 14415,
+        "overlap_pixels": 14108,
+        "missing_surface_pixels": 307,
+        "overlap": {
+          "pixels": 14108,
+          "mae_m": 0.029191917697295677,
+          "rmse_m": 0.0952089933841527,
+          "p95_abs_m": 0.07318136394023894,
+          "bias_m": -0.007292304159495119,
+          "squared_error_share": null
+        },
+        "regions": {
+          "depth_step_band": {
+            "valid_sensor_pixels": 3274,
+            "overlap_pixels": 3149,
+            "pixels": 3149,
+            "mae_m": 0.07166086981962053,
+            "rmse_m": 0.1784351192068334,
+            "p95_abs_m": 0.19427006244659326,
+            "bias_m": 0.0001556107300582406,
+            "squared_error_share": null
+          },
+          "missing_depth_band": {
+            "valid_sensor_pixels": 1985,
+            "overlap_pixels": 1820,
+            "pixels": 1820,
+            "mae_m": 0.03559803674509237,
+            "rmse_m": 0.11596619393871674,
+            "p95_abs_m": 0.07633863687515258,
+            "bias_m": -0.006682946917774913,
+            "squared_error_share": null
+          },
+          "image_border": {
+            "valid_sensor_pixels": 271,
+            "overlap_pixels": 271,
+            "pixels": 271,
+            "mae_m": 0.006440356868659438,
+            "rmse_m": 0.008276128967456721,
+            "p95_abs_m": 0.016922712326049805,
+            "bias_m": -0.005547239551684954,
+            "squared_error_share": null
+          },
+          "interior": {
+            "valid_sensor_pixels": 8885,
+            "overlap_pixels": 8868,
+            "pixels": 8868,
+            "mae_m": 0.013491850724400945,
+            "rmse_m": 0.018787134088271325,
+            "p95_abs_m": 0.03848955035209655,
+            "bias_m": -0.010115423992135044,
+            "squared_error_share": null
+          }
+        }
+      },
+      {
+        "index": 5,
+        "valid_sensor_pixels": 14367,
+        "overlap_pixels": 14285,
+        "missing_surface_pixels": 82,
+        "overlap": {
+          "pixels": 14285,
+          "mae_m": 0.0370282125047424,
+          "rmse_m": 0.12312340329958063,
+          "p95_abs_m": 0.09879422187805172,
+          "bias_m": 0.029694502183428836,
+          "squared_error_share": null
+        },
+        "regions": {
+          "depth_step_band": {
+            "valid_sensor_pixels": 3095,
+            "overlap_pixels": 3026,
+            "pixels": 3026,
+            "mae_m": 0.10679291745171354,
+            "rmse_m": 0.2520910778699831,
+            "p95_abs_m": 0.5167735815048218,
+            "bias_m": 0.08427206140752667,
+            "squared_error_share": null
+          },
+          "missing_depth_band": {
+            "valid_sensor_pixels": 1669,
+            "overlap_pixels": 1658,
+            "pixels": 1658,
+            "mae_m": 0.04017183630400314,
+            "rmse_m": 0.10889961424975668,
+            "p95_abs_m": 0.1142929583787917,
+            "bias_m": 0.03241744256422229,
+            "squared_error_share": null
+          },
+          "image_border": {
+            "valid_sensor_pixels": 285,
+            "overlap_pixels": 285,
+            "pixels": 285,
+            "mae_m": 0.004030511462897585,
+            "rmse_m": 0.006791264292878076,
+            "p95_abs_m": 0.013671016693115242,
+            "bias_m": -0.00033797276647467363,
+            "squared_error_share": null
+          },
+          "interior": {
+            "valid_sensor_pixels": 9318,
+            "overlap_pixels": 9316,
+            "pixels": 9316,
+            "mae_m": 0.014817415957749786,
+            "rmse_m": 0.02215820865109191,
+            "p95_abs_m": 0.04615563154220581,
+            "bias_m": 0.01240091330378595,
+            "squared_error_share": null
+          }
+        }
+      },
+      {
+        "index": 10,
+        "valid_sensor_pixels": 14279,
+        "overlap_pixels": 14268,
+        "missing_surface_pixels": 11,
+        "overlap": {
+          "pixels": 14268,
+          "mae_m": 0.01829167535851775,
+          "rmse_m": 0.03052615320425253,
+          "p95_abs_m": 0.06029271185398102,
+          "bias_m": -0.008051994123778357,
+          "squared_error_share": null
+        },
+        "regions": {
+          "depth_step_band": {
+            "valid_sensor_pixels": 1847,
+            "overlap_pixels": 1845,
+            "pixels": 1845,
+            "mae_m": 0.04991950303881472,
+            "rmse_m": 0.06377502853587012,
+            "p95_abs_m": 0.13111708164215086,
+            "bias_m": -0.007959802299334105,
+            "squared_error_share": null
+          },
+          "missing_depth_band": {
+            "valid_sensor_pixels": 2028,
+            "overlap_pixels": 2026,
+            "pixels": 2026,
+            "mae_m": 0.022868374051840612,
+            "rmse_m": 0.03531068558104891,
+            "p95_abs_m": 0.06727036833763123,
+            "bias_m": -0.006694963542047634,
+            "squared_error_share": null
+          },
+          "image_border": {
+            "valid_sensor_pixels": 293,
+            "overlap_pixels": 293,
+            "pixels": 293,
+            "mae_m": 0.005680127762283481,
+            "rmse_m": 0.006570696708021983,
+            "p95_abs_m": 0.011698722839355465,
+            "bias_m": -0.005234767552528772,
+            "squared_error_share": null
+          },
+          "interior": {
+            "valid_sensor_pixels": 10111,
+            "overlap_pixels": 10104,
+            "pixels": 10104,
+            "mae_m": 0.01196442375745645,
+            "rmse_m": 0.01794229015759879,
+            "p95_abs_m": 0.038402771949768065,
+            "bias_m": -0.00842262805688032,
+            "squared_error_share": null
+          }
+        }
+      },
+      {
+        "index": 15,
+        "valid_sensor_pixels": 14678,
+        "overlap_pixels": 13952,
+        "missing_surface_pixels": 726,
+        "overlap": {
+          "pixels": 13952,
+          "mae_m": 0.035044672228225056,
+          "rmse_m": 0.1290845871000133,
+          "p95_abs_m": 0.08178152441978453,
+          "bias_m": -0.019794315727718108,
+          "squared_error_share": null
+        },
+        "regions": {
+          "depth_step_band": {
+            "valid_sensor_pixels": 3752,
+            "overlap_pixels": 3381,
+            "pixels": 3381,
+            "mae_m": 0.09524287215988511,
+            "rmse_m": 0.2566840107307529,
+            "p95_abs_m": 0.3562352657318115,
+            "bias_m": -0.05101740912056928,
+            "squared_error_share": null
+          },
+          "missing_depth_band": {
+            "valid_sensor_pixels": 1647,
+            "overlap_pixels": 1391,
+            "pixels": 1391,
+            "mae_m": 0.026143411181111888,
+            "rmse_m": 0.059243923270048016,
+            "p95_abs_m": 0.0666230320930481,
+            "bias_m": -0.0072651553891015345,
+            "squared_error_share": null
+          },
+          "image_border": {
+            "valid_sensor_pixels": 286,
+            "overlap_pixels": 286,
+            "pixels": 286,
+            "mae_m": 0.009529171915321084,
+            "rmse_m": 0.011497578911311179,
+            "p95_abs_m": 0.020599260926246643,
+            "bias_m": -0.009234950467423125,
+            "squared_error_share": null
+          },
+          "interior": {
+            "valid_sensor_pixels": 8993,
+            "overlap_pixels": 8894,
+            "pixels": 8894,
+            "mae_m": 0.014373317746223963,
+            "rmse_m": 0.02322382753396067,
+            "p95_abs_m": 0.05198554396629335,
+            "bias_m": -0.010224129280026424,
+            "squared_error_share": null
+          }
+        }
+      },
+      {
+        "index": 20,
+        "valid_sensor_pixels": 14620,
+        "overlap_pixels": 14586,
+        "missing_surface_pixels": 34,
+        "overlap": {
+          "pixels": 14586,
+          "mae_m": 0.026735613477846306,
+          "rmse_m": 0.12008087879651218,
+          "p95_abs_m": 0.06619787216186523,
+          "bias_m": 0.015531214866130813,
+          "squared_error_share": null
+        },
+        "regions": {
+          "depth_step_band": {
+            "valid_sensor_pixels": 2554,
+            "overlap_pixels": 2553,
+            "pixels": 2553,
+            "mae_m": 0.09960907085988739,
+            "rmse_m": 0.2674586532601058,
+            "p95_abs_m": 0.5300443172454847,
+            "bias_m": 0.07059507203298226,
+            "squared_error_share": null
+          },
+          "missing_depth_band": {
+            "valid_sensor_pixels": 1348,
+            "overlap_pixels": 1332,
+            "pixels": 1332,
+            "mae_m": 0.03217781033064868,
+            "rmse_m": 0.11631495310383763,
+            "p95_abs_m": 0.08467525243759161,
+            "bias_m": 0.02507103755846396,
+            "squared_error_share": null
+          },
+          "image_border": {
+            "valid_sensor_pixels": 286,
+            "overlap_pixels": 281,
+            "pixels": 281,
+            "mae_m": 0.0030613227671151483,
+            "rmse_m": 0.004354217016554993,
+            "p95_abs_m": 0.010503113269805908,
+            "bias_m": -0.0022563741300453918,
+            "squared_error_share": null
+          },
+          "interior": {
+            "valid_sensor_pixels": 10432,
+            "overlap_pixels": 10420,
+            "pixels": 10420,
+            "mae_m": 0.008823668447657418,
+            "rmse_m": 0.030461590091129125,
+            "p95_abs_m": 0.027732986211776733,
+            "bias_m": 0.001300239946242715,
+            "squared_error_share": null
+          }
+        }
+      },
+      {
+        "index": 25,
+        "valid_sensor_pixels": 15368,
+        "overlap_pixels": 15003,
+        "missing_surface_pixels": 365,
+        "overlap": {
+          "pixels": 15003,
+          "mae_m": 0.03744277582322408,
+          "rmse_m": 0.12379057002314656,
+          "p95_abs_m": 0.09676871299743647,
+          "bias_m": -0.009060726164659087,
+          "squared_error_share": null
+        },
+        "regions": {
+          "depth_step_band": {
+            "valid_sensor_pixels": 2595,
+            "overlap_pixels": 2463,
+            "pixels": 2463,
+            "mae_m": 0.12282224234845451,
+            "rmse_m": 0.25634396691038097,
+            "p95_abs_m": 0.6920987367630008,
+            "bias_m": -0.0424297624519091,
+            "squared_error_share": null
+          },
+          "missing_depth_band": {
+            "valid_sensor_pixels": 1356,
+            "overlap_pixels": 1263,
+            "pixels": 1263,
+            "mae_m": 0.06820434582016341,
+            "rmse_m": 0.1972751151108683,
+            "p95_abs_m": 0.19647933840751333,
+            "bias_m": 0.00834228873536026,
+            "squared_error_share": null
+          },
+          "image_border": {
+            "valid_sensor_pixels": 286,
+            "overlap_pixels": 233,
+            "pixels": 233,
+            "mae_m": 0.008705469415934813,
+            "rmse_m": 0.011211573260207653,
+            "p95_abs_m": 0.025351166725158678,
+            "bias_m": -0.008533158783237309,
+            "squared_error_share": null
+          },
+          "interior": {
+            "valid_sensor_pixels": 11131,
+            "overlap_pixels": 11044,
+            "pixels": 11044,
+            "mae_m": 0.01549006878185514,
+            "rmse_m": 0.041342330944342705,
+            "p95_abs_m": 0.05826600193977357,
+            "bias_m": -0.0036202149950736937,
+            "squared_error_share": null
+          }
+        }
+      },
+      {
+        "index": 30,
+        "valid_sensor_pixels": 14521,
+        "overlap_pixels": 14243,
+        "missing_surface_pixels": 278,
+        "overlap": {
+          "pixels": 14243,
+          "mae_m": 0.03847357825533875,
+          "rmse_m": 0.12755416794472396,
+          "p95_abs_m": 0.09700388908386223,
+          "bias_m": 0.02672014549978243,
+          "squared_error_share": null
+        },
+        "regions": {
+          "depth_step_band": {
+            "valid_sensor_pixels": 4112,
+            "overlap_pixels": 3898,
+            "pixels": 3898,
+            "mae_m": 0.10157457243301368,
+            "rmse_m": 0.23969844312912458,
+            "p95_abs_m": 0.4967155456542967,
+            "bias_m": 0.06770824303438629,
+            "squared_error_share": null
+          },
+          "missing_depth_band": {
+            "valid_sensor_pixels": 1419,
+            "overlap_pixels": 1383,
+            "pixels": 1383,
+            "mae_m": 0.023155420781561024,
+            "rmse_m": 0.056709629858320884,
+            "p95_abs_m": 0.0793863475322723,
+            "bias_m": 0.016389706603703254,
+            "squared_error_share": null
+          },
+          "image_border": {
+            "valid_sensor_pixels": 276,
+            "overlap_pixels": 276,
+            "pixels": 276,
+            "mae_m": 0.005817466024039448,
+            "rmse_m": 0.008775060494211256,
+            "p95_abs_m": 0.017432644963264465,
+            "bias_m": 0.0008077694885972618,
+            "squared_error_share": null
+          },
+          "interior": {
+            "valid_sensor_pixels": 8714,
+            "overlap_pixels": 8686,
+            "pixels": 8686,
+            "mae_m": 0.013632503359816795,
+            "rmse_m": 0.01950534203049628,
+            "p95_abs_m": 0.04258623719215393,
+            "bias_m": 0.010794196683581513,
+            "squared_error_share": null
+          }
+        }
+      },
+      {
+        "index": 35,
+        "valid_sensor_pixels": 15313,
+        "overlap_pixels": 14361,
+        "missing_surface_pixels": 952,
+        "overlap": {
+          "pixels": 14361,
+          "mae_m": 0.02014838307774272,
+          "rmse_m": 0.07577592095508434,
+          "p95_abs_m": 0.05472564697265625,
+          "bias_m": 0.0011097939596660257,
+          "squared_error_share": null
+        },
+        "regions": {
+          "depth_step_band": {
+            "valid_sensor_pixels": 1104,
+            "overlap_pixels": 851,
+            "pixels": 851,
+            "mae_m": 0.06782938506712505,
+            "rmse_m": 0.12204368589171788,
+            "p95_abs_m": 0.25026828050613403,
+            "bias_m": -0.0253805803216022,
+            "squared_error_share": null
+          },
+          "missing_depth_band": {
+            "valid_sensor_pixels": 1510,
+            "overlap_pixels": 1412,
+            "pixels": 1412,
+            "mae_m": 0.02420395857551618,
+            "rmse_m": 0.048467793418585106,
+            "p95_abs_m": 0.06932550370693208,
+            "bias_m": 0.0016117966377701368,
+            "squared_error_share": null
+          },
+          "image_border": {
+            "valid_sensor_pixels": 262,
+            "overlap_pixels": 200,
+            "pixels": 200,
+            "mae_m": 0.15819089651107787,
+            "rmse_m": 0.31985313332953536,
+            "p95_abs_m": 0.6835268557071685,
+            "bias_m": 0.14168566167354585,
+            "squared_error_share": null
+          },
+          "interior": {
+            "valid_sensor_pixels": 12437,
+            "overlap_pixels": 11898,
+            "pixels": 11898,
+            "mae_m": 0.013936287937173926,
+            "rmse_m": 0.062183602755181006,
+            "p95_abs_m": 0.032075837254524224,
+            "bias_m": 0.0005819159288289347,
+            "squared_error_share": null
+          }
+        }
+      },
+      {
+        "index": 40,
+        "valid_sensor_pixels": 13549,
+        "overlap_pixels": 13446,
+        "missing_surface_pixels": 103,
+        "overlap": {
+          "pixels": 13446,
+          "mae_m": 0.021427120496417092,
+          "rmse_m": 0.06718078937698557,
+          "p95_abs_m": 0.06741678714752197,
+          "bias_m": 0.008200309690790093,
+          "squared_error_share": null
+        },
+        "regions": {
+          "depth_step_band": {
+            "valid_sensor_pixels": 2904,
+            "overlap_pixels": 2836,
+            "pixels": 2836,
+            "mae_m": 0.05816028013888468,
+            "rmse_m": 0.13615535399636602,
+            "p95_abs_m": 0.1171882301568985,
+            "bias_m": 0.03097992614226886,
+            "squared_error_share": null
+          },
+          "missing_depth_band": {
+            "valid_sensor_pixels": 1674,
+            "overlap_pixels": 1651,
+            "pixels": 1651,
+            "mae_m": 0.021348820860497088,
+            "rmse_m": 0.06189442088327111,
+            "p95_abs_m": 0.06796017289161682,
+            "bias_m": 0.002207899259697806,
+            "squared_error_share": null
+          },
+          "image_border": {
+            "valid_sensor_pixels": 286,
+            "overlap_pixels": 286,
+            "pixels": 286,
+            "mae_m": 0.0049617653126483195,
+            "rmse_m": 0.008123537982714863,
+            "p95_abs_m": 0.02194519340991974,
+            "bias_m": -0.003726207709812618,
+            "squared_error_share": null
+          },
+          "interior": {
+            "valid_sensor_pixels": 8685,
+            "overlap_pixels": 8673,
+            "pixels": 8673,
+            "mae_m": 0.009973543133961623,
+            "rmse_m": 0.014273556146883111,
+            "p95_abs_m": 0.029566860198974608,
+            "bias_m": 0.002285569847819028,
+            "squared_error_share": null
+          }
+        }
+      },
+      {
+        "index": 45,
+        "valid_sensor_pixels": 14603,
+        "overlap_pixels": 12945,
+        "missing_surface_pixels": 1658,
+        "overlap": {
+          "pixels": 12945,
+          "mae_m": 0.039777642734817854,
+          "rmse_m": 0.14237637113872248,
+          "p95_abs_m": 0.10116643905639645,
+          "bias_m": 0.012816864535264316,
+          "squared_error_share": null
+        },
+        "regions": {
+          "depth_step_band": {
+            "valid_sensor_pixels": 1793,
+            "overlap_pixels": 1528,
+            "pixels": 1528,
+            "mae_m": 0.15449747435397504,
+            "rmse_m": 0.2936498070139556,
+            "p95_abs_m": 0.6886455237865448,
+            "bias_m": -0.03467110743385335,
+            "squared_error_share": null
+          },
+          "missing_depth_band": {
+            "valid_sensor_pixels": 1318,
+            "overlap_pixels": 983,
+            "pixels": 983,
+            "mae_m": 0.11225906484367161,
+            "rmse_m": 0.32713246833256665,
+            "p95_abs_m": 1.1345966041088102,
+            "bias_m": 0.09038574170484184,
+            "squared_error_share": null
+          },
+          "image_border": {
+            "valid_sensor_pixels": 253,
+            "overlap_pixels": 48,
+            "pixels": 48,
+            "mae_m": 0.005181079109509786,
+            "rmse_m": 0.007617224375441832,
+            "p95_abs_m": 0.018261760473251336,
+            "bias_m": 0.0025791178146998086,
+            "squared_error_share": null
+          },
+          "interior": {
+            "valid_sensor_pixels": 11239,
+            "overlap_pixels": 10386,
+            "pixels": 10386,
+            "mae_m": 0.0161997007366414,
+            "rmse_m": 0.049501235273400834,
+            "p95_abs_m": 0.04141528904438019,
+            "bias_m": 0.012509029637681435,
+            "squared_error_share": null
+          }
+        }
+      },
+      {
+        "index": 50,
+        "valid_sensor_pixels": 13594,
+        "overlap_pixels": 13182,
+        "missing_surface_pixels": 412,
+        "overlap": {
+          "pixels": 13182,
+          "mae_m": 0.032991630519906875,
+          "rmse_m": 0.11168245666426482,
+          "p95_abs_m": 0.0845747649669647,
+          "bias_m": 0.006923410702938195,
+          "squared_error_share": null
+        },
+        "regions": {
+          "depth_step_band": {
+            "valid_sensor_pixels": 4095,
+            "overlap_pixels": 3795,
+            "pixels": 3795,
+            "mae_m": 0.07684374224684141,
+            "rmse_m": 0.19869090981067,
+            "p95_abs_m": 0.24917363524436945,
+            "bias_m": 0.0216320250973557,
+            "squared_error_share": null
+          },
+          "missing_depth_band": {
+            "valid_sensor_pixels": 1797,
+            "overlap_pixels": 1738,
+            "pixels": 1738,
+            "mae_m": 0.027627918093333446,
+            "rmse_m": 0.0837338871201867,
+            "p95_abs_m": 0.07811940908432007,
+            "bias_m": 0.006373104449657357,
+            "squared_error_share": null
+          },
+          "image_border": {
+            "valid_sensor_pixels": 256,
+            "overlap_pixels": 256,
+            "pixels": 256,
+            "mae_m": 0.012242971220985055,
+            "rmse_m": 0.01567502519478242,
+            "p95_abs_m": 0.030002102255821228,
+            "bias_m": -0.0025157646741718054,
+            "squared_error_share": null
+          },
+          "interior": {
+            "valid_sensor_pixels": 7446,
+            "overlap_pixels": 7393,
+            "pixels": 7393,
+            "mae_m": 0.012460726282681404,
+            "rmse_m": 0.01783170313421884,
+            "p95_abs_m": 0.03865306377410888,
+            "bias_m": -0.0001706418416407536,
+            "squared_error_share": null
+          }
+        }
+      },
+      {
+        "index": 55,
+        "valid_sensor_pixels": 14977,
+        "overlap_pixels": 12718,
+        "missing_surface_pixels": 2259,
+        "overlap": {
+          "pixels": 12718,
+          "mae_m": 0.04704321155778303,
+          "rmse_m": 0.15698182979685393,
+          "p95_abs_m": 0.10519263446331009,
+          "bias_m": 0.012462925936257545,
+          "squared_error_share": null
+        },
+        "regions": {
+          "depth_step_band": {
+            "valid_sensor_pixels": 1415,
+            "overlap_pixels": 1243,
+            "pixels": 1243,
+            "mae_m": 0.200541019775363,
+            "rmse_m": 0.34924304204454465,
+            "p95_abs_m": 0.7061155557632446,
+            "bias_m": -0.10867274857679875,
+            "squared_error_share": null
+          },
+          "missing_depth_band": {
+            "valid_sensor_pixels": 1205,
+            "overlap_pixels": 850,
+            "pixels": 850,
+            "mae_m": 0.12891094214775983,
+            "rmse_m": 0.3565534266309147,
+            "p95_abs_m": 1.2461458802223198,
+            "bias_m": 0.12283581151681788,
+            "squared_error_share": null
+          },
+          "image_border": {
+            "valid_sensor_pixels": 282,
+            "overlap_pixels": 0,
+            "pixels": 0,
+            "mae_m": null,
+            "rmse_m": null,
+            "p95_abs_m": null,
+            "bias_m": null,
+            "squared_error_share": null
+          },
+          "interior": {
+            "valid_sensor_pixels": 12075,
+            "overlap_pixels": 10625,
+            "pixels": 10625,
+            "mae_m": 0.022536355405695298,
+            "rmse_m": 0.07112080666860708,
+            "p95_abs_m": 0.0524121761322021,
+            "bias_m": 0.017804543882257797,
+            "squared_error_share": null
+          }
+        }
+      }
+    ],
+    "limitations": [
+      "Depth edges here are detected from the held-out ground truth ONLY for analysis, never training.",
+      "Depth-step proximity is correlated with edges, but cannot prove the cause of a residual.",
+      "Pixel errors are not statistically independent (same sequence and local surfaces).",
+      "Measured missing surfaces are counted by coverage, not imputed.",
+      "Unmeasured depth cannot establish spurious predicted geometry.",
+      "This is not a laser-scanned 3D accuracy benchmark."
+    ]
+  },
+  "raw_mesh_sha256": "16aa524c1bdc04e474f59a33f70dd441a2261f0b76c78dd2f720f9bea4471922",
+  "pinned_public_archive_sha256": "a0236d97b8c30cd93b653656d2b6c293ff7c982a4130ef2a1a8beecdb124ef98",
+  "interpretation_rules": [
+    "A large fraction of RMSE may come from very few large residual pixels.",
+    "Association with held-out depth discontinuities is a correlation, not a causal attribution.",
+    "Do not filter or remove any pixels when quoting the original baseline RMSE and coverage.",
+    "Do not claim precision from unobserved scene surfaces or independently unknown poses.",
+    "Do not use held-out pixels to train or tune the TSDF (post-hoc diagnostics only)."
+  ],
+  "elapsed_seconds": 35.741
+}

@@ -1,0 +1,433 @@
+{
+  "version": "AB-V2-final",
+  "status": "completed_AB_V2_both_research_gates_passed_not_independent_3D_truth",
+  "created_utc": "2026-10-25T15:54:18.338819+00:00",
+  "git_sha": "69c5f80d6f4b33f228ceb150bd3c49902bf0d405",
+  "run_url": "https://github.com/REDrighthand05/echo4d/actions/runs/40209071859",
+  "purpose": "48 same real RGB+sensor-depth train, 12 same withheld-Z compare GT-pose A and SfM-pose B; never use GT for B",
+  "limits": [
+    "First public AB trial on one TUM sequence only.",
+    "TUM GT frame 25 excluded from NEW V2 train and heldout before first trial.",
+    "Existing V1 48/12 reports are separate and must not be numerically compared to V2.",
+    "Depth comes from physical sensor, not RGB-only depth inference.",
+    "Both A/B have incomplete regions and share sensor biases; not independent laser ground truth."
+  ],
+  "b_result": {
+    "metric_stage": {
+      "source_sha256": "a0236d97b8c30cd93b653656d2b6c293ff7c982a4130ef2a1a8beecdb124ef98",
+      "scale_m_per_sfm_unit": 0.049842820169744645,
+      "metric_se3_heldout_rmse_m": 0.015308865375987066,
+      "gt_only_for_post_calibration_evaluation": true
+    },
+    "dataset_conversion": {
+      "output": "/home/runner/work/_temp/tum-static-ab-v2/b-sensor-recording",
+      "training_frames": 48,
+      "heldout_frames": 12,
+      "sensor_scale_m_per_sfm_unit": 0.049842820169744645
+    },
+    "split_sha256": "1611c066d0f37bea6319f38152b28b29287cfc18df0c6938902b3bce24484742",
+    "input_manifest_sha256": "8967cc58743d01c06ef9a71739172ed8482c51bf19aa87c6a6aa0b8d31c641b6",
+    "sensor_provenance_sha256": "9e8ed35e508331c49f2a595b0669f40e900c5350fa81463a3020f0dedb77496e",
+    "pre_registered_bounds": [
+      -2.061554056694922,
+      -0.7318124404331692,
+      0.35006088275642694,
+      1.1897345140088456,
+      1.1651006725785902,
+      3.345512808101213
+    ],
+    "tsdf_config": {
+      "voxel_m": 0.07,
+      "max_voxels": 1500000,
+      "max_depth_m": 4.0,
+      "min_observations": 2,
+      "percentiles": [
+        2.0,
+        98.0
+      ],
+      "margin_m": 0.3
+    },
+    "mesh_result": {
+      "output": "/home/runner/work/echo4d/echo4d/artifacts/tum-static-ab-v2/mesh",
+      "frames": 48,
+      "vertices": 2518,
+      "triangles": 4064,
+      "elapsed_seconds": 0.42296100100003287,
+      "mesh_sha256": "a5273c0d38117d6f2063b6edc9c49adb9c71f8e38c2f2bc35cfb3d63a33d5897"
+    },
+    "mesh_heldout": {
+      "version": "echo-b-mesh-heldout-1",
+      "source_kind": "measured_registered_z_depth",
+      "mesh_sha256": "a5273c0d38117d6f2063b6edc9c49adb9c71f8e38c2f2bc35cfb3d63a33d5897",
+      "pose_kind": "RGB COLMAP + external three-frame sensor depth scale",
+      "gt_camera_poses_loaded": false,
+      "holdout_frames": 12,
+      "valid_measured_pixels": 177475,
+      "overlap_pixels": 165555,
+      "missing_surface_pixels": 11920,
+      "coverage": 0.9328356106493872,
+      "mae_m": 0.03629751109856567,
+      "bias_m": 0.007631073950756313,
+      "rmse_m": 0.10982795919910932,
+      "median_abs_m": 0.013624906539916992,
+      "p95_abs_m": 0.10585374832153302,
+      "within_3cm": 0.7336836700794298,
+      "within_5cm": 0.8447947811905409,
+      "within_10cm": 0.9451783395246293,
+      "within_30cm": 0.9839328319893691,
+      "screening_gate_coverage_gte_80pct": true,
+      "screening_gate_overlap_rmse_lte_15cm": true,
+      "screening_gate_passed": true,
+      "limitations": [
+        "Holdout sensor depths were not fused into TSDF or used to compute bounds.",
+        "Scale came from 3 separate measured sensor-depth anchors, never GT Sim(3).",
+        "B arm uses estimated metric SfM poses, not TUM ground-truth camera poses.",
+        "Depth and scale use the same public RGB-D sensor: NOT external laser-scan surface truth.",
+        "Neighboring frames and underlying sensor share errors and scene observations.",
+        "MAE/RMSE are conditional on overlapping valid pixels; missing geometry is reported by coverage.",
+        "First pass screening thresholds are research-only and do not certify consumer-level 3D accuracy."
+      ]
+    },
+    "mesh_heldout_report_sha256": "ca1cd311b33159406adf624e0e702e2d01bc9f93785f475757a0b842547a3ddf"
+  },
+  "b_stage_completed_before_A_GT_reference_opened": true,
+  "gt_reference": {
+    "groundtruth_sha256": "aac0319a6ef4e1cdf61e779d2152b95aa7e9f7b1749d6d18717b43ddabffede2",
+    "missing_across_all_90": [
+      "frame_00025.png"
+    ],
+    "pre_registered_excluded_from_AB": [
+      "frame_00025.png"
+    ]
+  },
+  "identical_training_inputs": {
+    "frames": 48,
+    "training_data_sha256": [
+      {
+        "name": "frame_00000.png",
+        "rgb_sha256": "56880d5c789515a082f3cdb02ec7d632c18a818f75b258fc0a12cfddba633a35",
+        "measured_z_sha256": "f8e16692375d2b41007916fdd24c3029bcc5e1fcce03776668dabaae207a3966"
+      },
+      {
+        "name": "frame_00001.png",
+        "rgb_sha256": "4439129075aa6e4394441c941918685cb199bac0e163c849c180993f805583bf",
+        "measured_z_sha256": "0ee3a809c1f14187dc6764f28ae6a9ba5e273635fe827348c5d730e7a08f447a"
+      },
+      {
+        "name": "frame_00002.png",
+        "rgb_sha256": "799fb0b194a55228f28630453d095b99a1ec40f5b7845c8532d207f80a152744",
+        "measured_z_sha256": "5014ff8c7bf0d00714fcb52d551eb52c890c270efccbdabc45d578e728bb8ae3"
+      },
+      {
+        "name": "frame_00003.png",
+        "rgb_sha256": "cbd7f8eaba792b81bb2ef5fbc6c3d51ff75e180f6fa0c2b88f92d38b2ba479e6",
+        "measured_z_sha256": "35cfee7818ad27173abed8e02bee6c2b5f5e7cf446ecf0c611b2971ab6871da3"
+      },
+      {
+        "name": "frame_00006.png",
+        "rgb_sha256": "427f698a2bc0ffb2d50ff13abb471f2314973ba7d50bb12c7610092a016419e3",
+        "measured_z_sha256": "ee80080eb8953070142ca4775ea3549d475e46a6bac40aac1c769c0e1d956fdc"
+      },
+      {
+        "name": "frame_00007.png",
+        "rgb_sha256": "2834ad97541bf07c4f5af8dccdd690b3fdf14bd95dc2df5c67f9c9a68959c672",
+        "measured_z_sha256": "8aed9de2ad446d45000d7ec884e083138852c74c70644154d09d81c45d07259b"
+      },
+      {
+        "name": "frame_00008.png",
+        "rgb_sha256": "40caae53fb92a128fa5177d31b6e0c93e6b83efae636ec72dc73f97128cf739a",
+        "measured_z_sha256": "ea08a309fe565d50fcb4057d674920aea439e2a96e149a845d3228adc9654189"
+      },
+      {
+        "name": "frame_00011.png",
+        "rgb_sha256": "7e827ab3b493466bb79e9e22fd153a37dc03a2b9b35a62d10019893d2b4fa07b",
+        "measured_z_sha256": "02a19097b6fcfc5b9d0be626d501e9f1a0c5592c2abe20fd0ef81c29b7b1402f"
+      },
+      {
+        "name": "frame_00012.png",
+        "rgb_sha256": "a623ec1fb3862c9e7ead14c55ea9e93c2b56b13f4e67aed6f3b04eee3fe782b6",
+        "measured_z_sha256": "2b733e57727b31786f2c47c548351a3163320ff669415edb12346eb409e3e9f1"
+      },
+      {
+        "name": "frame_00013.png",
+        "rgb_sha256": "0bbf15f3ad807d3cc0059d8168c68690e5bfbf9f405cd88f7ac6f0812b737803",
+        "measured_z_sha256": "2ed6448e42e2ef98c4180a6f29d2f2bcaceacf2cce030cdc277a8bd187e1c377"
+      },
+      {
+        "name": "frame_00015.png",
+        "rgb_sha256": "c7f250854624b1ac1122d4ce433d7168c4b7a4351c482fdedea667748d743cd6",
+        "measured_z_sha256": "6d2715aeb1650a871370cf3bcdf07ef47180191ed9a02424fd0f79446479bed9"
+      },
+      {
+        "name": "frame_00016.png",
+        "rgb_sha256": "2d9ad7fa7b30f74666018c0b798fe9c5fd244213e130012140787295a09c4cda",
+        "measured_z_sha256": "d12af0d6ba92f1d8d7d6d252008fa75425898c9ee24e8cbf5d771a0b12344cbb"
+      },
+      {
+        "name": "frame_00017.png",
+        "rgb_sha256": "07842a7210e3e341c7bc757f68a5f90c37e3f061102beafd6e9520ea859363ba",
+        "measured_z_sha256": "bcde26d9363e735082e4401b2603307c355b9f6cc95ebe6c27d29152b289adeb"
+      },
+      {
+        "name": "frame_00018.png",
+        "rgb_sha256": "ae154a611ccb4edc4b5fb676f413f7f3272a51d1c042a32822fca511ed6cb6d5",
+        "measured_z_sha256": "cc77655c5a2d30ef56719bac03c3bc8ca5f8e71a6883066dd09c8ae20dc9885e"
+      },
+      {
+        "name": "frame_00020.png",
+        "rgb_sha256": "be549f6c09b1a3ef1b21a88e565e6c0cdb7cbac6b6dce774c6b8427d3817f08e",
+        "measured_z_sha256": "ef7020f93786e1a2dfdda5f74ad7acef35b62ff42d833d9d4608b1780bec2421"
+      },
+      {
+        "name": "frame_00021.png",
+        "rgb_sha256": "a7ba810755405726f5cce8185e89153ba5e363d9d175a91745fe004bacc3d02f",
+        "measured_z_sha256": "bfe4f0f7dfeefaa625287817a03cbeb3443310dfe7402a2cefaa29baaa18a36f"
+      },
+      {
+        "name": "frame_00022.png",
+        "rgb_sha256": "4764907e4fb196077e6f93b81d149a0cfd1bca02c663d869051bdc762dba8bd4",
+        "measured_z_sha256": "4ff278058fccc4dcdf8617054fa71d33a8676b090b7dd53567e9f4c8abb04ec7"
+      },
+      {
+        "name": "frame_00023.png",
+        "rgb_sha256": "51318c29a5f487a418324b7662e5a4a5f76fa37347d9ab73c53eb1471401259a",
+        "measured_z_sha256": "c50060c19d30b0066b1c3e95a6c40cd7625013d3a005ca2734a3137a0addad7a"
+      },
+      {
+        "name": "frame_00027.png",
+        "rgb_sha256": "08d9433f9628e921580f14d08e82f196f482e9f9f73410af36303b576f989e18",
+        "measured_z_sha256": "d0711aa016ffc44f1ab78996123d0693c914302c055c354b5c094abf4994421c"
+      },
+      {
+        "name": "frame_00028.png",
+        "rgb_sha256": "9880eeba7d6898cef062ca3227a95f27b73b43fff5a51064f64d6a37a60bf9e9",
+        "measured_z_sha256": "7e5dc6666e4f79a5bff0d2d532c1ca806628a6204e224f85ef9326bad425b6d3"
+      },
+      {
+        "name": "frame_00030.png",
+        "rgb_sha256": "dbd73e977228959c9c7b95e6966de19397363ddaa86ea54d706cc729c646fda0",
+        "measured_z_sha256": "8c425239968d385435afc6f9f2914fb12e1e72f78ba5ada2405a22307d8de1d7"
+      },
+      {
+        "name": "frame_00031.png",
+        "rgb_sha256": "b6d23cbe67a4e33a8154ee03f1110db2a8d13ba3f4cda5a66ef8e10d69bf903e",
+        "measured_z_sha256": "4d3ad396baecdee2daeeb89f92abd9f3fb27d06dac4c2a716026e0f1d5ff97f7"
+      },
+      {
+        "name": "frame_00032.png",
+        "rgb_sha256": "2d0b0e09b316e5a32628e323712190ab3e1f2af35918f074ae65b54dc8adfab8",
+        "measured_z_sha256": "1acfd0ff173618db2bb2804845456cf63aa7e2da9fd9fdef1f6fec91322c51aa"
+      },
+      {
+        "name": "frame_00033.png",
+        "rgb_sha256": "651ca4ca33e8965397fe6eb179a133feb5c92619dc8511aef4dd24f2818a26e2",
+        "measured_z_sha256": "201a03287b4219d6511b0e1d761349cc1da13c8876298fdee52f26443bb78239"
+      },
+      {
+        "name": "frame_00036.png",
+        "rgb_sha256": "2235d56bce435317ef2cd0d0caf1d57142e162f9c578fb7557523923dd42947a",
+        "measured_z_sha256": "98644249008bf4a96e497bf46565d1171b0ba3e53bfc1a42775e2d56b9d6224b"
+      },
+      {
+        "name": "frame_00037.png",
+        "rgb_sha256": "6d08fa584b4230d5cc972a9dea798999516efc828b8505b89e285f6a6bbefdb4",
+        "measured_z_sha256": "34d3db51e4eb98a1f4dbaeffac66a600c3b5a5a6015a3080fdf0abcab9f158d4"
+      },
+      {
+        "name": "frame_00038.png",
+        "rgb_sha256": "2c777b80052a4c115ebc99ac61699706e9d84028f6704e7ab16889b2ff8d12c8",
+        "measured_z_sha256": "cb67c30ce1d7cd66bf05ea9d428a2df9b5a63d2ece3337dc41b988e0b53a7aac"
+      },
+      {
+        "name": "frame_00039.png",
+        "rgb_sha256": "beb6c39b8e06e515dde9f5f10da4c4af7958afb5b4e7cca753f20ba6209fa55d",
+        "measured_z_sha256": "6df68564825ef39012cfdf6c64f91112721b36d68ae57deaf61f32fddab97630"
+      },
+      {
+        "name": "frame_00040.png",
+        "rgb_sha256": "7dccf4d34bd3f02c866ad11732a638f4338a20fdcf479c7f5d396049cbe772a1",
+        "measured_z_sha256": "15cdaf0d35ee2bd258f9dab5270d5f3ed512d39662bafab18c72d49956e5fcba"
+      },
+      {
+        "name": "frame_00041.png",
+        "rgb_sha256": "51f62f9a577861b72dc3dcbd7ad1112aa9c7b0504ea1a5adb5fa788d855b7c41",
+        "measured_z_sha256": "a47d128a696aae864e8c0f6ebe13c2b8d0244953f677636470a8e7f960f93d5a"
+      },
+      {
+        "name": "frame_00042.png",
+        "rgb_sha256": "78d07ccab20b812321ea0a685a414b8ccbf05b14f35ca3cf2f5246ad7f639223",
+        "measured_z_sha256": "f479ced766dd064fb8cb06165773bb1f9a5da404a81ee0fe1ef11085c63db917"
+      },
+      {
+        "name": "frame_00043.png",
+        "rgb_sha256": "6f03e20d69da818621aa587d6332b06ca7d5870d733429d33c0fdad52420ee41",
+        "measured_z_sha256": "275d22e4747d3bdf86bb11e0954335fe9b3baf704837954c3b8baedaf69f4601"
+      },
+      {
+        "name": "frame_00044.png",
+        "rgb_sha256": "1cff05a8a1dd77730baf6328f211fd0182eb3d4f36bd5d79c30d0ecc869bee09",
+        "measured_z_sha256": "c7e06ff716853bbab95cc70853600c77cc8cdf1501da6d68dd12f3966da8bf80"
+      },
+      {
+        "name": "frame_00045.png",
+        "rgb_sha256": "55b73ae52e0800b4d95d3e182d98df723bde24a67acd17fd2d289868a6aff30e",
+        "measured_z_sha256": "12693129ecda25d8fdea452ce14c1c034cb4cf98df768005654b37bed1821f9f"
+      },
+      {
+        "name": "frame_00046.png",
+        "rgb_sha256": "e76ce1b39ebd82e31e830061dcbfa3843c426074fbed7746536ab68d65179938",
+        "measured_z_sha256": "9e983823dc0ad1aaf618df901b810e5fd04cdf03b034de3f9c4b5da73e739a64"
+      },
+      {
+        "name": "frame_00047.png",
+        "rgb_sha256": "178cd8f9a776ca1e7eae2b54dade1e756e9aff330a9b181192b5934401bc0b9a",
+        "measured_z_sha256": "b6b0e63cde50998f1d20953c9acbd0613a82536326f1b8efb8fac365f59fa7ea"
+      },
+      {
+        "name": "frame_00048.png",
+        "rgb_sha256": "8f9631fdf983078600ac555a9f80d207f3f9aa806c0c89b705f62730e2412895",
+        "measured_z_sha256": "81a34ac88549f9b5233c6204ac6a47f713a56180d9acdd93fde4e60943fc22d1"
+      },
+      {
+        "name": "frame_00049.png",
+        "rgb_sha256": "5a9d8e1927bd5d6da32d194c4683c2713894bcf9e815e5339a5db48f4e01bf57",
+        "measured_z_sha256": "d3a47b434e1de246ba21d81bc01f355476a7b05cca983ed0b1047568ee4f02ce"
+      },
+      {
+        "name": "frame_00050.png",
+        "rgb_sha256": "82144f0f6bbe83dcf0045b4471ec3598a8a297e5b5b8042d5378101a6468bb07",
+        "measured_z_sha256": "64f0263991c88bb653873cad0bf93f29fdd2c3d6603c408a7d67468a23b94d33"
+      },
+      {
+        "name": "frame_00051.png",
+        "rgb_sha256": "c751651f7f576d9f9d1b38825f706c449b21e0dcd38e0fe5e4514cc4bab4a57e",
+        "measured_z_sha256": "468004aea0aab06cceea322d6b8f4325faf6983d21f95e06e5471607cbebd5bc"
+      },
+      {
+        "name": "frame_00052.png",
+        "rgb_sha256": "a281560db257cbd2df7d11570da7976c88220db1ecdef4d859f800ba4f6de5ce",
+        "measured_z_sha256": "ede52230413d3dc545ae0683e5af255967bd5f502866f80a5d64d7a2e7d3a419"
+      },
+      {
+        "name": "frame_00053.png",
+        "rgb_sha256": "198411291d0c3e3194a2d537f70b8d9c75d07e0f1338e1ff48260ec1408361e3",
+        "measured_z_sha256": "872ed89f8f5da84e3a3f4ed8d11e0d066264554c076fd0f4c50781e3e3fe66fb"
+      },
+      {
+        "name": "frame_00054.png",
+        "rgb_sha256": "ab3091c64daa3772287a51378cd64e3db3d58b2932f4f3ebb11b9b9232cbf181",
+        "measured_z_sha256": "aa72966a0c55d75a5fdbe84ba1282e1f90c06ce6369cee4092c06d4fcd8a8531"
+      },
+      {
+        "name": "frame_00056.png",
+        "rgb_sha256": "f1c5aaefb2bae452334ca31d1850f67d77d51e363c959dac79a8a51f56831081",
+        "measured_z_sha256": "4c31ae7a392aea04a20a4f9e52059ea2342c00e7c32a931be19fde22448107f8"
+      },
+      {
+        "name": "frame_00057.png",
+        "rgb_sha256": "07bb3ba6b51e409750cc4da4b78c0c9e63ba7b901896f939e5625fd768ec3d03",
+        "measured_z_sha256": "0a75e7a323f723b3aa001699885fdeebc78f528fdde13860b72c603053d40355"
+      },
+      {
+        "name": "frame_00058.png",
+        "rgb_sha256": "55cdad810957e8a21a454d5b52b6ab82c58d81f2c526c31971a20af507ed155f",
+        "measured_z_sha256": "03f752bfb46041f3160a240b24b934594d9d76374636eb2045e516f7a86669fa"
+      },
+      {
+        "name": "frame_00059.png",
+        "rgb_sha256": "a249b18119babe405c7ae7cf0b4302fe397998233d19867cd353f1969b6254bc",
+        "measured_z_sha256": "3b1c2cbd1a77aedba1f2b7b5c97ce48fd6a053f6bd7cf209ab86f89b23a89f34"
+      },
+      {
+        "name": "frame_00060.png",
+        "rgb_sha256": "7a49f7cccb485cc45c6ece09efc823bfdb8252cc1894e876605ce705d328048e",
+        "measured_z_sha256": "18c5aa80d5466aaf24906913be690a8b92649f2aed13b915464f7138409c4230"
+      }
+    ],
+    "a_manifest_sha256": "23e892ff5ae9d848bf61817e9c29641472eaa92322d56d2826aaef554937eba1",
+    "b_manifest_sha256": "8967cc58743d01c06ef9a71739172ed8482c51bf19aa87c6a6aa0b8d31c641b6"
+  },
+  "a_bounds_m_from_same_training_depth_only": [
+    -2.0033745518590305,
+    -1.209980775961211,
+    -0.31904046762884,
+    1.2315781386078495,
+    1.8936139653409299,
+    1.5005956261084819
+  ],
+  "a_mesh_result": {
+    "output": "/home/runner/work/echo4d/echo4d/artifacts/tum-static-ab-v2/a-known-pose-mesh",
+    "frames": 48,
+    "vertices": 2270,
+    "triangles": 3773,
+    "elapsed_seconds": 0.4114706259999821,
+    "mesh_sha256": "7c83972f794dc1ad90041d36475be9d1a46d9916c576f8c754efd132310170b4"
+  },
+  "a_heldout_report_sha256": "ae1b2f22bb2cd3983f94f371ffaa744223df61165b3a4598585b94f130f92be8",
+  "ab_comparison": {
+    "version": "AB-V2-final",
+    "same_48_training_rgb_and_depth_files": true,
+    "same_12_withheld_depth_views": true,
+    "split_sha256": "1611c066d0f37bea6319f38152b28b29287cfc18df0c6938902b3bce24484742",
+    "A_known_pose": {
+      "version": "echo-b-mesh-heldout-1",
+      "source_kind": "measured_registered_z_depth",
+      "mesh_sha256": "7c83972f794dc1ad90041d36475be9d1a46d9916c576f8c754efd132310170b4",
+      "pose_kind": "TUM measured ground-truth camera pose (A reference arm)",
+      "gt_camera_poses_loaded": true,
+      "holdout_frames": 12,
+      "valid_measured_pixels": 177475,
+      "overlap_pixels": 164723,
+      "missing_surface_pixels": 12752,
+      "coverage": 0.9281476264262573,
+      "mae_m": 0.04268410088016204,
+      "bias_m": 0.010008980664723886,
+      "rmse_m": 0.12815143815592767,
+      "median_abs_m": 0.015508055686950684,
+      "p95_abs_m": 0.11425605416297907,
+      "within_3cm": 0.6925444534157343,
+      "within_5cm": 0.8101358037432538,
+      "within_10cm": 0.9384056871232311,
+      "within_30cm": 0.9792560844569368,
+      "screening_gate_coverage_gte_80pct": true,
+      "screening_gate_overlap_rmse_lte_15cm": true,
+      "screening_gate_passed": true
+    },
+    "B_estimated_pose_sensor_scale": {
+      "version": "echo-b-mesh-heldout-1",
+      "source_kind": "measured_registered_z_depth",
+      "mesh_sha256": "a5273c0d38117d6f2063b6edc9c49adb9c71f8e38c2f2bc35cfb3d63a33d5897",
+      "pose_kind": "RGB COLMAP + external three-frame sensor depth scale",
+      "gt_camera_poses_loaded": false,
+      "holdout_frames": 12,
+      "valid_measured_pixels": 177475,
+      "overlap_pixels": 165555,
+      "missing_surface_pixels": 11920,
+      "coverage": 0.9328356106493872,
+      "mae_m": 0.03629751109856567,
+      "bias_m": 0.007631073950756313,
+      "rmse_m": 0.10982795919910932,
+      "median_abs_m": 0.013624906539916992,
+      "p95_abs_m": 0.10585374832153302,
+      "within_3cm": 0.7336836700794298,
+      "within_5cm": 0.8447947811905409,
+      "within_10cm": 0.9451783395246293,
+      "within_30cm": 0.9839328319893691,
+      "screening_gate_coverage_gte_80pct": true,
+      "screening_gate_overlap_rmse_lte_15cm": true,
+      "screening_gate_passed": true
+    },
+    "A_gate": {
+      "coverage_minimum": 0.8,
+      "rmse_maximum_m": 0.15,
+      "passed": true
+    },
+    "B_gate": {
+      "coverage_minimum": 0.8,
+      "rmse_maximum_m": 0.15,
+      "passed": true
+    },
+    "interpretation": "Only one real TUM RGB-D sensor sequence, not an independent laser scan. Difference combines pose, TSDF bounds and reconstruction randomness; it cannot be uniquely assigned to pose error."
+  },
+  "duration_seconds": 179.369
+}

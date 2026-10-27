@@ -25,6 +25,27 @@ echo4d reconstruct outputs/demo/recording.json --output outputs/result --bounds 
 
 结果目录必须不存在；重跑请选择新目录。程序不会清空已有结果。`demo` 是解析盒体生成的合成传感器数据，不是真实采集。
 
+## 静态场景整合候选
+
+本分支收敛了视频定位、传感器定尺度、实测深度融合和留出误差检查。它仍为工程验证版：**生成表面需要已配准的实测深度；普通 RGB 视频本身不提供完整米制表面。**
+
+已有去畸变 COLMAP TEXT 相机模型、逐图时间戳 CSV、同名 RGB 图片和浮点米制 NPY 深度时，统一导入入口为：
+
+```bash
+echo4d import-colmap --model datasets/model --images datasets/rgb --depth datasets/depth --timestamps datasets/times.csv --meters-per-colmap-unit 0.05 --scale-source "独立实测尺度说明" --output outputs/imported
+echo4d validate outputs/imported/recording.json
+```
+
+`0.05` 只是格式示例，必须换成实际测得的比例。这个比例只换算相机位置；已经是米的深度不会再次缩放。导入后按实际场景确定 `reconstruct --bounds`。输入格式见 [COLMAP 导入](docs/COLMAP_IMPORT.md)。#19 的 depth-index/整数 PNG 便利输入尚未迁入这个入口。
+
+公开 TUM 端到端对照（会下载约0.42GB数据，另需安装 CPU COLMAP 和 FFmpeg）：
+
+```bash
+python tools/tum_static_ab.py --work outputs/tum-ab-work --report-dir outputs/tum-ab-report
+```
+
+程序分别用参考相机位置和软件估计位置重建，再用相同12张未融合深度检查。查看 `ab-comparison.json`、`ab-run-report.json` 和两组 `mesh.ply`；覆盖率与覆盖区域内误差需同时阅读。[复现协议](docs/STATIC_FAIR_AB.md)和[整合清单](docs/INTEGRATION_20261026.md)列出来源、固定数据划分和剩余限制。
+
 打开检查台：
 
 ```bash
@@ -42,6 +63,10 @@ python -m http.server 8080 --bind 127.0.0.1 --directory dist
 | `src/echo4d/tum.py` | TUM 时间关联、SLERP 旋转插值、标定保持降采样 |
 | `src/echo4d/output.py` | 二进制 PLY、证据数组、场景导出、失败回滚 |
 | `src/echo4d/evaluation.py` | 与独立、已对齐参考点集比较 |
+| `src/echo4d/colmap.py` | 唯一 COLMAP 导入核心、数值尺度与严格输入校验 |
+| `src/echo4d/video_sfm.py` | FFmpeg / CPU COLMAP 视频定位，输出未知尺度轨迹 |
+| `src/echo4d/metric_anchor.py`、`metric_rgbd.py` | 实测深度定尺度与训练深度桥接 |
+| `src/echo4d/metric_holdout.py` | 统一三角形投影与未融合深度评分 |
 | `dist/` | 无第三方运行时依赖的浏览器检查台；WebGL / Canvas |
 | `tests/` | 数值、边界、命令行端到端、跨语言数据契约测试 |
 | `tools/verify.py` | 自动测试及 Python → JavaScript 场景导出验收 |
@@ -88,7 +113,7 @@ python tools/package_source.py --output artifacts/echo4d-source.zip
 
 ## 边界
 
-当前依赖已知位姿，重建静态表面；动态物体需要外部排除掩码。没有 SLAM、回环闭合、自动人体识别、身份跟踪、可穿戴驱动或穿墙感知。人物关节是世界坐标输入，插值不构成历史事实。
+重建内核需要逐帧位姿和米制深度；实验工具可从视频估计位姿，再借助实测深度定尺度。当前重建静态表面，动态物体需要外部排除掩码。没有实时 SLAM、自动人体识别、身份跟踪、可穿戴驱动或穿墙感知。人物关节是世界坐标输入，插值不构成历史事实。
 
 默认最多 400 万体素，数组约 128 MB，提取网格还需要额外内存。观测次数不是校准置信概率。模型不补洞、不保证无自交或可打印。面向部署的限制与验收要求见 [运行说明](docs/OPERATIONS.md)。
 
