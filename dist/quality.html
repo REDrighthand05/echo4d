@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="ECHO 实景重建质量工作台：本地对比原始照片、对应网格视角与自由视角。">
+  <title>ECHO · 真实场景验收</title>
+  <link rel="stylesheet" href="./quality.css">
+  <script type="module" src="./quality.mjs"></script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="./index.html"><span class="logo">◉</span><strong>ECHO</strong><span>回声</span></a>
+    <nav aria-label="工作区导航"><a href="./index.html">时空回放</a><a class="selected" href="./quality.html" aria-current="page">实景验收</a><a href="https://github.com/REDrighthand05/echo4d/blob/main/docs/PRODUCT_NORTH_STAR.md" target="_blank" rel="noopener noreferrer">项目初心 ↗</a></nav>
+    <span class="mode">本地处理 · 不上传</span>
+  </header>
+  <main>
+    <section class="intro">
+      <div><p class="eyebrow">SPATIAL MEMORY / REALITY CHECK</p><h1>能认出过去的那个地方吗？</h1><p class="lead">同一份真实场景 Mesh，要能对上清晰原始照片，也要经得起自由第三人称观察。没有证据的地方，宁愿留空。</p></div>
+      <div class="statusbox"><span class="dot"></span><div><small>当前阶段 · Issue #74</small><strong>未通过实景验收</strong><p>本页帮助整理证据，不自动判定算法成功。</p></div></div>
+    </section>
+    <section class="stats" aria-label="当前验收条件">
+      <article><span>01 / 输入来源</span><strong>原始高清 RGB</strong><small>不能用 80×60 预览伪装原图</small></article>
+      <article><span>02 / 相机对应</span><strong>3 对固定视角</strong><small>源照片 ↔ 同一 Mesh 的实际投影</small></article>
+      <article><span>03 / 空间可信度</span><strong>2 个自由视角</strong><small>明显碎片、空洞、错误结构必须标注</small></article>
+      <article><span>04 / 独立验收</span><strong>12 帧留出 + 审阅</strong><small>缺机器证据与人工判读不能 PASS</small></article>
+    </section>
+    <div class="layout">
+      <section class="workspace">
+        <div class="section-head"><div><span class="eyebrow">CAPTURE VS RECONSTRUCTION</span><h2>原图 / 同视角 Mesh</h2></div><span id="pairsCount" class="tag">0 / 3 组齐全</span></div>
+        <p class="helper">每组需要一张从合法来源获取的原始清晰照片，以及基于同一个真实 Mesh 和对应相机位姿渲染的截图。上传图像不能证明位姿或模型一致，需要另附报告。</p>
+        <div id="pairs" class="pairs" aria-label="三个固定视角"></div>
+        <div class="section-head smallhead"><div><span class="eyebrow">OUTSIDE THE CAMERA</span><h2>自由观察视角</h2></div><span id="orbitCount" class="tag">0 / 2 张</span></div>
+        <p class="helper">用同一个真实 Mesh，从两个不同的第三人称位置观察。不能用手工制作或 AI 替换模型冒充重建。</p>
+        <div id="orbits" class="orbits"></div>
+      </section>
+      <aside class="sidebar">
+        <section class="panel">
+          <p class="eyebrow">CURRENT BASELINE / FROZEN</p>
+          <h2>已有实拍结果</h2>
+          <p>desk V2 原冻结实验：留出深度覆盖率 <strong>93.7357%</strong>；RMSE <strong>16.7779 cm</strong>，超过 15 cm 筛选上限。</p>
+          <div class="warning">深度筛选：FAIL</div>
+          <p class="subtle">这是已归档旧实验，不是当前上传图片的评估结果。也没有独立实物表面真值结论。</p>
+        </section>
+        <section class="panel">
+          <p class="eyebrow">EVIDENCE COMPLETENESS</p><h2>材料是否齐全</h2>
+          <div class="progress-track"><div id="progressFill" class="progress-fill"></div></div><strong id="progressText">0 / 8 图像材料</strong>
+          <ul id="gateList" class="gate-list" aria-live="polite"></ul>
+          <p class="subtle">图像齐全只是“可送审”，不是“审核已通过”。完整来源、位姿、Mesh 哈希、12 帧未融合评分和人工审阅仍需独立核实。</p>
+        </section>
+        <section class="panel">
+          <p class="eyebrow">REVIEW NOTES</p><h2>场景与证据说明</h2>
+          <label for="sceneId">场景 / 实验标识</label><input id="sceneId" placeholder="例如：desk-v3-20261027" maxlength="100" autocomplete="off">
+          <label for="meshSha">同一 Mesh SHA-256</label><input id="meshSha" placeholder="64位十六进制；来自实际输出" maxlength="64" spellcheck="false">
+          <label for="reviewNotes">审核记录与未观测区域</label><textarea id="reviewNotes" rows="5" placeholder="可辨认的墙面/台面、碎片与失配、未知范围；注明所用相机位姿、出处和运行命令。"></textarea>
+          <button class="primary" id="exportManifest" type="button">导出本地证据清单 .json</button>
+          <p class="subtle">清单记录文件名、图像像素、SHA-256 与备注。不包含图片本身。请勿将未经授权的私人影像上传至公共仓库。</p>
+        </section>
+        <section class="panel mission">
+          <p class="eyebrow">WHY ECHO EXISTS</p><h2>让生活重新成为空间</h2><p>重建过去的真实生活，而不是生成一个看起来相似的虚构世界。优先真实、来源可查、未知诚实呈现；让每条技术路线回答这个目标。</p>
+          <a href="https://github.com/REDrighthand05/echo4d/issues/1" target="_blank" rel="noopener noreferrer">阅读项目初心与边界 ↗</a>
+        </section>
+      </aside>
+    </div>
+  </main>
+  <footer>回声 ECHO · 工程验证版 · 该页面不会把文件上传到服务器，也不代表 P0 已通过。 <a href="https://github.com/REDrighthand05/echo4d/issues/74" target="_blank" rel="noopener noreferrer">查看完整验收定义</a></footer>
+</body></html>
