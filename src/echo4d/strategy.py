@@ -223,6 +223,8 @@ def _load_json_profile(path: Path) -> dict[str, Any]:
     try:
         payload = json.loads(path.read_text(encoding="utf-8"),
                              object_pairs_hook=no_duplicate_keys)
+    except DataError:
+        raise
     except (ValueError, UnicodeError) as exc:
         raise DataError("Invalid strategy profile JSON") from exc
     if not isinstance(payload, dict):
