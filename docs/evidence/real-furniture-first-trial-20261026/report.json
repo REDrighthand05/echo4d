@@ -1,0 +1,67 @@
+{
+  "version": "echo-real-furniture-first-trial-1",
+  "result": "blocked_missing_furniture_instance_evidence",
+  "verified_independent_furniture_count": 0,
+  "hi3d_used": false,
+  "invented_geometry_faces": 0,
+  "echo_source": "PR34 real RGB-D measured-depth static meshes",
+  "scenes": {
+    "a": {
+      "source_path": "docs/evidence/tum-static-ab-v2/a-known-pose-mesh.ply",
+      "sha256": "7c83972f794dc1ad90041d36475be9d1a46d9916c576f8c754efd132310170b4",
+      "vertices": 2270,
+      "triangles": 3773,
+      "connected_surface_components": 24,
+      "bounds_as_encoded": [
+        [
+          -1.9683746099472046,
+          -1.1749807596206665,
+          -0.03986535966396332
+        ],
+        [
+          1.0755318403244019,
+          1.9050191640853882,
+          1.2049248218536377
+        ]
+      ],
+      "attempted_object": "one chair or desk",
+      "decision": "BLOCKED_no_original_photo_instance_mask_and_metric_depth_association",
+      "photo_to_object_identity_verified": false,
+      "explanation": "A mesh component is not a chair/table label. No multi-view human-reviewed mask matches these room meshes."
+    },
+    "b": {
+      "source_path": "docs/evidence/tum-static-ab-v2/b-estimated-pose-mesh.ply",
+      "sha256": "a5273c0d38117d6f2063b6edc9c49adb9c71f8e38c2f2bc35cfb3d63a33d5897",
+      "vertices": 2518,
+      "triangles": 4064,
+      "connected_surface_components": 34,
+      "bounds_as_encoded": [
+        [
+          -2.0265541076660156,
+          -0.6968124508857727,
+          0.5250608921051025
+        ],
+        [
+          1.1934459209442139,
+          1.1931875944137573,
+          3.3250608444213867
+        ]
+      ],
+      "attempted_object": "one chair or desk",
+      "decision": "BLOCKED_no_original_photo_instance_mask_and_metric_depth_association",
+      "photo_to_object_identity_verified": false,
+      "explanation": "A mesh component is not a chair/table label. No multi-view human-reviewed mask matches these room meshes."
+    }
+  },
+  "fallback": {
+    "source_url": "https://graphics.stanford.edu/projects/objectsensing/data/single-chair/single-chair.zip",
+    "dataset": "Stanford Object Sensing 2015 / single-chair real Kinect RGB-D",
+    "dataset_license": "CC BY-NC-SA 4.0 (not ECHO MIT)",
+    "mesh_source": "never ShapeNet retrieval; no CAD substitute accepted",
+    "status": "fallback_unavailable_or_invalid",
+    "failure": {
+      "type": "URLError",
+      "message": "<urlopen error timed out>"
+    }
+  }
+}

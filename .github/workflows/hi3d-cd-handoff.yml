@@ -1,0 +1,48 @@
+name: Issue47 C-D furniture handoff actual module integration
+
+on:
+  pull_request:
+    paths:
+      - 'tools/real_furniture_extract.py'
+      - 'tools/hi3d_furniture_compare.py'
+      - 'tools/bounded_numeric_npz.py'
+      - 'tests/python/test_bounded_numeric_npz.py'
+      - 'tests/python/test_real_furniture_extract.py'
+      - 'tests/python/test_hi3d_cd_handoff.py'
+      - '.github/workflows/hi3d-cd-handoff.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  explicit-geometry-only-cd-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install ECHO locked CPU dependencies and optional reviewed mesh I/O
+        run: |
+          python -m pip install -r requirements.lock
+          python -m pip install --no-deps -e .
+          python -m pip install trimesh==4.11.1
+      - name: Run C source-observation identity, D source tests and exact C-export-to-D-read smoke checks
+        env:
+          PYTHONPATH: tools
+        run: |
+          python -m pytest -q -ra tests/python/test_real_furniture_extract.py tests/python/test_hi3d_furniture_evidence.py tests/python/test_hi3d_cd_handoff.py
+      - name: Verify mandatory test modules were collected, none silently skipped
+        env:
+          PYTHONPATH: tools
+        run: |
+          python - <<'PY'
+          import subprocess,sys
+          p=subprocess.run([sys.executable,'-m','pytest','-q','-rs',
+            'tests/python/test_hi3d_cd_handoff.py'],capture_output=True,text=True)
+          print(p.stdout,p.stderr)
+          if p.returncode or 'skipped' in p.stdout.lower() or 'deselected' in p.stdout.lower():
+              raise SystemExit('C/D integration test unavailable, skipped or failed')
+          PY
