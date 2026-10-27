@@ -29,7 +29,7 @@ from tum_public_roundtrip import (
     URL, VOXEL, download, extract,
 )
 
-FRAMES = 30
+DEFAULT_FRAMES = 60
 STRIDE = 12
 
 
@@ -144,10 +144,10 @@ def real_trial(args: argparse.Namespace, report: dict) -> None:
     imported = work / "tum-640px"
     cmd([sys.executable, "-m", "echo4d", "import-tum", str(source),
          "--output", str(imported), "--intrinsics", "525", "525", "319.5", "239.5",
-         "--stride", str(STRIDE), "--limit", str(FRAMES),
+         "--stride", str(STRIDE), "--limit", str(args.frames),
          "--downsample", "1", "--world-up", "z"], timeout=600)
     recording = load_recording(imported / "recording.json")
-    if len(recording) != FRAMES or recording.camera.width != 640:
+    if len(recording) != args.frames or recording.camera.width != 640:
         raise DataError("Unexpected true source resolution or frame count")
 
     reel = work / "tum-observed-frames.webm"
@@ -198,7 +198,7 @@ def real_trial(args: argparse.Namespace, report: dict) -> None:
     converted = work / "decoded-and-aligned"
     bridge = prepare_history_rgbd(archive, alignment, converted)
     after = load_recording(converted / "recording.json")
-    if len(after) != FRAMES:
+    if len(after) != args.frames:
         raise DataError("Historical RGB-D bridge dropped original TUM frames")
     poses_match, depth_match = True, True
     for (_, a, _), (_, b, _) in zip(recording.iter_frames(), after.iter_frames()):
@@ -219,7 +219,7 @@ def real_trial(args: argparse.Namespace, report: dict) -> None:
     if (mesh_out / "scene.echo.json").is_file():
         shutil.copyfile(mesh_out / "scene.echo.json", report_dir / "scene.echo.json")
     report["real_rgbd_bridge"] = {
-        "source_rgb_resolution": [640,480], "frames": FRAMES,
+        "source_rgb_resolution": [640,480], "frames": args.frames,
         "pinned_archive_sha256": PINNED_ARCHIVE_SHA256 if args.dataset is None else None,
         "video_sha256": file_sha256(reel), "video_reencode": "lossless_VP9_yuv444p",
         "time_notes": "Derived VFR reel, not a raw continuously recorded wearable camera video",
@@ -235,6 +235,8 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--work", type=Path, required=True)
     parser.add_argument("--report-dir", type=Path, required=True)
+    parser.add_argument("--frames", type=int, choices=[30, 60], default=DEFAULT_FRAMES,
+                        help="Controlled 30 vs 60 real-frame ablation; same scene, bounds and voxel size")
     parser.add_argument("--dataset", type=Path,
                         help="Previously extracted real TUM freiburg1_xyz data directory (no network)")
     args = parser.parse_args()
@@ -243,7 +245,7 @@ def main() -> int:
          "started_utc": datetime.now(timezone.utc).isoformat(),
          "official_source": URL, "source_archive_pin": PINNED_ARCHIVE_SHA256,
          "source_archive_bytes": PINNED_ARCHIVE_BYTES,
-         "sample_count": FRAMES, "stride": STRIDE, "source_downsample": 1,
+         "sample_count": args.frames, "stride": STRIDE, "source_downsample": 1,
          "commit": os.getenv("GITHUB_SHA"), "status": "started"}
     start = time.monotonic()
     try:
