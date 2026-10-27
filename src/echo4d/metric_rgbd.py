@@ -137,7 +137,8 @@ def convert_metric_sensor(
 
     if len(camera_ids) != 1:
         raise DataError("ECHO input requires one fixed camera model")
-    camera = cams[next(iter(camera_ids))].scaled(downsample)
+    source_camera = cams[next(iter(camera_ids))]
+    camera = source_camera.scaled(downsample)
     prepared.sort(key=lambda row: row[0])
     if any(b[0] <= a[0] for a, b in zip(prepared, prepared[1:])):
         raise DataError("Training frame timestamps must strictly increase")
@@ -166,7 +167,8 @@ def convert_metric_sensor(
             "source": "recorded", "units": "meters", "depth_scale": 1,
             "duration": max(entries[-1]["t"], .001), "intrinsics": camera.to_dict(),
             "frames": entries,
-            "notes": "Estimated SfM poses scaled by independent measured depth; all dense Z measurements external. Not RGB-only."
+            "notes": "Estimated SfM poses scaled by independent measured depth; all dense Z measurements external. "
+                     "Not RGB-only. RGB and measured Z may be downsampled; see sensor-provenance.json."
         })
         write_json(target / "sensor-provenance.json", {
             "version": "echo-sensor-mesh-input-1",
@@ -175,6 +177,15 @@ def convert_metric_sensor(
             "depth_split_sha256": file_sha256(split_path),
             "colmap_cameras_sha256": file_sha256(colmap_dir / "cameras.txt"),
             "sensor_scale_m_per_sfm_unit": float(scale),
+            "resolution_provenance": {
+                "source_rgb_px": {"width": source_camera.width, "height": source_camera.height},
+                "emitted_recording_px": {"width": camera.width, "height": camera.height},
+                "rgb_and_depth_pixel_stride": downsample,
+                "source_kind": "measured_registered_z_depth",
+                "note": "Source dimensions verified against COLMAP and each RGB file; "
+                        "emitted RGB and measured depth use the same pixel stride. "
+                        "A later scene preview can downsample again."
+            },
             "sensor_claim_as_supplied": split["source_description"],
             "train": receipts, "holdout_names_not_loaded": withheld,
             "limitations": ["Holdout depth not read", "No external geometry ground truth",
