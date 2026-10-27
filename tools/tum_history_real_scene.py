@@ -285,7 +285,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--work", type=Path, required=True)
     parser.add_argument("--report-dir", type=Path, required=True)
-    parser.add_argument("--min-observations", type=int, choices=[1, 2], default=1,
+    parser.add_argument("--min-observations", type=int, choices=[1, 2], default=2,
                         help="1 = preserve singly observed geometry; 2 = stricter original baseline")
     parser.add_argument("--frames", type=int, choices=[30, 60], default=DEFAULT_FRAMES,
                         help="Controlled 30 vs 60 real-frame ablation; same scene, bounds and voxel size")
