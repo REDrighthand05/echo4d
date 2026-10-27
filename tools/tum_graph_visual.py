@@ -61,7 +61,7 @@ def read_vertex_rgb(path: Path, vertex_count: int) -> np.ndarray:
     """Recover training-derived RGB from an already strict-validated ECHO PLY."""
     with Path(path).open("rb") as stream:
         header = bytearray()
-        while not header.endswith(b"end_header\\n"):
+        while not header.endswith(b"end_header" + bytes([10])):
             line = stream.readline()
             if not line or len(header) + len(line) > 4096:
                 raise DataError("Invalid bounded ECHO PLY header")

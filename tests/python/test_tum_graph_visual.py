@@ -138,3 +138,17 @@ def test_vertex_rgb_invalid_source_and_pose_fail_closed():
     points[0, 2] = .01
     image, count = rasterize_vertex_rgb(points, faces, colors, camera, np.eye(4))
     assert count == 0 and not image.any()
+
+def test_vertex_rgb_binary_ply_header_and_colors(tmp_path):
+    from tum_graph_visual import read_vertex_rgb
+    path = tmp_path / "fixture.ply"
+    dtype = np.dtype([(k, "<f4") for k in ("x", "y", "z", "nx", "ny", "nz")]
+                     + [(k, "u1") for k in ("red", "green", "blue")])
+    data = np.zeros(3, dtype=dtype)
+    data["red"] = [255, 0, 0]
+    data["green"] = [0, 255, 0]
+    data["blue"] = [0, 0, 255]
+    path.write_bytes(b"ply" + bytes([10]) + b"end_header" + bytes([10]) + data.tobytes())
+    assert read_vertex_rgb(path, 3).tolist() == [[255, 0, 0], [0, 255, 0], [0, 0, 255]]
+    with pytest.raises(DataError, match="Truncated"):
+        read_vertex_rgb(path, 4)
