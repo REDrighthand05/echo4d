@@ -5,6 +5,8 @@ on:
     paths:
       - 'tools/real_furniture_extract.py'
       - 'tools/hi3d_furniture_compare.py'
+      - 'tools/bounded_numeric_npz.py'
+      - 'tests/python/test_bounded_numeric_npz.py'
       - 'tests/python/test_real_furniture_extract.py'
       - 'tests/python/test_hi3d_cd_handoff.py'
       - '.github/workflows/hi3d-cd-handoff.yml'

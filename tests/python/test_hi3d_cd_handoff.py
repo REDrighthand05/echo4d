@@ -53,3 +53,32 @@ def test_geometry_npz_d_reader_rejects_malformed_or_unsafe_files(tmp_path,field)
         np.savez(path,vertices=np.array([{'untrusted':True}],dtype=object),faces=f)
     with pytest.raises(DataError):
         read_furniture_geometry(path)
+
+
+def test_observed_only_cli_preserves_report_but_cannot_signal_geometry_acceptance(tmp_path, monkeypatch):
+    import hi3d_furniture_compare as d
+    report = {'candidate_is_not_worse_on_frozen_metrics': True,
+              'conclusion': 'OBSERVED_METRICS_PASS_GEOMETRY_INCONCLUSIVE'}
+    monkeypatch.setattr(d, 'evaluate', lambda *args: report)
+    out = tmp_path / 'report.json'
+    code = d.main(['--ledger', 'unused', '--proof', 'unused',
+                   '--root', str(tmp_path), '--out', str(out)])
+    assert code == 3
+    assert json.loads(out.read_text()) == report
+
+
+def test_cd_resource_rejection_occurs_before_materialization(tmp_path, monkeypatch):
+    import io
+    import zipfile
+    header = io.BytesIO()
+    np.lib.format.write_array_header_1_0(header, {
+        'shape': (2_000_001, 3), 'fortran_order': False, 'descr': '<f8'})
+    p = tmp_path / 'oversized.npz'
+    with zipfile.ZipFile(p, 'w') as z:
+        z.writestr('vertices.npy', header.getvalue())
+        z.writestr('faces.npy', b'not materialized')
+    def forbidden(*args, **kwargs):
+        pytest.fail('unbounded array load')
+    monkeypatch.setattr(np, 'load', forbidden)
+    with pytest.raises(DataError):
+        read_furniture_geometry(p)

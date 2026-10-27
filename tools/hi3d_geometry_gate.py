@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 import numpy as np
 from scipy.spatial import cKDTree
+from bounded_numeric_npz import read_numeric_npz
 
 class AuditError(ValueError):
     pass
@@ -36,10 +37,12 @@ def checked(root, obj):
 def mesh(path):
     if path.suffix != ".npz":
         raise AuditError("Expected numeric mesh .npz")
-    with np.load(path, allow_pickle=False) as z:
-        if set(z.files) != {"vertices","faces"}:
-            raise AuditError("Mesh must contain only vertices and faces")
-        v, f = np.asarray(z["vertices"]), np.asarray(z["faces"])
+    try:
+        z = read_numeric_npz(path, {"vertices": (3, 2000000, 3, "fiu"),
+                                    "faces": (1, 3000000, 3, "iu")})
+        v, f = z["vertices"], z["faces"]
+    except ValueError as exc:
+        raise AuditError('Mesh must contain valid bounded vertices and faces: ' + str(exc)) from exc
     if v.ndim!=2 or v.shape[1]!=3 or v.dtype.kind not in "fiu" or not 3<=len(v)<=2000000 or not np.isfinite(v).all():
         raise AuditError("Invalid mesh vertices")
     if f.ndim!=2 or f.shape[1]!=3 or f.dtype.kind not in "iu" or not 1<=len(f)<=3000000 or f.min()<0 or f.max()>=len(v):
@@ -49,10 +52,10 @@ def mesh(path):
 def measured(path):
     if path.suffix != ".npz":
         raise AuditError("Measured point source must be numeric .npz")
-    with np.load(path, allow_pickle=False) as z:
-        if set(z.files)!={"points_m"}:
-            raise AuditError("Invalid measured point field")
-        x=np.asarray(z["points_m"])
+    try:
+        x = read_numeric_npz(path, {"points_m": (32, 500000, 3, "fiu")})["points_m"]
+    except ValueError as exc:
+        raise AuditError('Invalid independent measured points: ' + str(exc)) from exc
     if x.ndim!=2 or x.shape[1]!=3 or x.dtype.kind not in "fiu" or not 32<=len(x)<=500000 or not np.isfinite(x).all():
         raise AuditError("Invalid independent measured points")
     return x.astype(np.float64)
@@ -72,7 +75,13 @@ def similarity(flat):
     return m,scale
 
 def surface_sample(vertices,faces,count,seed=0):
-    tris=vertices[faces]
+    # Stable for triangle-list permutations and winding reversals. Without this,
+    # identical indexed geometry can receive different random surface samples
+    # and flip a near-threshold CPU acceptance result. This does NOT eliminate
+    # Monte Carlo uncertainty between genuinely different surfaces.
+    canonical=np.sort(faces,axis=1)
+    order=np.lexsort((canonical[:,2],canonical[:,1],canonical[:,0]))
+    tris=vertices[canonical[order]]
     weights=np.linalg.norm(np.cross(tris[:,1]-tris[:,0],tris[:,2]-tris[:,0]),axis=1)/2
     if not np.isfinite(weights).all() or weights.sum()<=1e-12:
         raise AuditError("Degenerate surface")
@@ -120,11 +129,24 @@ def audit(manifest,root,count=3000):
     transformed=(local@m[:3,:3].T +m[:3,3],faces)
     before=score(coarse,reference,count)
     after=score(transformed,reference,count)
-    passed=(after["measurements_to_surface_rmse_m"]<=before["measurements_to_surface_rmse_m"]+.005 and
-            after["measurement_coverage"]>=before["measurement_coverage"]-.02)
-    return {"version":"echo-hi3d-audit-report-1","status":"cpu_contract_evaluated",
+    # V2 synthetic-only screening, frozen before any real Hi3D evaluation:
+    # observed points must remain close to the candidate, AND the candidate
+    # must not add a large area unsupported by the independent measurements.
+    # Unsupported geometry is inconclusive, not proof that a plausible unseen
+    # back surface is false. The optional AI layer remains separate.
+    observed_ok=(after["measurements_to_surface_rmse_m"]<=before["measurements_to_surface_rmse_m"]+.005 and
+                 after["measurement_coverage"]>=before["measurement_coverage"]-.02)
+    surface_ok=(after["surface_to_measurements_rmse_m"]<=before["surface_to_measurements_rmse_m"]+.005 and
+                after["surface_precision"]>=before["surface_precision"]-.02)
+    passed=observed_ok and surface_ok
+    return {"version":"echo-hi3d-audit-report-2","status":"cpu_contract_evaluated",
             "hi3d_gpu_was_run":False,"physical_truth_certified":False,
             "candidate_passes_approximate_holdout_check":bool(passed),
+            "observed_measurement_consistency_screen_passed":bool(observed_ok),
+            "candidate_surface_support_screen_passed":bool(surface_ok),
+            "unsupported_surface_is_inconclusive_not_proven_false":True,
+            "screening_thresholds":{"max_rmse_regression_m":.005,
+                                    "max_coverage_or_precision_drop":.02},
             "input_manifest_sha256":file_hash(mf),
             "source_sha256":{k:file_hash(v) for k,v in assets.items()},
             "alignment_provenance_claim_not_cryptographically_verified":spec["alignment_provenance"],
@@ -134,6 +156,7 @@ def audit(manifest,root,count=3000):
             "limitations":["This is a CPU contract test, not Hi3D inference or GLB conversion",
                            "The caller must independently prove alignment and holdout separation",
                            "Mesh surface sampling approximates distances; success is not history certification",
+                           "A support-screen failure may be a plausible unobserved back surface, not proof of incorrect geometry",
                            "AI-generated unseen geometry must remain a separately labelled optional layer"]}
 
 def main():

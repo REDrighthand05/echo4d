@@ -17,6 +17,7 @@ from scipy.spatial import cKDTree
 from echo4d.holdout import read_echo_ply, rasterize_mesh_depth
 from echo4d.model import Camera, DataError, file_sha256, rigid_matrix, safe_path
 from hi3d_furniture_evidence import validate_ledger
+from bounded_numeric_npz import read_numeric_npz
 
 EXPECTED_COUNT = 12
 
@@ -86,11 +87,9 @@ def read_furniture_geometry(path: Path) -> tuple[np.ndarray, np.ndarray]:
     if path.suffix.lower() != '.npz':
         raise DataError('Furniture mesh must be strict ECHO PLY or geometry-only NPZ')
     try:
-        with np.load(path, allow_pickle=False) as z:
-            if set(z.files) != {'vertices', 'faces'}:
-                raise DataError('Geometry-only NPZ requires exactly vertices and faces')
-            vertices=np.asarray(z['vertices'])
-            faces=np.asarray(z['faces'])
+        z = read_numeric_npz(path, {'vertices': (3, 2_000_000, 3, 'fiu'),
+                                    'faces': (1, 3_000_000, 3, 'iu')})
+        vertices, faces = z['vertices'], z['faces']
     except (OSError, ValueError, TypeError, KeyError) as e:
         raise DataError('Invalid geometry-only NPZ payload') from e
     if (vertices.ndim!=2 or vertices.shape[1]!=3 or vertices.dtype.kind not in 'fiu'
@@ -247,9 +246,19 @@ def evaluate(ledger_path: Path, proof_path: Path, root: Path) -> dict:
         np.max(after["dimension_relative_error"]) <=
         np.max(before["dimension_relative_error"]) + cfg["max_dimension_relative_error_increase"] and
         after["measured_to_surface_rmse_m"] <= before["measured_to_surface_rmse_m"] + .005)
-    output["conclusion"] = "PASS_RESEARCH_SCREEN_NOT_PHYSICAL_TRUTH" if output[
-        "candidate_is_not_worse_on_frozen_metrics"] else "FAIL_OR_INCONCLUSIVE"
+    # The frozen D protocol gates only observed/forward metrics. It cannot
+    # certify unsupported candidate surfaces, even if all those metrics pass.
+    # Keep its original arithmetic and thresholds; never upgrade it to an
+    # overall geometry acceptance decision. A new protocol needs preregistration.
+    output["geometry_acceptance_status"] = "INCONCLUSIVE_UNOBSERVED_SURFACES"
+    output["conclusion"] = comparison_conclusion(
+        output["candidate_is_not_worse_on_frozen_metrics"])
     return output
+
+
+def comparison_conclusion(observed_metrics_passed: bool) -> str:
+    return ("OBSERVED_METRICS_PASS_GEOMETRY_INCONCLUSIVE" if observed_metrics_passed
+            else "FAIL_OR_INCONCLUSIVE")
 
 
 def main(argv=None) -> int:
@@ -266,7 +275,7 @@ def main(argv=None) -> int:
         a.out.parent.mkdir(parents=True, exist_ok=True)
         a.out.write_text(json.dumps(result, indent=2, allow_nan=False) + "\n")
         print(json.dumps({"decision": result["conclusion"], "report": str(a.out)}))
-        return 0 if result["candidate_is_not_worse_on_frozen_metrics"] else 3
+        return 3  # Neither observed-only outcome certifies overall geometry.
     except (DataError, ValueError, OSError, KeyError, TypeError) as e:
         import sys
         print(json.dumps({"status": "rejected", "error": str(e)}), file=sys.stderr)

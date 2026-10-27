@@ -136,3 +136,45 @@ def test_manifest_path_escape_rejected(tmp_path):
     fixture(tmp_path)
     with pytest.raises(AuditError,match="Unsafe manifest"):
         audit("../manifest.json",tmp_path)
+
+
+def test_extra_unobserved_surface_cannot_pass_as_observed_geometry(tmp_path):
+    """Retaining the observed face must not hide a large unsupported new face.
+
+    Synthetic geometry only. This is a regression for a false-positive gate,
+    not evidence that a real Hi3D output or unseen backside is incorrect.
+    """
+    spec=fixture(tmp_path)
+    with np.load(tmp_path/"refined.npz") as z:
+        vertices=z["vertices"].copy()
+        faces=z["faces"].copy()
+    # World transform has scale 2: +1 local Z creates a second equal-area
+    # surface two metres behind the unchanged observed plane.
+    other=vertices.copy()
+    other[:,2]+=1.
+    extended_vertices=np.concatenate([vertices,other],axis=0)
+    extended_faces=np.concatenate([faces,faces+len(vertices)],axis=0)
+    np.savez(tmp_path/"refined.npz",vertices=extended_vertices,faces=extended_faces)
+    spec["refined_local_mesh"]["sha256"]=hashlib.sha256(
+        (tmp_path/"refined.npz").read_bytes()).hexdigest()
+    save(tmp_path,spec)
+
+    result=audit("manifest.json",tmp_path,20000)
+    assert result["observed_measurement_consistency_screen_passed"]
+    assert result["candidate"]["measurement_coverage"]>=result["coarse"]["measurement_coverage"]-.02
+    assert result["candidate"]["measurements_to_surface_rmse_m"]<=(
+        result["coarse"]["measurements_to_surface_rmse_m"]+.005)
+    assert result["candidate"]["surface_to_measurements_rmse_m"]>1.
+    assert not result["candidate_surface_support_screen_passed"]
+    assert not result["candidate_passes_approximate_holdout_check"]
+    assert result["unsupported_surface_is_inconclusive_not_proven_false"]
+
+
+def test_two_sided_screen_keeps_identical_observed_geometry(tmp_path):
+    fixture(tmp_path)
+    result=audit("manifest.json",tmp_path,2000)
+    assert result["version"]=="echo-hi3d-audit-report-2"
+    assert result["observed_measurement_consistency_screen_passed"]
+    assert result["candidate_surface_support_screen_passed"]
+    assert result["candidate_passes_approximate_holdout_check"]
+    assert not result["physical_truth_certified"]

@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 import json
 import os
 from pathlib import Path
+import shutil
 import sys
 import time
 
@@ -42,6 +43,29 @@ VOXEL_M = .07
 MAX_VOXELS = 1_500_000
 MAX_DEPTH_M = 4.0
 MIN_OBSERVATIONS = 2
+
+
+
+def archive_training_input_evidence(input_dir: Path, target: Path) -> dict[str, str]:
+    """Keep the exact pre-fusion training manifest and sensor provenance auditable.
+
+    These two hashes appear in report.json. The original input directory lives
+    in runner temp and is otherwise absent from the uploaded artifact.
+    No held-out depth is copied or opened by this helper.
+    """
+    receipts = {}
+    for original, archived, key in (
+        ("recording.json", "b-training-recording.json", "input_manifest_sha256"),
+        ("sensor-provenance.json", "b-sensor-provenance.json", "sensor_provenance_sha256"),
+    ):
+        source = input_dir / original
+        destination = target / archived
+        shutil.copyfile(source, destination)
+        digest = file_sha256(source)
+        if file_sha256(destination) != digest:
+            raise DataError(f"Archived training input hash mismatch: {original}")
+        receipts[key] = digest
+    return receipts
 
 
 def split_names(source: list[dict], *, fair_ab_v2: bool = False) -> tuple[list[str], list[str]]:
@@ -148,6 +172,9 @@ def experiment(args: argparse.Namespace, report: dict) -> None:
         "metric_se3_heldout_rmse_m": metric_report["metric_se3_pose_evaluation"]["heldout_position_rmse_m"],
         "gt_only_for_post_calibration_evaluation": True,
     }
+    # Direct calls bypass tum_metric_anchor.main(), so finalize the nested
+    # receipt explicitly; an E3-complete run must never say status=running.
+    metric_report["status"] = "passed_sensor_metric_calibration_not_rgb_only_metric"
     (target/"metric"/"report.json").write_text(
         json.dumps(metric_report, indent=2, ensure_ascii=False, allow_nan=False)+"\n")
     if metric_report["dataset"]["sha256"] != PINNED_ARCHIVE_SHA256:
@@ -167,8 +194,7 @@ def experiment(args: argparse.Namespace, report: dict) -> None:
         tum, split_path, input_dir, downsample=DOWNSAMPLE)
     report["dataset_conversion"] = conversion
     report["split_sha256"] = file_sha256(split_path)
-    report["input_manifest_sha256"] = file_sha256(input_dir/"recording.json")
-    report["sensor_provenance_sha256"] = file_sha256(input_dir/"sensor-provenance.json")
+    report.update(archive_training_input_evidence(input_dir, target))
     bounds = depth_only_training_bounds(input_dir/"recording.json")
     report["pre_registered_bounds"] = bounds
     report["tsdf_config"] = {"voxel_m":VOXEL_M, "max_voxels":MAX_VOXELS,

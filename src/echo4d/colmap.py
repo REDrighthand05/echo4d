@@ -189,7 +189,11 @@ def import_colmap(args: argparse.Namespace) -> dict:
         with Image.open(color_file) as image:
             if image.size != (camera.width, camera.height):
                 raise DataError(f"Image size differs from COLMAP camera: {name}")
-        depth = np.load(depth_file, allow_pickle=False, mmap_mode="r")
+        # Read bounded camera-sized arrays without persistent OS file mappings.
+        # On Windows a failed import must release handles before staging cleanup.
+        if depth_file.stat().st_size > 64 * 1024 * 1024:
+            raise DataError(f"Oversized depth NPY: {depth_name}")
+        depth = np.load(depth_file, allow_pickle=False)
         if not isinstance(depth, np.ndarray):
             if isinstance(depth, np.lib.npyio.NpzFile):
                 depth.close()
