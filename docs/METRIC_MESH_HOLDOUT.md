@@ -1,5 +1,7 @@
 # ECHO4D B 路：12 帧留出测深的 Mesh 视角一致性评分
 
+> **棋盘模块标注（2026-10-27）：M14。** 共享留出一致性评分器，供相应组合复用；数值检查不替代#74视觉与#3独立几何验收。 [路线策略](STRATEGY_CHESSBOARD.md) · [模块合同](STRATEGY_MODULES.md) · [逐格验证](STRATEGY_VALIDATION.md)。下文历史状态/数字不因该标注改变，最新证据以GitHub为准。
+
 此工作叠加在 [Draft PR #23](https://github.com/REDrighthand05/echo4d/pull/23) 之上，服务 [Issue #15](https://github.com/REDrighthand05/echo4d/issues/15)。它**不修改**三锚点尺度、48/12 原始划分、TSDF 的边界、体素和输出 Mesh，只在 Mesh 生成后对 **12 张未参与融合的实测深度图** 进行数值验证。
 
 ## 实际计算
