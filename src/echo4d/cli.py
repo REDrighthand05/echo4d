@@ -117,6 +117,10 @@ def build_parser() -> argparse.ArgumentParser:
     colmap.add_argument("--scale-source", required=True,
                         help="Traceable independent real-world measurement source, not evaluation GT")
     colmap.add_argument("--output", required=True, type=Path)
+    strategy = sub.add_parser("strategy", help="Explore all input-dependent reconstruction routes; no auto-pick or reconstruction")
+    strategy.add_argument("--profile", type=Path,
+                          help="JSON declaration of available information; omit to view the complete route matrix")
+    strategy.add_argument("--format", choices=("markdown", "json"), default="markdown")
     return parser
 
 
@@ -141,6 +145,16 @@ def main(argv: list[str] | None = None) -> int:
             with output_transaction(args.output) as output:
                 write_json(output / "recording.echo.json", preview_recording(recording))
             result = {"output":str(args.output.resolve())}
+        elif args.command == "strategy":
+            from .strategy import (render_strategy_markdown, strategy_catalog,
+                                   strategy_from_file)
+            result = (strategy_from_file(args.profile) if args.profile
+                      else strategy_catalog())
+            if args.format == "markdown":
+                print(render_strategy_markdown(result), end="")
+            else:
+                print(json.dumps(result, ensure_ascii=False, allow_nan=False, indent=2))
+            return 0
         elif args.command == "import-colmap":
             # One strict adapter. Uses #6 + #24 hardening, NOT the incompatible
             # second converter implementation from draft PR #19.
