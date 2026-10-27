@@ -46,7 +46,7 @@ code{color:#b5e9ee} .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 <p id="motionAtTime" class="muted">尚无与回放时间对应的运动数据。</p>
 <div class="grid">
 <div><label for="videoImport">打开已有视频（不上传）</label><input type="file" accept="video/*" id="videoImport"></div>
-<div><label for="manifestImport">打开关联的记录清单（可选）</label><input type="file" accept="application/json,.json" id="manifestImport"></div>
+<div><label for="manifestImport">打开采集清单或统一历史时间轴（可选）</label><input type="file" accept="application/json,.json" id="manifestImport"></div>
 </div>
 <p id="metadata" class="muted">原始录制与空间 Mesh 是两种不同数据。此处播放的是真实视频，而不是 AI 生成的视图。</p>
 </section>
@@ -272,7 +272,7 @@ $("manifestImport").addEventListener("change",async()=>{
   try{
     if(file.size>8*1024*1024)throw new Error("清单超过此实验台的8 MiB读取限制");
     const obj=JSON.parse(await file.text());
-    if(obj.version!=="echo-history-stream-0.1"||!obj.media||!Array.isArray(obj.imu?.samples))
+    if(!["echo-history-stream-0.1","echo-history-timeline-1"].includes(obj.version)||!obj.media||!Array.isArray(obj.imu?.samples))
       throw new Error("清单不是受支持的 Echo 历史记录版本");
     if(typeof obj.duration_s!=="number"||!Number.isFinite(obj.duration_s)||obj.duration_s<0)
       throw new Error("清单时间不合法");
@@ -296,7 +296,8 @@ $("manifestImport").addEventListener("change",async()=>{
     if(boundVideoFile&&obj.media.file!==boundVideoFile)
       throw new Error("文件名不匹配，不能关联运动读数");
     manifest=obj;
-    $("metadata").textContent="清单："+obj.created_utc+"；运动样本："+obj.imu.samples.length+
+    $("metadata").textContent="记录："+(obj.created_utc||obj.started_utc||"时间未知")+"；运动样本："+obj.imu.samples.length+
+      "；附加传感流："+(obj.auxiliary_streams?.length||0)+
       "；空间几何状态："+String(obj.geometry_status||"unknown");
     if(boundVideoFile&&obj.media.file!==boundVideoFile)
       status("文件名不匹配：这份视频可能不是该清单记录的原始媒体。");
