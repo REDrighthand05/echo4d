@@ -25,6 +25,19 @@ echo4d reconstruct outputs/demo/recording.json --output outputs/result --bounds 
 
 结果目录必须不存在；重跑请选择新目录。程序不会清空已有结果。`demo` 是解析盒体生成的合成传感器数据，不是真实采集。
 
+## 输入信息与策略路线选择（开发中的 Feature）
+
+ECHO **不再把只有RGB视频的流程当作唯一默认研究路线**。已有Mesh、IMU、实测深度、相机位姿、标定等丰富输入可以先作为整体基线，再逐项撤去，测量信息缺失对场景重建的真实影响；每条路线保留独立证据与FAIL。
+
+```bash
+echo4d strategy
+echo4d strategy --format json
+echo4d strategy --profile examples/strategy/rich-video-imu-mesh.json
+echo4d strategy --profile examples/strategy/video-and-calibration.json --format json
+```
+
+输出全部候选路线、哪些输入缺失、仓库当前实现程度及输入逐项消融依赖。**不自动选择主路线**；用户可在profile中声明主/备路线，也可保持未选。技术设计与完整矩阵见 [输入×策略决策功能](docs/INPUT_STRATEGY_MATRIX.md)及[Issue #4](https://github.com/REDrighthand05/echo4d/issues/4)。这是不访问真实源资料的声明式决策辅助功能，**没有**在本功能里实现视频+IMU+既有Mesh完整融合，也没有因此通过 [真实场景验收 #74](https://github.com/REDrighthand05/echo4d/issues/74)。
+
 ## 静态场景整合候选
 
 本分支收敛了视频定位、传感器定尺度、实测深度融合和留出误差检查。它仍为工程验证版：**生成表面需要已配准的实测深度；普通 RGB 视频本身不提供完整米制表面。**
