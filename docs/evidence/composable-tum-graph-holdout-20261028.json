@@ -1,0 +1,134 @@
+{
+  "schema": "echo4d-tum-graph-holdout-archive-1",
+  "experiment": "tum-fr1-xyz-fixed60-typed-graph-tsdf-v1",
+  "workflow_run": "https://github.com/REDrighthand05/echo4d/actions/runs/40566204322",
+  "artifact": "https://github.com/REDrighthand05/echo4d/actions/runs/40566204322/artifacts/12763521060",
+  "artifact_retention_days": 14,
+  "tested_checkout_sha": "55b314fdf937a9d6b91bbf29d2e9880a6320b8b7",
+  "artifact_zip_sha256": "c5008b7f25b5f0fd086a09708b67c659bc3d4983d03dcf0a2d216a8f321339a7",
+  "artifact_file_sha256": {
+    "report.json": "da8de23c3fc88b57848b15c7d53b932bb38f75ebf356818319709713d8d96ab3",
+    "graph-execution.json": "d8cf5eb6902899f63094dfd7bf4ebef1bfb8d9e289bd842dca5af26e825f4cd2",
+    "heldout-view-consistency.json": "9cf59856f8bec91550231d8875854bad8b1ea1ffffe691a89501dfb9fdded2d5",
+    "mesh.ply": "82d049d99f7b1fa82dabfa0a02e3847896b51de7647f382144c619fba784e658"
+  },
+  "source_archive_sha256": "a0236d97b8c30cd93b653656d2b6c293ff7c982a4130ef2a1a8beecdb124ef98",
+  "full_manifest_sha256": "eb82d91f6282b231f4fa30ffe851f97c97eb536cb5494e35554d61fc24ba17f5",
+  "train_manifest_sha256": "dbe1a78503a5f16638905d9419ad58a1c4644b14721c44e5b8a16678d3283357",
+  "graph_path_id": "e1f31960bf98ed3e224b14e09f97a69c3c47588806115f6c3294912f34457393",
+  "graph_experiment_id": "57687d3bfeaabec261eaf530f71efbb6300dd68842665fd86943680008e676b7",
+  "input": "TUM Freiburg1 XYZ; official 640x480 RGB, 160x120 fused RGB-D, TUM known poses and measured Z",
+  "split": {
+    "train": 48,
+    "holdout_indices": [
+      4,
+      5,
+      9,
+      10,
+      14,
+      19,
+      24,
+      25,
+      29,
+      34,
+      35,
+      55
+    ]
+  },
+  "same_sensor_holdout": {
+    "measured_valid_pixels": 176486,
+    "overlap_pixels": 175288,
+    "coverage": 0.9932119261584488,
+    "rmse_m": 0.11471287437489365,
+    "mae_m": 0.031520663499750544,
+    "p95_abs_m": 0.07949792742729185,
+    "per_frame": [
+      [
+        4,
+        0.999522086434082,
+        0.15052040338189696
+      ],
+      [
+        5,
+        0.9990951486044407,
+        0.12384633303164602
+      ],
+      [
+        9,
+        0.9997913624035051,
+        0.059136478723613606
+      ],
+      [
+        10,
+        0.9999299670845297,
+        0.03054230992818588
+      ],
+      [
+        14,
+        0.9939289410141428,
+        0.14230798630136096
+      ],
+      [
+        19,
+        0.9993894579743572,
+        0.09065175298361215
+      ],
+      [
+        24,
+        1,
+        0.17314304463275887
+      ],
+      [
+        25,
+        0.9925169182717335,
+        0.13076192059849687
+      ],
+      [
+        29,
+        0.9996469425222426,
+        0.07345962764598125
+      ],
+      [
+        34,
+        1,
+        0.09763567102929423
+      ],
+      [
+        35,
+        0.985437210213544,
+        0.046751175644509646
+      ],
+      [
+        55,
+        0.9509915203311745,
+        0.1499942701935421
+      ]
+    ],
+    "per_frame_columns": [
+      "frame_index",
+      "coverage",
+      "rmse_m"
+    ],
+    "independent_arithmetic": "Weighted RMSE = sqrt(sum(per_frame.overlap_pixels * per_frame.rmse_m^2)/175288), independently recomputed from raw receipt and equal to global 0.11471287437489365 m; weighted MAE also exactly matches."
+  },
+  "status": "diagnostic_only",
+  "geometry_acceptance": "not_evaluated",
+  "independent_surface_truth": false,
+  "human_visual_review": false,
+  "visual_3plus2": "not_run",
+  "different_algorithm_comparison": "not_run",
+  "historical_desk_v2": {
+    "coverage_percent": 93.7357,
+    "rmse_cm": 16.7779,
+    "threshold_cm": 15,
+    "status": "FAIL",
+    "different_scene_and_protocol": true
+  },
+  "limitations": [
+    "Same RGB-D sensor withheld depth, not independent scanned-surface truth; known TUM poses, not estimated SfM.",
+    "Holdout overlap RMSE excludes missing surface pixels; coverage must be reported separately.",
+    "Do not apply Desk V2 15cm acceptance threshold to this different TUM xyz scene/protocol.",
+    "No clear-source-RGB 3+2 renderings or independent human structure review; #74 remains FAIL.",
+    "Actions artifact expires; original dataset official URL and pinned archive SHA are in source script."
+  ]
+}
