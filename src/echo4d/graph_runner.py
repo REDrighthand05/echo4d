@@ -179,11 +179,22 @@ def execute_graph(
                     raise GraphFailed(f"Provider {module_id} failed: {type(error).__name__}: {error}") from error
                 if not isinstance(output, Mapping) or set(output) != set(module.outputs):
                     raise GraphFailed(f"Provider {module_id} returned incorrect output ports")
+                # Adapters may read earlier artifacts, but must not rewrite them.
+                for port in module.inputs:
+                    path = _file(artifacts[port])
+                    expected = (produced[port.label()]["sha256"]
+                                if port.label() in produced else input_hashes[port.label()])
+                    if file_sha256(path) != expected:
+                        raise GraphFailed(f"Typed input artifact changed during execution: {module_id}")
                 for port, raw_path in output.items():
                     try:
                         path = _file(Path(raw_path), step_dir)
                     except (TypeError, ValueError, GraphBlocked) as error:
                         raise GraphFailed(f"Invalid output artifact for {module_id}: {error}") from error
+                    # Match the planner: the first producer of a port wins.
+                    # Multi-output providers cannot silently replace an existing edge.
+                    if port in artifacts:
+                        continue
                     artifacts[port] = path
                     produced[port.label()] = {
                         "provider": module_id,
@@ -280,3 +291,4 @@ def tsdf_recording_adapter(
         return {mesh_port: Path(result["output"]) / "mesh.ply"}
 
     return Adapter(module_id, Path(source_file), invoke, config)
+

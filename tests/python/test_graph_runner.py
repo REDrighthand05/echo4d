@@ -193,3 +193,72 @@ def test_source_image_changed_during_run_cannot_publish_mesh(tmp_path):
     failure = json.loads((tmp_path / "run.failed.json").read_text())
     assert failure["status"] == "failed"
     assert failure["input_dependencies_sha256"][inp.label()]
+
+
+def artifact(kind):
+    return ArtifactType(kind, "none", "none", "none", "estimated", "train",
+                        "fixture", "none", "none", "none", "none", "none", "none")
+
+
+def test_multi_output_provider_preserves_planned_first_producer(tmp_path):
+    seed, x, y, target = map(artifact, ("seed", "x", "y", "mesh"))
+    source = tmp_path / "provider.py"
+    source.write_text("# synthetic provider")
+    item = tmp_path / "input"
+    item.write_text("seed")
+    def module(name, ins, outs):
+        return ModuleSpec(name, tuple(ins), tuple(outs), 1, True, file_sha256(source))
+    modules = (module("a", [seed], [x]), module("b", [seed], [x, y]),
+               module("join", [x, y], [target]))
+    route = next(r for r in compose((seed,), modules, target).routes if "a" in r.modules)
+    def first(inputs, work):
+        path = work / "x"
+        path.write_text("A")
+        return {x: path}
+    def second(inputs, work):
+        px, py = work / "x", work / "y"
+        px.write_text("B")
+        py.write_text("Y")
+        return {x: px, y: py}
+    def join(inputs, work):
+        path = work / "mesh"
+        path.write_text(inputs[x].read_text() + "|" + inputs[y].read_text())
+        return {target: path}
+    adapters = {name: Adapter(name, source, fn)
+                for name, fn in (("a", first), ("b", second), ("join", join))}
+    receipt = execute_graph(route, modules, adapters,
+        {seed: InputFile(item, file_sha256(item))}, target,
+        tmp_path / "run", checkout_sha=checkout())
+    output = receipt["outputs"][target.label()]
+    assert (tmp_path / "run" / output["path"]).read_text() == "A|Y"
+    assert receipt["outputs"][x.label()]["provider"] == "a"
+
+
+def test_adapter_cannot_mutate_prior_intermediate_and_publish(tmp_path):
+    seed, intermediate, target = map(artifact, ("seed", "intermediate", "mesh"))
+    source = tmp_path / "provider.py"
+    source.write_text("# synthetic provider")
+    item = tmp_path / "input"
+    item.write_text("seed")
+    first = ModuleSpec("first", (seed,), (intermediate,), 1, True, file_sha256(source))
+    last = ModuleSpec("last", (intermediate,), (target,), 1, True, file_sha256(source))
+    def produce(inputs, work):
+        path = work / "intermediate"
+        path.write_text("frozen")
+        return {intermediate: path}
+    def mutate(inputs, work):
+        inputs[intermediate].write_text("changed")
+        path = work / "mesh"
+        path.write_text("derived from changed input")
+        return {target: path}
+    modules = (first, last)
+    route = compose((seed,), modules, target).routes[0]
+    with pytest.raises(GraphFailed, match="Typed input artifact changed"):
+        execute_graph(route, modules,
+            {"first": Adapter("first", source, produce),
+             "last": Adapter("last", source, mutate)},
+            {seed: InputFile(item, file_sha256(item))}, target,
+            tmp_path / "run", checkout_sha=checkout())
+    assert not (tmp_path / "run").exists()
+    failure = json.loads((tmp_path / "run.failed.json").read_text())
+    assert failure["status"] == "failed" and failure["attempted_module"] == "last"
