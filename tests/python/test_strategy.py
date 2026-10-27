@@ -137,6 +137,42 @@ def test_catalog_and_plan_have_human_readable_table():
     assert "用户选择" in plan and "not_evaluated" in plan
 
 
+def test_unhashable_enums_never_escape_as_unstructured_errors():
+    p = profile(["rgb_video"])
+    p["goal"] = ["invalid-list"]
+    with pytest.raises(DataError, match="goal"):
+        strategy_plan(p)
+    p = profile(["rgb_video"])
+    p["inputs"]["rgb_video"]["status"] = ["invalid-list"]
+    with pytest.raises(DataError, match="Input"):
+        strategy_plan(p)
+    p = profile(["rgb_video"])
+    p["choice"] = {"primary": ["invalid-list"]}
+    with pytest.raises(DataError, match="route"):
+        strategy_plan(p)
+
+
+def test_duplicate_json_key_is_rejected_not_silently_overwritten(tmp_path, capsys):
+    path = tmp_path / "duplicate.json"
+    path.write_text('{"version":"echo-strategy-profile-1",'
+                    '"inputs":{"rgb_video":{"status":"present"},'
+                    '"rgb_video":{"status":"absent"}}}',encoding="utf-8")
+    assert main(["strategy", "--profile", str(path), "--format", "json"]) == 2
+    output = json.loads(capsys.readouterr().err)
+    assert output["type"] == "DataError"
+    assert "Duplicate" in output["error"]
+
+
+def test_cost_license_and_review_snapshot_not_falsely_populated():
+    catalog = strategy_catalog()
+    assert catalog["catalog_review"]["update_required_if_repo_changed"] is True
+    assert all(x["cost_on_this_input"] == "not_measured" for x in catalog["routes"])
+    result = strategy_plan(profile(["rgb_video", "camera_calibration"]))
+    assert all(x["external_dependency_license_review"] ==
+               "not_performed_for_chosen_versions" for x in result["routes"])
+    assert result["catalog_review"]["main_sha"]
+
+
 def test_cli_catalog_and_profile_usable_without_running_reconstruction(tmp_path, capsys):
     assert main(["strategy", "--format", "json"]) == 0
     data = json.loads(capsys.readouterr().out)
