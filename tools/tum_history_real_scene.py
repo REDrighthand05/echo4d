@@ -77,7 +77,7 @@ def visualize(report_dir: Path, dataset: Path, mesh_file: Path) -> dict:
     results = []
     render_camera = recording.camera.scaled(4)  # Mesh views are lower-res previews, never original photos.
     for index in choices:
-        _, frame, _ = next(recording.iter_frames(stride=1, limit=index+1))
+        frame = next(frame for i, frame, _ in recording.iter_frames() if i == index)
         # Use the original source RGB, not decoded video as an independent high-quality reference.
         photo = recording.root / recording.entries[index]["color"]
         target = dest / f"view-{index:02d}-original-rgb-640.png"
@@ -172,9 +172,7 @@ def real_trial(args: argparse.Namespace, report: dict) -> None:
     archive = work / "history-archive"
     import_history(caption, reel, archive)
 
-    alignment_root = work / "known-measured-alignment"
-    alignment_root.mkdir()
-    (alignment_root / "depth").symlink_to((imported / "depth").resolve(), target_is_directory=True)
+    # Use the real imported depth files in their original parent. No path aliases.
     actual_frames = []
     for i, (entry, pts_value) in enumerate(zip(recording.entries, pts)):
         t = entry["t"]
@@ -184,7 +182,7 @@ def real_trial(args: argparse.Namespace, report: dict) -> None:
             "depth": f"depth/{i:05d}.npy",
             "cameraToWorld": entry["cameraToWorld"],
         })
-    alignment = alignment_root / "alignment.json"
+    alignment = imported / "history-alignment-input.json"
     alignment.write_text(json.dumps({
         "version": "echo-history-rgbd-alignment-1",
         "source_media_sha256": file_sha256(reel),
@@ -230,7 +228,7 @@ def real_trial(args: argparse.Namespace, report: dict) -> None:
         "history_recording_has_no_imu": True,
         "historical_surface_accuracy": "not_measured",
     }
-    report["visuals"] = visualize(report_dir, converted, mesh_out / "mesh.ply")
+    report["visuals"] = visualize(report_dir, imported, mesh_out / "mesh.ply")
 
 
 def main() -> int:
