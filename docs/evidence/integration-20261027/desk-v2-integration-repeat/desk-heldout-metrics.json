@@ -1,0 +1,395 @@
+{
+  "version": "echo-b-mesh-heldout-1",
+  "source_kind": "measured_registered_z_depth",
+  "mesh_sha256": "ab131aa953c4b214c415840338ca0c21b9f74f0ec9f6fa0c91743b45173ec330",
+  "pose_kind": "RGB COLMAP + external three-frame sensor depth scale",
+  "gt_camera_poses_loaded": false,
+  "holdout_frames": 12,
+  "valid_measured_pixels": 169467,
+  "overlap_pixels": 159630,
+  "missing_surface_pixels": 9837,
+  "coverage": 0.941953300642603,
+  "mae_m": 0.05736996308645867,
+  "bias_m": 0.006173829992246279,
+  "rmse_m": 0.16538642697507425,
+  "median_abs_m": 0.022100389003753662,
+  "p95_abs_m": 0.1628798425197599,
+  "within_3cm": 0.5975693791893755,
+  "within_5cm": 0.774848086199336,
+  "within_10cm": 0.9156236296435507,
+  "within_30cm": 0.9669736265113074,
+  "screening_gate_coverage_gte_80pct": true,
+  "screening_gate_overlap_rmse_lte_15cm": false,
+  "screening_gate_passed": false,
+  "per_frame": [
+    {
+      "name": "frame_00004.png",
+      "source_rgb_t_s": 1305031454.427465,
+      "depth_filename": "depth/1305031454.437248.png",
+      "depth_sha256": "dc33d66b54f532c852b14e7b6b011297284887c269c95ac004a19143ae374cbd",
+      "rgb_depth_delta_s": 0.009783029556274414,
+      "score": {
+        "sensor_valid_pixels": 14021,
+        "overlap_pixels": 13085,
+        "missing_surface_pixels": 936,
+        "observed_depth_coverage": 0.9332429926538763,
+        "mae_m": 0.09990622835574735,
+        "rmse_m": 0.29970505832245303,
+        "median_abs_m": 0.019920945167541504,
+        "p95_abs_m": 0.5257686853408811,
+        "bias_m": 0.07902932959200545,
+        "within_3cm": 0.6181887657623233,
+        "within_5cm": 0.7436759648452427,
+        "within_10cm": 0.8765762323270921,
+        "prediction_valid_pixels": 16979,
+        "metric_scope": "Only held-out valid measured pixels WITH a predicted surface; missed pixels reported separately."
+      },
+      "raster": {
+        "triangles": 7669,
+        "skip_near_crossing": 0,
+        "skip_nonprojecting": 3095,
+        "triangles_drawn": 3866,
+        "predicted_pixels": 16979
+      }
+    },
+    {
+      "name": "frame_00009.png",
+      "source_rgb_t_s": 1305031455.759683,
+      "depth_filename": "depth/1305031455.773667.png",
+      "depth_sha256": "94a2a87d474b86cf27da0c63fba441d61707e58395f07a6dcb4d9d26730ec533",
+      "rgb_depth_delta_s": 0.013984203338623047,
+      "score": {
+        "sensor_valid_pixels": 14088,
+        "overlap_pixels": 13207,
+        "missing_surface_pixels": 881,
+        "observed_depth_coverage": 0.9374645088018172,
+        "mae_m": 0.02632809717451009,
+        "rmse_m": 0.07935698711071464,
+        "median_abs_m": 0.01091146469116211,
+        "p95_abs_m": 0.08041431903839108,
+        "bias_m": 0.008023731680725853,
+        "within_3cm": 0.7857954115241917,
+        "within_5cm": 0.8918755205572803,
+        "within_10cm": 0.9697130309684259,
+        "prediction_valid_pixels": 17732,
+        "metric_scope": "Only held-out valid measured pixels WITH a predicted surface; missed pixels reported separately."
+      },
+      "raster": {
+        "triangles": 7669,
+        "skip_near_crossing": 0,
+        "skip_nonprojecting": 4191,
+        "triangles_drawn": 3041,
+        "predicted_pixels": 17732
+      }
+    },
+    {
+      "name": "frame_00014.png",
+      "source_rgb_t_s": 1305031457.091655,
+      "depth_filename": "depth/1305031457.076011.png",
+      "depth_sha256": "86d68cf7afec872e78304d2cf1bb276086b3e064bebc51264b909e25f5949738",
+      "rgb_depth_delta_s": -0.015644073486328125,
+      "score": {
+        "sensor_valid_pixels": 15367,
+        "overlap_pixels": 15291,
+        "missing_surface_pixels": 76,
+        "observed_depth_coverage": 0.9950543372161125,
+        "mae_m": 0.03265310103270688,
+        "rmse_m": 0.05018085967256602,
+        "median_abs_m": 0.0214768648147583,
+        "p95_abs_m": 0.09225571155548096,
+        "bias_m": -0.020966430711711913,
+        "within_3cm": 0.607285331240599,
+        "within_5cm": 0.7909227650251782,
+        "within_10cm": 0.9584723039696553,
+        "prediction_valid_pixels": 19066,
+        "metric_scope": "Only held-out valid measured pixels WITH a predicted surface; missed pixels reported separately."
+      },
+      "raster": {
+        "triangles": 7669,
+        "skip_near_crossing": 0,
+        "skip_nonprojecting": 5668,
+        "triangles_drawn": 1863,
+        "predicted_pixels": 19066
+      }
+    },
+    {
+      "name": "frame_00019.png",
+      "source_rgb_t_s": 1305031458.427598,
+      "depth_filename": "depth/1305031458.443957.png",
+      "depth_sha256": "ec6921eee8875a48e009497be3389dcc0d8817f28c664ad5a6ccb26784fb8555",
+      "rgb_depth_delta_s": 0.01635909080505371,
+      "score": {
+        "sensor_valid_pixels": 14219,
+        "overlap_pixels": 13564,
+        "missing_surface_pixels": 655,
+        "observed_depth_coverage": 0.9539348758703143,
+        "mae_m": 0.05244994772127405,
+        "rmse_m": 0.1394637334373726,
+        "median_abs_m": 0.01702094078063965,
+        "p95_abs_m": 0.16699280142784048,
+        "bias_m": -0.003874435519897913,
+        "within_3cm": 0.6513565319964613,
+        "within_5cm": 0.7817752875258036,
+        "within_10cm": 0.9161751695664996,
+        "prediction_valid_pixels": 17680,
+        "metric_scope": "Only held-out valid measured pixels WITH a predicted surface; missed pixels reported separately."
+      },
+      "raster": {
+        "triangles": 7669,
+        "skip_near_crossing": 0,
+        "skip_nonprojecting": 3144,
+        "triangles_drawn": 3938,
+        "predicted_pixels": 17680
+      }
+    },
+    {
+      "name": "frame_00024.png",
+      "source_rgb_t_s": 1305031459.759635,
+      "depth_filename": "depth/1305031459.743425.png",
+      "depth_sha256": "62523ae5582cefae2aacf4b8a75dc88c684cb37ff84a7ceaf81c979d1809ce93",
+      "rgb_depth_delta_s": -0.016210079193115234,
+      "score": {
+        "sensor_valid_pixels": 12751,
+        "overlap_pixels": 12706,
+        "missing_surface_pixels": 45,
+        "observed_depth_coverage": 0.9964708650301937,
+        "mae_m": 0.0360522597357361,
+        "rmse_m": 0.07419841464451864,
+        "median_abs_m": 0.018951475620269775,
+        "p95_abs_m": 0.1193123459815979,
+        "bias_m": 0.011998229602481668,
+        "within_3cm": 0.7206044388477885,
+        "within_5cm": 0.8345663466079017,
+        "within_10cm": 0.9301117582244609,
+        "prediction_valid_pixels": 18654,
+        "metric_scope": "Only held-out valid measured pixels WITH a predicted surface; missed pixels reported separately."
+      },
+      "raster": {
+        "triangles": 7669,
+        "skip_near_crossing": 345,
+        "skip_nonprojecting": 3780,
+        "triangles_drawn": 3097,
+        "predicted_pixels": 18654
+      }
+    },
+    {
+      "name": "frame_00029.png",
+      "source_rgb_t_s": 1305031461.091728,
+      "depth_filename": "depth/1305031461.079602.png",
+      "depth_sha256": "e1c4e2cfe353d77645cbc764bee781e137b61e8e8c981e0c191c09604dfa3d1b",
+      "rgb_depth_delta_s": -0.012125968933105469,
+      "score": {
+        "sensor_valid_pixels": 12817,
+        "overlap_pixels": 12569,
+        "missing_surface_pixels": 248,
+        "observed_depth_coverage": 0.9806506982913318,
+        "mae_m": 0.04977265783990992,
+        "rmse_m": 0.12795878637808544,
+        "median_abs_m": 0.01056450605392456,
+        "p95_abs_m": 0.30410495996475173,
+        "bias_m": 0.014718929204160042,
+        "within_3cm": 0.7446893149813032,
+        "within_5cm": 0.8271938897286976,
+        "within_10cm": 0.8992759964993238,
+        "prediction_valid_pixels": 18318,
+        "metric_scope": "Only held-out valid measured pixels WITH a predicted surface; missed pixels reported separately."
+      },
+      "raster": {
+        "triangles": 7669,
+        "skip_near_crossing": 809,
+        "skip_nonprojecting": 4117,
+        "triangles_drawn": 2525,
+        "predicted_pixels": 18318
+      }
+    },
+    {
+      "name": "frame_00034.png",
+      "source_rgb_t_s": 1305031462.427635,
+      "depth_filename": "depth/1305031462.413016.png",
+      "depth_sha256": "18c34b2e73a3607632d923cbd5f06e6466448ec3150bc405ae17f27bd6f27f4b",
+      "rgb_depth_delta_s": -0.014618873596191406,
+      "score": {
+        "sensor_valid_pixels": 15295,
+        "overlap_pixels": 15295,
+        "missing_surface_pixels": 0,
+        "observed_depth_coverage": 1.0,
+        "mae_m": 0.020036504158750787,
+        "rmse_m": 0.046128932115964465,
+        "median_abs_m": 0.009137928485870361,
+        "p95_abs_m": 0.047741997241973866,
+        "bias_m": -0.013519294069420477,
+        "within_3cm": 0.8708074534161491,
+        "within_5cm": 0.9531873161163779,
+        "within_10cm": 0.9691402419091206,
+        "prediction_valid_pixels": 19200,
+        "metric_scope": "Only held-out valid measured pixels WITH a predicted surface; missed pixels reported separately."
+      },
+      "raster": {
+        "triangles": 7669,
+        "skip_near_crossing": 872,
+        "skip_nonprojecting": 5809,
+        "triangles_drawn": 943,
+        "predicted_pixels": 19200
+      }
+    },
+    {
+      "name": "frame_00039.png",
+      "source_rgb_t_s": 1305031463.759674,
+      "depth_filename": "depth/1305031463.747849.png",
+      "depth_sha256": "7072bb1598c07d0a9792b20b358a58bea332141b972bb64759440acda33c7d1b",
+      "rgb_depth_delta_s": -0.011825084686279297,
+      "score": {
+        "sensor_valid_pixels": 15162,
+        "overlap_pixels": 14985,
+        "missing_surface_pixels": 177,
+        "observed_depth_coverage": 0.9883260783537792,
+        "mae_m": 0.039975587483203366,
+        "rmse_m": 0.05577345343452671,
+        "median_abs_m": 0.03561979532241821,
+        "p95_abs_m": 0.0901177167892455,
+        "bias_m": 0.03468056829682899,
+        "within_3cm": 0.3462796129462796,
+        "within_5cm": 0.8471805138471805,
+        "within_10cm": 0.9651651651651652,
+        "prediction_valid_pixels": 18541,
+        "metric_scope": "Only held-out valid measured pixels WITH a predicted surface; missed pixels reported separately."
+      },
+      "raster": {
+        "triangles": 7669,
+        "skip_near_crossing": 114,
+        "skip_nonprojecting": 5598,
+        "triangles_drawn": 1779,
+        "predicted_pixels": 18541
+      }
+    },
+    {
+      "name": "frame_00044.png",
+      "source_rgb_t_s": 1305031465.0957,
+      "depth_filename": "depth/1305031465.083338.png",
+      "depth_sha256": "8d6c07e69a598ad2e4a3c9d610d58c3f5b731e0e15260502610f69dc97586cb5",
+      "rgb_depth_delta_s": -0.012362003326416016,
+      "score": {
+        "sensor_valid_pixels": 13213,
+        "overlap_pixels": 10658,
+        "missing_surface_pixels": 2555,
+        "observed_depth_coverage": 0.8066298342541437,
+        "mae_m": 0.11396891395981706,
+        "rmse_m": 0.23302347776472437,
+        "median_abs_m": 0.0608067512512207,
+        "p95_abs_m": 0.4996475219726558,
+        "bias_m": -0.07690952599417718,
+        "within_3cm": 0.13389003565396884,
+        "within_5cm": 0.3106586601613811,
+        "within_10cm": 0.8040908237943329,
+        "prediction_valid_pixels": 12739,
+        "metric_scope": "Only held-out valid measured pixels WITH a predicted surface; missed pixels reported separately."
+      },
+      "raster": {
+        "triangles": 7669,
+        "skip_near_crossing": 0,
+        "skip_nonprojecting": 3352,
+        "triangles_drawn": 3633,
+        "predicted_pixels": 12739
+      }
+    },
+    {
+      "name": "frame_00049.png",
+      "source_rgb_t_s": 1305031466.427819,
+      "depth_filename": "depth/1305031466.420844.png",
+      "depth_sha256": "0b10abf770869f8aa1f65158276605a7956067f148d7b55954c84aa9e7fa8de9",
+      "rgb_depth_delta_s": -0.006974935531616211,
+      "score": {
+        "sensor_valid_pixels": 13812,
+        "overlap_pixels": 13471,
+        "missing_surface_pixels": 341,
+        "observed_depth_coverage": 0.975311323486823,
+        "mae_m": 0.05760197520530372,
+        "rmse_m": 0.1760688624388401,
+        "median_abs_m": 0.022875964641571045,
+        "p95_abs_m": 0.1563568115234375,
+        "bias_m": 0.03985612000931293,
+        "within_3cm": 0.5981738549476654,
+        "within_5cm": 0.7759631801647985,
+        "within_10cm": 0.9088412144606933,
+        "prediction_valid_pixels": 17807,
+        "metric_scope": "Only held-out valid measured pixels WITH a predicted surface; missed pixels reported separately."
+      },
+      "raster": {
+        "triangles": 7669,
+        "skip_near_crossing": 0,
+        "skip_nonprojecting": 2372,
+        "triangles_drawn": 4463,
+        "predicted_pixels": 17807
+      }
+    },
+    {
+      "name": "frame_00054.png",
+      "source_rgb_t_s": 1305031467.759907,
+      "depth_filename": "depth/1305031467.752580.png",
+      "depth_sha256": "1d5a6acd7ce6544169f1df74ce95866bdf1c6702dacb8fbcc94169b9b9f8926a",
+      "rgb_depth_delta_s": -0.007327079772949219,
+      "score": {
+        "sensor_valid_pixels": 14050,
+        "overlap_pixels": 10784,
+        "missing_surface_pixels": 3266,
+        "observed_depth_coverage": 0.7675444839857651,
+        "mae_m": 0.09992783577443938,
+        "rmse_m": 0.2529513766174178,
+        "median_abs_m": 0.023379921913146973,
+        "p95_abs_m": 0.7965583622455599,
+        "bias_m": 0.01533703484989769,
+        "within_3cm": 0.5833642433234422,
+        "within_5cm": 0.7398924332344213,
+        "within_10cm": 0.8616468842729971,
+        "prediction_valid_pixels": 13859,
+        "metric_scope": "Only held-out valid measured pixels WITH a predicted surface; missed pixels reported separately."
+      },
+      "raster": {
+        "triangles": 7669,
+        "skip_near_crossing": 0,
+        "skip_nonprojecting": 1981,
+        "triangles_drawn": 4476,
+        "predicted_pixels": 13859
+      }
+    },
+    {
+      "name": "frame_00059.png",
+      "source_rgb_t_s": 1305031469.095723,
+      "depth_filename": "depth/1305031469.088069.png",
+      "depth_sha256": "da25db93c295b37b39d43d150ceb64243e0d6288c8a727a5df76740259be3cf8",
+      "rgb_depth_delta_s": -0.007653951644897461,
+      "score": {
+        "sensor_valid_pixels": 14672,
+        "overlap_pixels": 14015,
+        "missing_surface_pixels": 657,
+        "observed_depth_coverage": 0.9552208287895311,
+        "mae_m": 0.08810743048409671,
+        "rmse_m": 0.2335144218049765,
+        "median_abs_m": 0.03423655033111572,
+        "p95_abs_m": 0.3421930551528927,
+        "bias_m": -0.022429273866816073,
+        "within_3cm": 0.42825544059935783,
+        "within_5cm": 0.6752051373528363,
+        "within_10cm": 0.8768462361755263,
+        "prediction_valid_pixels": 17598,
+        "metric_scope": "Only held-out valid measured pixels WITH a predicted surface; missed pixels reported separately."
+      },
+      "raster": {
+        "triangles": 7669,
+        "skip_near_crossing": 0,
+        "skip_nonprojecting": 2397,
+        "triangles_drawn": 4420,
+        "predicted_pixels": 17598
+      }
+    }
+  ],
+  "limitations": [
+    "Holdout sensor depths were not fused into TSDF or used to compute bounds.",
+    "Scale came from 3 separate measured sensor-depth anchors, never GT Sim(3).",
+    "B arm uses estimated metric SfM poses, not TUM ground-truth camera poses.",
+    "Depth and scale use the same public RGB-D sensor: NOT external laser-scan surface truth.",
+    "Neighboring frames and underlying sensor share errors and scene observations.",
+    "MAE/RMSE are conditional on overlapping valid pixels; missing geometry is reported by coverage.",
+    "First pass screening thresholds are research-only and do not certify consumer-level 3D accuracy."
+  ]
+}

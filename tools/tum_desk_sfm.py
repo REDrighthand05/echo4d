@@ -138,16 +138,21 @@ def get_archive(path: Path, receipt: dict, offline: Path | None = None) -> None:
                                         else 'first SHA-256 observation only; must pin and rerun')
 
 
-def prepare_video(tum: Path, work: Path, r: dict) -> list[dict]:
+def prepare_video(tum: Path, work: Path, r: dict, *, chosen_rows=None) -> list[dict]:
     """Exactly the previous 8-frame stride and FFmpeg encoding, 75 images.
 
     Unlike xyz, desk has about 613 images: 90 images at stride 8 would
     exceed its duration, so 75 and 8 are locked *before* first run.
     """
     rows = read_rows(tum / 'rgb.txt', 2)
-    chosen = rows[::SOURCE_STRIDE][:FRAME_COUNT]
+    chosen = rows[::SOURCE_STRIDE][:FRAME_COUNT] if chosen_rows is None else chosen_rows
     if len(chosen) != FRAME_COUNT:
         raise DataError(f'Expected {FRAME_COUNT} frames at stride {SOURCE_STRIDE}; got {len(chosen)}')
+    identities = {(float(t), path): i for i, (t, path) in enumerate(rows)}
+    keys = [(float(t), path) for t, path in chosen]
+    if (len(set(keys)) != FRAME_COUNT or any(k not in identities for k in keys)
+            or any(b[0] <= a[0] for a, b in zip(keys, keys[1:]))):
+        raise DataError('Explicit desk source cohort differs from original RGB index')
     image_dir = work / 'rgb-input'
     image_dir.mkdir()
     evidence=[]
@@ -156,6 +161,7 @@ def prepare_video(tum: Path, work: Path, r: dict) -> list[dict]:
         dest=image_dir / f'frame_{i:05d}.png'
         shutil.copyfile(original,dest)
         evidence.append({'name':dest.name,'t_tum_rgb_s':float(ts),
+                         'source_rgb_index': identities[(float(ts), path)],
                          'original_tum_path':path,'source_rgb_sha256':file_sha256(dest)})
     video = work / 'test-video-from-real-tum-rgb.mp4'
     invoke('encode-real-TUM-desk-RGB-into-test-MP4',[
