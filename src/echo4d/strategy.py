@@ -213,8 +213,16 @@ def _load_json_profile(path: Path) -> dict[str, Any]:
     path = Path(path)
     if not path.is_file() or path.stat().st_size > 128 * 1024:
         raise DataError("Missing or oversized strategy profile (max 128KiB)")
+    def no_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+        result: dict[str, Any] = {}
+        for key, value in pairs:
+            if key in result:
+                raise DataError("Duplicate field in strategy profile JSON")
+            result[key] = value
+        return result
     try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
+        payload = json.loads(path.read_text(encoding="utf-8"),
+                             object_pairs_hook=no_duplicate_keys)
     except (ValueError, UnicodeError) as exc:
         raise DataError("Invalid strategy profile JSON") from exc
     if not isinstance(payload, dict):
@@ -280,6 +288,8 @@ def _route_result(route: dict[str, Any], states: dict[str, Any]) -> dict[str, An
         "implementation": route["implementation"],
         "evidence": route["evidence"],
         "components": route["components"],
+        "cost_on_this_input": "not_measured",
+        "external_dependency_license_review": "not_performed_for_chosen_versions",
         "possible_output": route["output"],
         "still_unknown": route["unknown"],
         "checks_not_performed": list(route["checks"]),
@@ -316,6 +326,9 @@ def strategy_plan(payload: dict[str, Any]) -> dict[str, Any]:
         "version": REPORT_VERSION,
         "profile": profile,
         "route_catalog_order_note": "从高信息到稀疏输入展示，不是单维难度/质量排序",
+        "catalog_review": {"date": "2026-10-27",
+                           "main_sha": "00e1167b9406aa7d6d8425f6283f4f1cd5772843",
+                           "update_required_if_repo_changed": True},
         "no_auto_selection": not bool(choice),
         "user_choices": decisions,
         "routes": rows,
@@ -338,8 +351,14 @@ def strategy_plan(payload: dict[str, Any]) -> dict[str, Any]:
 
 def strategy_catalog() -> dict[str, Any]:
     return {"version": REPORT_VERSION,
+            "catalog_review": {"date": "2026-10-27",
+                               "main_sha": "00e1167b9406aa7d6d8425f6283f4f1cd5772843",
+                               "update_required_if_repo_changed": True},
             "input_catalog": list(INPUT_CATALOG),
-            "routes": [{**route, "requires": [list(g) for g in route["requires"]],
+            "routes": [{**route,
+                        "cost_on_this_input": "not_measured",
+                        "external_dependency_license_review": "not_performed_for_chosen_versions",
+                        "requires": [list(g) for g in route["requires"]],
                         "optional": list(route["optional"]),
                         "checks": list(route["checks"]),
                         "links": list(route["links"])}
@@ -354,12 +373,12 @@ def render_strategy_markdown(result: dict[str, Any]) -> str:
     if "profile" not in result:
         lines = ["# ECHO 输入信息与策略候选矩阵", "",
                  "候选顺序不是单维难度排序；实现成熟度是**本仓库**状态，不是外部算法能力。", "",
-                 "| 策略 | 必需输入（每组任选一个） | 仓库支持 | 能得到什么 / 不能证明什么 |",
-                 "|---|---|---|---|"]
+                 "| 策略 | 必需输入（每组任选一个） | 仓库支持 | 成本/外部许可 | 能得到什么 / 不能证明什么 |",
+                 "|---|---|---|---|---|"]
         for route in result["routes"]:
             req = " + ".join("/".join(g) for g in route["requires"])
             lines.append(f"| {route['name']} | {req} | {route['implementation']} ({route['evidence']}) | "
-                         f"{route['output']}；未知：{route['unknown']} |")
+                         f"本输入未测 / 依赖许可待核 | {route['output']}；未知：{route['unknown']} |")
         lines.extend(["", "## 输入类型与核验", "",
                       "| 类型 | 需要核对 |", "|---|---|"])
         for item in result["input_catalog"]:
@@ -368,11 +387,12 @@ def render_strategy_markdown(result: dict[str, Any]) -> str:
     lines = ["# ECHO 选择路线前的输入情况", "",
              "这是**声明式路线候选分析**，未实际读取传感器、运行算法或通过视觉验收。",
              "即便 checked 也仅表示声明者提供证据，不是此程序验过的真实数据。", "",
-             "| 路线 | 输入条件 | 在仓库的状态 | 缺少的输入组 |",
-             "|---|---|---|---|"]
+             "| 路线 | 输入条件 | 在仓库的状态 | 成本和许可证 | 缺少的输入组 |",
+             "|---|---|---|---|---|"]
     for row in result["routes"]:
         missing = "；".join("/".join(g) for g in row["missing_required_groups"]) or "无（仍须核验质量/配准）"
-        lines.append(f"| {row['name']} | {row['input_match']} | {row['implementation']} | {missing} |")
+        lines.append(f"| {row['name']} | {row['input_match']} | {row['implementation']} | "
+                     f"本输入未测/依赖许可待核 | {missing} |")
     lines.extend(["", "## 用户选择（不替用户决定）", ""])
     if not result["user_choices"]:
         lines.append("尚未由用户指定主路线和备选路线。")
