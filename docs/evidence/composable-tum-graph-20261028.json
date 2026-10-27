@@ -1,0 +1,91 @@
+{
+  "schema": "echo4d-real-graph-evidence-1",
+  "experiment": "tum-fr1-xyz-fixed60-typed-graph-tsdf-v1",
+  "source_checkout_sha": "552b40b40089f0ddc3a502543035b4731b499610",
+  "workflow_run": "https://github.com/REDrighthand05/echo4d/actions/runs/40564566430",
+  "artifact_url": "https://github.com/REDrighthand05/echo4d/actions/runs/40564566430/artifacts/12761678572",
+  "artifact_retention_days": 14,
+  "source": {
+    "official_url": "https://cvg.cit.tum.de/rgbd/dataset/freiburg1/rgbd_dataset_freiburg1_xyz.tgz",
+    "archive_bytes": 448204271,
+    "archive_sha256": "a0236d97b8c30cd93b653656d2b6c293ff7c982a4130ef2a1a8beecdb124ef98",
+    "rgb_source_resolution": [
+      640,
+      480
+    ],
+    "fusion_resolution": [
+      160,
+      120
+    ],
+    "pose": "TUM provided groundtruth.txt; not SfM",
+    "depth": "measured sensor Z, explicit metric conversion"
+  },
+  "fixed_split": {
+    "total_frames": 60,
+    "train_frames": 48,
+    "holdout_frames": 12,
+    "holdout_indices": [
+      4,
+      5,
+      9,
+      10,
+      14,
+      19,
+      24,
+      25,
+      29,
+      34,
+      35,
+      55
+    ],
+    "distinct_from_desk_v2": true
+  },
+  "input_sha256": {
+    "full_import_manifest": "eb82d91f6282b231f4fa30ffe851f97c97eb536cb5494e35554d61fc24ba17f5",
+    "train_manifest": "dbe1a78503a5f16638905d9419ad58a1c4644b14721c44e5b8a16678d3283357",
+    "association": "23aa2a725a93187023e5d69b29b4264040f734f89e0d7cbb3bc28918aafce530"
+  },
+  "graph": {
+    "path_id": "e1f31960bf98ed3e224b14e09f97a69c3c47588806115f6c3294912f34457393",
+    "experiment_id": "439fa7c319ca2334ba922ededeef112adb10d025c25fc74a2b51ea215b4cc6af",
+    "modules": [
+      "known_pose_sensor_tsdf"
+    ],
+    "provider_sha256": "1d66c24461a9cfafcbdf3e6518422b3c275fa3ae4bbc789781b379ce568e35ab",
+    "config_sha256": "ae380f3a896f150037f0c49f63a9a232bc6e0cd198395f4ae652c9a10560056f",
+    "referenced_training_rgb_depth_file_hashes": 96
+  },
+  "execution": {
+    "status": "executed_unscored",
+    "runtime_seconds": 23.236,
+    "import_seconds": 0.966,
+    "graph_seconds": 1.204,
+    "mesh_sha256": "82d049d99f7b1fa82dabfa0a02e3847896b51de7647f382144c619fba784e658",
+    "mesh_bytes": 376122,
+    "mesh_vertices": 7704,
+    "mesh_faces": 12906
+  },
+  "raw_artifact_sha256": {
+    "report.json": "ddcc9331f7d5fb97a5f7a3a2a31aab1013bed40edcddb2eb4ed447ba07bf3e41",
+    "graph-execution.json": "fd27f8c2396b9ec8f1f07244776b2cf732e1b132019277fa32f3692076cced39",
+    "mesh.ply": "82d049d99f7b1fa82dabfa0a02e3847896b51de7647f382144c619fba784e658"
+  },
+  "verification": {
+    "artifact_zip_downloaded": true,
+    "report_json_and_mesh_sha256_checked": true,
+    "synthetic_contract_tests_passed": 15,
+    "independent_surface_accuracy": "not_measured",
+    "holdout_geometry_scoring": "not_run",
+    "visual_3plus2_review": "not_run",
+    "different_algorithm_comparison": "not_run",
+    "human_independent_review": "not_run"
+  },
+  "historical_desk_v2": {
+    "coverage_percent": 93.7357,
+    "rmse_cm": 16.7779,
+    "threshold_cm": 15,
+    "status": "FAIL"
+  },
+  "issue_74": "FAIL / NOT ACCEPTED",
+  "next": "Run frozen 12-frame heldout geometry scoring without using holdout for route selection; separately obtain original RGB 3+2 same-Mesh renderings and human review. Do not count this TSDF as a second distinct algorithm."
+}
