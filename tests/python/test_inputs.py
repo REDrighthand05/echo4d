@@ -122,3 +122,20 @@ def test_portrait_preview_preserves_intrinsics_and_valid_dimensions(tmp_path):
     assert preview['intrinsics']['height']==60
     assert preview['intrinsics']['fy']==50
     assert len(preview['frames'][0]['depth'])==120
+
+
+def test_scene_preview_cannot_be_mistaken_for_source_capture(tmp_path):
+    from echo4d.output import preview_recording
+    d = minimal()
+    d['intrinsics'].update(width=160, height=120, fx=100, fy=100, cx=79.5, cy=59.5)
+    d['frames'][0]['depth'] = [1] * (160 * 120)
+    preview = preview_recording(load_recording(save(tmp_path, d)))
+    provenance = preview['preview_provenance']
+    assert provenance['loaded_recording_resolution_px'] == {'width': 160, 'height': 120}
+    assert provenance['exported_preview_resolution_px'] == {'width': 80, 'height': 60}
+    assert provenance['pixel_stride_xy'] == [2, 2]
+    assert provenance['frame_stride'] == 1
+    assert provenance['original_capture_resolution_px'] is None
+    assert provenance['is_original_capture'] is False
+    assert len(preview['frames'][0]['depth']) == 80 * 60
+    assert 'already have been downsampled' in provenance['warning']
