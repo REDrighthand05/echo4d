@@ -6,7 +6,9 @@ on:
       - research/composable-graph-execution-m2-20261028
     paths:
       - 'tools/tum_composable_graph.py'
+      - 'tools/tum_graph_holdout.py'
       - 'tests/python/test_tum_composable_graph.py'
+      - 'tests/python/test_tum_graph_holdout.py'
       - '.github/workflows/tum-composable-graph.yml'
   workflow_dispatch:
 
@@ -36,7 +38,7 @@ jobs:
         env:
           PYTHONPATH: tools
         run: |
-          python -m pytest -q tests/python/test_tum_composable_graph.py tests/python/test_graph_runner.py
+          python -m pytest -q tests/python/test_tum_composable_graph.py tests/python/test_tum_graph_holdout.py tests/python/test_graph_runner.py
       - name: Execute real pinned public TUM graph
         env:
           ECHO_HEAD_SHA: ${{ github.sha }}
@@ -44,6 +46,17 @@ jobs:
           PYTHONPATH=tools python tools/tum_composable_graph.py \
             --work "$RUNNER_TEMP/echo-tum-graph" \
             --report-dir "$GITHUB_WORKSPACE/artifacts/tum-composable-graph"
+      - name: Evaluate frozen 12 sensor holdouts (diagnostic, not surface GT)
+        env:
+          PYTHONPATH: tools
+        run: |
+          python tools/tum_graph_holdout.py \
+            --full-manifest "$RUNNER_TEMP/echo-tum-graph/imported/recording.json" \
+            --train-manifest "$RUNNER_TEMP/echo-tum-graph/imported/recording-train.json" \
+            --mesh artifacts/tum-composable-graph/mesh.ply \
+            --execution artifacts/tum-composable-graph/graph-execution.json \
+            --report artifacts/tum-composable-graph/report.json \
+            --output artifacts/tum-composable-graph/heldout-view-consistency.json
       - name: Report execution separately from quality
         if: always()
         run: |
@@ -51,6 +64,9 @@ jobs:
             cat artifacts/tum-composable-graph/SUMMARY.md >> "$GITHUB_STEP_SUMMARY"
           else
             echo "No execution report; inspect setup logs. No Mesh PASS." >> "$GITHUB_STEP_SUMMARY"
+          fi
+          if [ -f artifacts/tum-composable-graph/heldout-view-consistency.json ]; then
+            python -c 'import json; d=json.load(open("artifacts/tum-composable-graph/heldout-view-consistency.json")); s=d.get("diagnostic",{}); print("Sensor holdout diagnostic:",d["status"],"12-frame overlap coverage:",s.get("observed_depth_coverage","not_scored"),"RMSE(m):",s.get("rmse_m","not_scored"),"; NOT independent surface truth or #74 acceptance")' >> "$GITHUB_STEP_SUMMARY"
           fi
       - name: Preserve real receipt and Mesh only if produced
         if: always()
