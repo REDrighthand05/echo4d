@@ -373,3 +373,30 @@ def projective_recording_adapter(
         return {mesh_port: mesh_path}
 
     return Adapter(module_id, Path(source_file), invoke, config)
+
+
+def archive_pinned_files(files: Mapping[str, InputFile], destination: Path) -> dict:
+    """Preserve actual run metadata bytes atomically, never just their hashes."""
+    import shutil
+    if not files:
+        raise GraphBlocked("No metadata files to archive")
+    archived = {}
+    with output_transaction(destination) as workspace:
+        for name, item in files.items():
+            if (not isinstance(name, str) or not re.fullmatch(r"[a-z][a-z0-9_.-]{0,63}", name)
+                    or ".." in name or not isinstance(item, InputFile)
+                    or not re.fullmatch(r"[0-9a-f]{64}", item.sha256)):
+                raise GraphBlocked("Invalid pinned metadata archive entry")
+            source = _file(item.path)
+            if file_sha256(source) != item.sha256:
+                raise GraphBlocked(f"Metadata differs from execution pin: {name}")
+            target = workspace / name
+            shutil.copyfile(source, target)
+            if file_sha256(source) != item.sha256 or file_sha256(target) != item.sha256:
+                raise GraphFailed(f"Metadata changed while archiving: {name}")
+            archived[name] = {"sha256": item.sha256, "bytes": target.stat().st_size}
+        write_json(workspace / "archive.json", {
+            "schema": "echo-graph-metadata-archive-1", "files": archived,
+            "scope": "metadata only; referenced images are not included",
+        })
+    return archived

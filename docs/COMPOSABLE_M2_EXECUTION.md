@@ -32,3 +32,17 @@ python -m pytest -q tests/python/test_graph_runner.py tests/python/test_projecti
 ```
 
 Historical desk V2 16.7779cm > 15cm and #74 visual acceptance remain FAIL. Avoid reusing the same heldout data to select a winner without a new independent frozen scene.
+
+
+## Exact metadata retention (2026-10-28)
+
+Both real-provider runners now copy the actual full/train recording manifests,
+association JSON and their own kernel report into each output's `metadata/`.
+The shared `archive_pinned_files` helper verifies expected SHA before copying,
+rechecks source and copy afterwards, records byte counts in `archive.json`, and
+publishes atomically without overwriting an older archive. The parent report's
+`archived_metadata` links these files. Referenced image arrays/source RGB are not
+included; preserve the official archive pin and source hashes separately.
+Old artifacts without these bytes are still incomplete: a later run is a new
+execution, never a byte-for-byte repair of an unretained historical receipt.
+This is evidence retention, not an improvement to Mesh quality or #74 PASS.

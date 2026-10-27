@@ -15,7 +15,7 @@ import sys
 import time
 
 from echo4d.composable import ArtifactType, ModuleSpec, compose
-from echo4d.graph_runner import InputFile, execute_graph, tsdf_recording_adapter
+from echo4d.graph_runner import InputFile, archive_pinned_files, execute_graph, tsdf_recording_adapter
 from echo4d.model import DataError, file_sha256, load_recording
 from tum_public_roundtrip import (BOUNDS, PINNED_ARCHIVE_BYTES,
     PINNED_ARCHIVE_SHA256, ROOT, URL, VOXEL, download, extract)
@@ -135,6 +135,13 @@ def run(args: argparse.Namespace, report: dict) -> None:
     shutil.copyfile(graph_dir / "execution.json", args.report_dir / "graph-execution.json")
     if file_sha256(args.report_dir / "mesh.ply") != output["sha256"]:
         raise DataError("Copied Mesh SHA mismatch")
+    provider_report = mesh.parent / "report.json"
+    report["archived_metadata"] = archive_pinned_files({
+        "full-recording.json": InputFile(original, report["input"]["original_manifest_sha256"]),
+        "train-recording.json": InputFile(manifest, report["input"]["train_manifest_sha256"]),
+        "association.json": InputFile(imported / "association.json", report["input"]["association_sha256"]),
+        "provider-report.json": InputFile(provider_report, file_sha256(provider_report)),
+    }, args.report_dir / "metadata")
     report["mesh_sha256"] = output["sha256"]
     report["mesh_bytes"] = output["bytes"]
     report["status"] = "executed_unscored"

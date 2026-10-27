@@ -11,6 +11,7 @@ on:
       - 'src/echo4d/projective_meshing.py'
       - 'src/echo4d/graph_runner.py'
       - 'src/echo4d/output.py'
+      - 'tests/python/test_graph_archive.py'
       - 'tests/python/test_projective_meshing.py'
       - 'tests/python/test_graph_runner.py'
       - 'tests/python/test_tum_graph_projective_ab.py'
@@ -45,7 +46,7 @@ jobs:
         env:
           PYTHONPATH: tools
         run: |
-          python -m pytest -q tests/python/test_tum_composable_graph.py tests/python/test_tum_graph_holdout.py tests/python/test_graph_runner.py tests/python/test_tum_graph_visual.py tests/python/test_projective_meshing.py tests/python/test_tum_graph_projective_ab.py
+          python -m pytest -q tests/python/test_tum_composable_graph.py tests/python/test_tum_graph_holdout.py tests/python/test_graph_runner.py tests/python/test_graph_archive.py tests/python/test_tum_graph_visual.py tests/python/test_projective_meshing.py tests/python/test_tum_graph_projective_ab.py
       - name: Execute real pinned public TUM graph
         env:
           ECHO_HEAD_SHA: ${{ github.sha }}

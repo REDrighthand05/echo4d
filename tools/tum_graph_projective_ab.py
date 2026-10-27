@@ -17,7 +17,7 @@ import time
 from echo4d import projective_meshing
 from echo4d.composable import ArtifactType, ModuleSpec, compose
 from echo4d.graph_runner import (
-    InputFile, execute_graph, projective_recording_adapter,
+    InputFile, archive_pinned_files, execute_graph, projective_recording_adapter,
 )
 from echo4d.model import DataError, file_sha256, load_recording
 from echo4d.output import write_json
@@ -121,6 +121,13 @@ def run(work: Path, baseline: Path, alternative: Path, *, pixel_stride: int = 4)
         "desk_v2_frozen": "FAIL 16.7779cm > 15cm; unchanged",
         "issue_74": "FAIL / NOT ACCEPTED",
     }
+    provider_report = mesh.parent / "provider-report.json"
+    alt_report["archived_metadata"] = archive_pinned_files({
+        "full-recording.json": InputFile(full, report["input"]["original_manifest_sha256"]),
+        "train-recording.json": InputFile(manifest, report["input"]["train_manifest_sha256"]),
+        "association.json": InputFile(work / "imported" / "association.json", report["input"]["association_sha256"]),
+        "provider-report.json": InputFile(provider_report, file_sha256(provider_report)),
+    }, alternative / "metadata")
     write_json(alternative / "report.json", alt_report)
     diagnostic = score_frozen_holdout(full, manifest, alternative / "mesh.ply",
                                       alternative / "graph-execution.json",
