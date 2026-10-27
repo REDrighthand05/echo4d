@@ -59,10 +59,18 @@ def rgb_pose_frames(root: Path) -> list[dict]:
     return frames
 
 
-def select_pairs(frames: list[dict], camera: Camera, max_pairs: int = 20) -> list[tuple[int, int]]:
-    """Select fixed-order positive-disparity horizontal pairs, train-only."""
+def select_pairs(frames: list[dict], camera: Camera, max_pairs: int = 20,
+                 backups_per_left: int = 3) -> list[tuple[int, int]]:
+    """Bounded train-only stereo candidates with alternative baselines per left view.
+
+    Geometry-only ranking cannot tell whether a pair has texture/overlap. Keep
+    several fixed, pre-ranked candidates per selected training view, so a bad
+    first match does not discard that view. No holdout pixels or scores used.
+    """
+    if not 1 <= max_pairs <= 48 or not 1 <= backups_per_left <= 4:
+        raise DataError('Stereo candidate budget outside fixed bounds')
     training = [i for i in range(TOTAL) if i not in HOLDOUT]
-    candidates = {}
+    candidates: dict[int, list[tuple[float, int]]] = {}
     for pos, i in enumerate(training):
         for j in training[pos + 1:]:
             if j - i > 14:
@@ -74,27 +82,30 @@ def select_pairs(frames: list[dict], camera: Camera, max_pairs: int = 20) -> lis
                     continue
                 baseline, angle = geom[-2:]
                 score = abs(baseline - .11) + .06 * angle + .002 * (j - i)
-                if left not in candidates or score < candidates[left][0]:
-                    candidates[left] = (score, right)
-                break
-    chosen = sorted(candidates)
-    if len(chosen) > max_pairs:
-        selected = np.linspace(0, len(chosen)-1, max_pairs, dtype=int)
-        chosen = [chosen[int(k)] for k in selected]
-    return [(i, candidates[i][1]) for i in chosen]
+                candidates.setdefault(left, []).append((score, right))
+    anchors = sorted(candidates)
+    if len(anchors) > max_pairs:
+        selected = np.linspace(0, len(anchors) - 1, max_pairs, dtype=int)
+        anchors = [anchors[int(k)] for k in selected]
+    return [(left, right) for left in anchors
+            for _score, right in sorted(candidates[left])[:backups_per_left]]
 
 
 def build_stereo_recording(frames: list[dict], target: Path, report: dict) -> Path:
     camera = Camera(320, 240, 262.5, 262.5, 159.75, 119.75)
     pairs = select_pairs(frames, camera)
     report['selected_pairs'] = pairs
-    if len(pairs) < 6:
+    report['candidate_pairs_attemptable'] = len(pairs)
+    if len({left for left, _ in pairs}) < 6:
         raise DataError(f'Only {len(pairs)} eligible stereo pairs; require >=6')
     target.mkdir(parents=True, exist_ok=False)
     (target / 'color').mkdir()
     (target / 'depth').mkdir()
     entries, pair_evidence = [], []
+    accepted_left: set[int] = set()
     for left_idx, right_idx in pairs:
+        if left_idx in accepted_left:
+            continue  # The first usable candidate wins; do not double-count a view.
         left, right = frames[left_idx], frames[right_idx]
         with Image.open(left['rgb']) as im:
             a = np.asarray(im.convert('RGB'))[::2, ::2].copy()
@@ -134,6 +145,7 @@ def build_stereo_recording(frames: list[dict], target: Path, report: dict) -> Pa
                         'color':f'color/{n:05d}.png','depth':f'depth/{n:05d}.npy'})
         item['saved_depth_sha256']=file_sha256(target / 'depth' / f'{n:05d}.npy')
         item['reprojected_valid_pixels']=int(np.count_nonzero(projected))
+        accepted_left.add(left_idx)
     report['pairs']=pair_evidence
     if len(entries)<6:
         raise DataError(f'Only {len(entries)} RGB-derived depth frames have >=100 valid pixels')
