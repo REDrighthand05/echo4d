@@ -1,4 +1,4 @@
-"""Pinned real TUM fr1_xyz: compare 160x120 / 5cm TSDF against 320x240 / 2.5cm TSDF.
+"""Pinned real TUM fr1_xyz: compare 160x120 / 5cm TSDF against 320x240 / 3.5cm TSDF.
 
 Both use identical original RGB-D frames, known TUM poses, 48 training views and
 12 untouched sensor holdouts. No independent surface ground truth is claimed.
@@ -129,7 +129,7 @@ def contact_sheet(original: Image.Image | None, low: np.ndarray, high: np.ndarra
         sheet.paste(Image.fromarray(image).resize((640, 480),
                     resample=Image.Resampling.NEAREST), (x, 34))
     for x, caption in ((0, title + " | original 640x480" if original else title + " | no original"),
-                       (640, "TSDF 160x120 / 5cm"), (1280, "TSDF 320x240 / 2.5cm")):
+                       (640, "TSDF 160x120 / 5cm"), (1280, "TSDF 320x240 / 3.5cm")):
         draw.text((x + 8, 10), caption, fill=(238, 238, 238))
     sheet.save(output)
 
