@@ -1,0 +1,266 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ECHO · 历史第一人称记录实验台</title>
+<style>
+:root{color-scheme:dark;font-family:system-ui,-apple-system,"Segoe UI",sans-serif;background:#101820;color:#edf3f4}
+*{box-sizing:border-box}body{margin:0;max-width:960px;padding:20px;margin-inline:auto}
+header{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+a{color:#a7e5e7}h1{font-size:1.45rem;margin:6px 0}h2{font-size:1.05rem;margin:0 0 12px}
+p{line-height:1.65;color:#c8d4db}small,.muted{color:#aab9c3}
+section{margin:16px 0;padding:18px;border:1px solid #344951;border-radius:14px;background:#17232d}
+video{display:block;width:100%;max-height:52vh;background:#050708;border-radius:8px;object-fit:contain}
+.controls{display:flex;gap:10px;flex-wrap:wrap;margin:12px 0}
+button,input[type=file]{font:inherit}button{border:1px solid #527c85;border-radius:8px;background:#223b48;color:#eafaff;padding:10px 14px;cursor:pointer}
+button:disabled{opacity:.43;cursor:not-allowed}button:focus-visible,input:focus-visible{outline:3px solid #b8fdff}
+label{display:block;margin:8px 0}input[type=range]{width:100%}
+#notice{min-height:2rem;padding:8px 10px;background:#26353a;border-radius:6px}
+body [hidden]{display:none!important} .warn{color:#f1c5a2} .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+code{color:#b5e9ee} .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media(max-width:600px){.grid{grid-template-columns:1fr}body{padding:12px}}
+</style>
+</head>
+<body>
+<header><div><h1>ECHO · 历史第一人称记录实验台</h1><small>独立本地原型 · 不依赖深度传感器或三维重建</small></div><a href="index.html">进入三维检查台</a></header>
+<p>先真实录下摄像头所见，再沿时间轴原样回放。若浏览器开放运动传感器，可同时保存其读数。此原型不能代表眼镜硬件、准确的头部轨迹或穿墙探测。</p>
+<section aria-labelledby="recordTitle">
+<h2 id="recordTitle">一、由用户主动开始采集</h2>
+<label><input id="useAudio" type="checkbox"> 同时申请麦克风权限（默认关闭）</label>
+<div class="controls">
+<button id="motionBtn">尝试启用浏览器运动传感器</button>
+<button id="startBtn">开始录制前方摄像头</button>
+<button id="stopBtn" disabled>停止录制</button>
+</div>
+<video id="live" autoplay muted playsinline aria-label="摄像头实时画面"></video>
+<p id="notice" role="status" aria-live="polite">未采集任何画面。只有点击开始并授予权限后才会录制。</p>
+<p class="muted">开发性短片段录制：最长 180 秒；浏览器在内存中暂存压缩视频块。停止后必须手动下载，关闭网页前未下载的数据可能丢失。画面与运动信息不会自动上传。</p>
+</section>
+<section aria-labelledby="replayTitle">
+<h2 id="replayTitle">二、沿时间轴回看当时的真实画面</h2>
+<video id="replay" controls playsinline hidden aria-label="历史第一人称回放"></video>
+<p id="noReplay" class="muted">录制完成，或从设备选择已有的视频后，可以在这里回放。</p>
+<label for="timeline">时间轴 · <output id="position">0.00 s / 0.00 s</output></label>
+<input id="timeline" type="range" min="0" max="0" step="0.05" value="0" disabled>
+<div class="grid">
+<div><label for="videoImport">打开已有视频（不上传）</label><input type="file" accept="video/*" id="videoImport"></div>
+<div><label for="manifestImport">打开关联的记录清单（可选）</label><input type="file" accept="application/json,.json" id="manifestImport"></div>
+</div>
+<p id="metadata" class="muted">原始录制与空间 Mesh 是两种不同数据。此处播放的是真实视频，而不是 AI 生成的视图。</p>
+</section>
+<section aria-labelledby="exportTitle">
+<h2 id="exportTitle">三、将本次记录保存在本地</h2>
+<div class="controls">
+<button id="downloadVideo" disabled>下载视频</button>
+<button id="downloadManifest" disabled>下载时间/运动清单 JSON</button>
+</div>
+<p class="muted">视频和 JSON 使用同一文件名前缀，清单中包含相对于录制开始的时间、实际媒体文件名、运动读数及浏览器报告的时间信息。没有 IMU 样本就明确记录为空，不补造传感器数据。</p>
+</section>
+<section aria-labelledby="roadmapTitle">
+<h2 id="roadmapTitle">未来的空间记录与重建</h2>
+<p><strong>IMU</strong> 辅助估计眼镜运动；<strong>测距或扫描</strong> 提供有标定的距离；<strong>非电离探测</strong> 只能在具体硬件及实验证明有效时增加遮挡后方的结构线索。它们将共享时间基准，与历史第一人称回放和自由第三人称 Mesh 关联。<span class="warn">本页面没有驱动或模拟穿透传感器，也不会把未知空间伪称为已测量。</span></p>
+</section>
+<script>
+"use strict";
+const $ = (id) => document.getElementById(id);
+const maxRecordingSeconds = 180;
+let stream=null, recorder=null, startClock=0, startedUtc="", endSeconds=0;
+let parts=[], mediaBlob=null, mediaName="", manifest=null, mediaUrl=null;
+let motionEnabled=false, motionSamples=[], timer=null;
+let seekDuration=0, boundVideoFile=null;
+function status(message){$("notice").textContent=message;}
+function timestamp(seconds){return (Number.isFinite(seconds)?seconds:0).toFixed(2)+" s";}
+function updatePosition(t,d){$("position").textContent=timestamp(t)+" / "+timestamp(d);}
+function positiveDuration(value){return Number.isFinite(value)&&value>0?value:0;}
+function displayReplay(blob,name){
+  if(mediaUrl)URL.revokeObjectURL(mediaUrl);
+  mediaUrl=URL.createObjectURL(blob);
+  $("replay").src=mediaUrl;$("replay").hidden=false;$("noReplay").hidden=true;
+  $("replay").load();boundVideoFile=name;
+}
+function seekTo(value){
+  if(!$("replay").hidden&&Number.isFinite(value)){
+    try{$("replay").currentTime=Math.max(0,Math.min(value,seekDuration||value));}
+    catch(error){status("浏览器暂不支持对此视频精确定位，可使用播放控件。");}
+  }
+}
+function setSeekDuration(seconds){
+  seekDuration=positiveDuration(seconds);
+  $("timeline").max=String(seekDuration);$("timeline").disabled=seekDuration<=0;
+  $("timeline").value="0";updatePosition(0,seekDuration);
+}
+function download(data,name,type){
+  const blob=data instanceof Blob?data:new Blob([data],{type:type||"application/octet-stream"});
+  const url=URL.createObjectURL(blob),a=document.createElement("a");
+  a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),2000);
+}
+function finiteOrNull(n){return typeof n==="number"&&Number.isFinite(n)?n:null;}
+function vectorOrNull(v){
+  if(!v)return null;
+  const x=finiteOrNull(v.x),y=finiteOrNull(v.y),z=finiteOrNull(v.z);
+  return x===null||y===null||z===null?null:[x,y,z];
+}
+function motionHandler(event){
+  if(!recorder||recorder.state!=="recording"||motionSamples.length>=20000)return;
+  const t=(performance.now()-startClock)/1000;
+  if(t<0||t>maxRecordingSeconds+1)return;
+  const sample={
+    t_s:Number(t.toFixed(4)),
+    acceleration_including_gravity_m_s2:vectorOrNull(event.accelerationIncludingGravity),
+    acceleration_without_gravity_m_s2:vectorOrNull(event.acceleration),
+    rotation_rate_deg_s:event.rotationRate?{
+      alpha:finiteOrNull(event.rotationRate.alpha),
+      beta:finiteOrNull(event.rotationRate.beta),
+      gamma:finiteOrNull(event.rotationRate.gamma)
+    }:null
+  };
+  if(sample.acceleration_including_gravity_m_s2||sample.acceleration_without_gravity_m_s2||sample.rotation_rate_deg_s)
+    motionSamples.push(sample);
+}
+$("motionBtn").addEventListener("click",async()=>{
+  try{
+    if(!("DeviceMotionEvent" in window))throw new Error("浏览器未提供运动传感器事件");
+    if(typeof DeviceMotionEvent.requestPermission==="function"){
+      const choice=await DeviceMotionEvent.requestPermission();
+      if(choice!=="granted")throw new Error("运动传感器访问未获授权");
+    }
+    if(!motionEnabled){window.addEventListener("devicemotion",motionHandler);motionEnabled=true;}
+    $("motionBtn").disabled=true;
+    status("已请求接收浏览器运动读数；是否实际提供样本取决于设备。");
+  }catch(err){status("IMU 不可用："+err.message+"。视频仍可独立录制。");}
+});
+$("startBtn").addEventListener("click",async()=>{
+  let newStream;
+  try{
+    if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia)
+      throw new Error("需要支持摄像头的安全浏览器环境（如 localhost）");
+    if(!window.MediaRecorder)throw new Error("该浏览器没有 MediaRecorder");
+    newStream=await navigator.mediaDevices.getUserMedia({
+      video:{facingMode:{ideal:"environment"},width:{ideal:1280},height:{ideal:720}},
+      audio:$("useAudio").checked
+    });
+    const accepted=["video/webm;codecs=vp9,opus","video/webm;codecs=vp8,opus","video/webm",
+                    "video/mp4"].find((mime)=>MediaRecorder.isTypeSupported(mime));
+    const newRecorder=accepted?new MediaRecorder(newStream,{mimeType:accepted}):new MediaRecorder(newStream);
+    if(mediaUrl){URL.revokeObjectURL(mediaUrl);mediaUrl=null;}
+    $("replay").pause();$("replay").removeAttribute("src");$("replay").hidden=true;
+    $("noReplay").hidden=false;setSeekDuration(0);
+    parts=[];mediaBlob=null;manifest=null;motionSamples=[];endSeconds=0;
+    $("downloadVideo").disabled=true;$("downloadManifest").disabled=true;
+    stream=newStream;recorder=newRecorder;
+    $("live").srcObject=stream;await $("live").play().catch(()=>{});
+    startClock=performance.now();startedUtc=new Date().toISOString();
+    recorder.ondataavailable=(event)=>{if(event.data&&event.data.size)parts.push(event.data);};
+    recorder.onerror=(event)=>{status("媒体录制出错；请停止并检查数据："+String(event.error?.message||"unknown"));};
+    recorder.onstop=finishRecording;
+    recorder.start(2000);
+    $("startBtn").disabled=true;$("stopBtn").disabled=false;$("useAudio").disabled=true;
+    timer=setInterval(()=>{
+      const elapsed=(performance.now()-startClock)/1000;
+      status("正在录制："+timestamp(elapsed)+"。请尊重所有入镜者的知情与隐私。");
+      if(elapsed>=maxRecordingSeconds)stopRecording();
+    },500);
+    status("摄像头录制已启动。只有实际录入的视频会进入历史回放。");
+  }catch(err){
+    if(newStream)newStream.getTracks().forEach((t)=>t.stop());
+    stream=null;recorder=null;
+    status("无法开始录制："+err.message);
+  }
+});
+function stopRecording(){
+  if(timer){clearInterval(timer);timer=null;}
+  if(!recorder||recorder.state==="inactive")return;
+  endSeconds=positiveDuration((performance.now()-startClock)/1000);
+  $("stopBtn").disabled=true;
+  try{recorder.stop();}catch(error){status("停止录制失败："+error.message);}
+  if(stream){stream.getTracks().forEach((t)=>t.stop());stream=null;}
+  $("live").srcObject=null;$("startBtn").disabled=false;$("useAudio").disabled=false;
+}
+$("stopBtn").addEventListener("click",stopRecording);
+function finishRecording(){
+  if(stream){stream.getTracks().forEach((t)=>t.stop());stream=null;}
+  if(!parts.length){status("录制结束，但浏览器没有返回视频数据。");return;}
+  const type=recorder.mimeType||parts[0].type||"video/webm";
+  mediaBlob=new Blob(parts,{type:type});
+  const ext=type.includes("mp4")?"mp4":"webm";
+  const prefix="echo-"+startedUtc.replace(/[:.]/g,"-");
+  mediaName=prefix+"."+ext;
+  manifest={
+    version:"echo-history-stream-0.1",
+    record_kind:"first_person_forward_camera_candidate",
+    created_utc:startedUtc,
+    time_base:"seconds_since_recording_start_monotonic",
+    duration_s:Number(endSeconds.toFixed(4)),
+    media:{
+      file:mediaName,mime_type:type,bytes:mediaBlob.size,
+      role:"camera_original_compressed_capture",
+      facing_mode_requested:"environment",
+      actual_camera_pose:"unknown",
+      source:"browser_MediaRecorder",
+      imu_alignment:"browser_event_monotonic_relative_no_hardware_sync"
+    },
+    imu:{
+      type:"browser_DeviceMotionEvent_optional",
+      calibrated:false,actual_head_pose:"unknown",
+      acceleration_unit:"m/s^2",rotation_rate_unit:"degrees/s",
+      samples:motionSamples
+    },
+    auxiliary_sensor_observations:[],
+    geometry_status:"not_reconstructed",
+    disclaimer:"No wall sensing, no guaranteed forward head orientation, and no geometry inferred from this recording."
+  };
+  displayReplay(mediaBlob,mediaName);
+  setSeekDuration(endSeconds);
+  $("downloadVideo").disabled=false;$("downloadManifest").disabled=false;
+  status("已得到实际视频："+(mediaBlob.size/1048576).toFixed(2)+" MiB；运动样本 "+motionSamples.length+" 条。请下载两份文件保存。");
+  recorder=null;
+}
+$("downloadVideo").addEventListener("click",()=>{if(mediaBlob)download(mediaBlob,mediaName);});
+$("downloadManifest").addEventListener("click",()=>{
+  if(manifest)download(JSON.stringify(manifest,null,2)+"\n",mediaName.replace(/\.[^.]+$/,"")+".json","application/json");
+});
+$("videoImport").addEventListener("change",()=>{
+  const file=$("videoImport").files?.[0];
+  if(!file)return;
+  displayReplay(file,file.name);
+  const declared=manifest?.media?.file;
+  status("已本地打开视频："+file.name+(declared&&declared!==file.name?"；注意：文件名与清单不一致。":""));
+  $("metadata").textContent="本地视频："+file.name+"；未上传至服务器。";
+});
+$("manifestImport").addEventListener("change",async()=>{
+  const file=$("manifestImport").files?.[0];if(!file)return;
+  try{
+    if(file.size>8*1024*1024)throw new Error("清单超过此实验台的8 MiB读取限制");
+    const obj=JSON.parse(await file.text());
+    if(obj.version!=="echo-history-stream-0.1"||!obj.media||!Array.isArray(obj.imu?.samples))
+      throw new Error("清单不是受支持的 Echo 历史记录版本");
+    if(typeof obj.duration_s!=="number"||!Number.isFinite(obj.duration_s)||obj.duration_s<0)
+      throw new Error("清单时间不合法");
+    manifest=obj;
+    $("metadata").textContent="清单："+obj.created_utc+"；运动样本："+obj.imu.samples.length+
+      "；空间几何状态："+String(obj.geometry_status||"unknown");
+    if(boundVideoFile&&obj.media.file!==boundVideoFile)
+      status("文件名不匹配：这份视频可能不是该清单记录的原始媒体。");
+    else status("历史清单已导入。它是设备声明，不代表已验证的空间位姿。");
+    if($("replay").hidden)setSeekDuration(obj.duration_s);
+  }catch(err){status("未导入清单："+err.message);}
+});
+$("replay").addEventListener("loadedmetadata",()=>{
+  const d=positiveDuration($("replay").duration);
+  if(d)setSeekDuration(d);
+});
+$("replay").addEventListener("timeupdate",()=>{
+  const t=positiveDuration($("replay").currentTime);
+  $("timeline").value=String(Math.min(t,seekDuration||t));
+  updatePosition(t,seekDuration);
+});
+$("timeline").addEventListener("input",()=>seekTo(Number($("timeline").value)));
+window.addEventListener("pagehide",()=>{
+  if(stream)stream.getTracks().forEach((t)=>t.stop());
+  if(mediaUrl)URL.revokeObjectURL(mediaUrl);
+});
+</script>
+</body>
+</html>
