@@ -15,7 +15,7 @@ permissions:
 
 concurrency:
   group: echo-history-tum-real-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   real-640p-history-to-mesh:
@@ -69,5 +69,6 @@ jobs:
             artifacts/history-tum-real/views/*.png
             artifacts/history-tum-real/mesh.ply
             artifacts/history-tum-real/scene.echo.json
+            artifacts/history-tum-real/metadata/
           if-no-files-found: warn
           retention-days: 14

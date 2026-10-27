@@ -19,11 +19,11 @@ import time
 import numpy as np
 from PIL import Image
 
-from echo4d.history import import_history
+from echo4d.history import import_history, _json_snapshot, _safe_basename
 from echo4d.history_rgbd import _video_pts, prepare_history_rgbd
 from echo4d.holdout import rasterize_mesh_depth, read_echo_ply
 from echo4d.model import DataError, file_sha256, load_recording
-from echo4d.output import write_json
+from echo4d.output import write_json, output_transaction
 from tum_public_roundtrip import (
     BOUNDS, PINNED_ARCHIVE_BYTES, PINNED_ARCHIVE_SHA256, ROOT,
     URL, VOXEL, download, extract,
@@ -31,6 +31,29 @@ from tum_public_roundtrip import (
 
 DEFAULT_FRAMES = 60
 STRIDE = 12
+
+
+def archive_metadata(sources: dict[str, Path], destination: Path) -> dict:
+    """Preserve bounded original JSON bytes, refusing changed inputs or overwrite."""
+    snapshots = {}
+    for name, source in sources.items():
+        _safe_basename(name)
+        _, raw, digest = _json_snapshot(source)
+        snapshots[name] = (source, raw, digest)
+    index = {}
+    with output_transaction(destination) as folder:
+        for name, (source, raw, digest) in snapshots.items():
+            if file_sha256(source) != digest:
+                raise DataError("Trial metadata changed before archival")
+            target = folder / name
+            target.write_bytes(raw)
+            if file_sha256(target) != digest:
+                raise DataError("Archived trial metadata hash mismatch")
+            index[name] = {"sha256": digest, "bytes": len(raw)}
+        write_json(folder / "archive.json", index)
+        if any(file_sha256(source) != digest for source, _, digest in snapshots.values()):
+            raise DataError("Trial metadata changed during archival")
+    return index
 
 
 def cmd(argv: list[str], timeout: int = 800) -> str:
@@ -90,6 +113,12 @@ def visualize(report_dir: Path, dataset: Path, mesh_file: Path) -> dict:
         Image.fromarray(values).save(rendered)
         results.append({"frame": index, "source_file": target.name,
                         "mesh_projection": rendered.name,
+                        "source_image_sha256": file_sha256(target),
+                        "render_sha256": file_sha256(rendered),
+                        "source_intrinsics": recording.camera.to_dict(),
+                        "render_intrinsics": render_camera.to_dict(),
+                        "cameraToWorld": frame.camera_to_world.flatten(order="F").tolist(),
+                        "observation_role": "training_view_not_holdout",
                         "projected_pixels": int(stats["predicted_pixels"]),
                         "view": "same_known_camera_pose"})
     # Two unrestricted cameras around real Mesh center. This is a view, not proof of geometry accuracy.
@@ -117,6 +146,9 @@ def visualize(report_dir: Path, dataset: Path, mesh_file: Path) -> dict:
         target = dest / f"free-{n+1}-mesh-depth-160.png"
         Image.fromarray(values).save(target)
         results.append({"view": "free_camera", "file": target.name,
+                        "render_sha256": file_sha256(target),
+                        "render_intrinsics": render_camera.to_dict(),
+                        "cameraToWorld": pose.flatten(order="F").tolist(),
                         "projected_pixels": int(stats["predicted_pixels"])})
     return {"views": results, "mesh_faces": int(len(faces)),
             "mesh_vertices": int(len(verts)), "mesh_sha256": file_sha256(mesh_file),
@@ -149,6 +181,12 @@ def real_trial(args: argparse.Namespace, report: dict) -> None:
     recording = load_recording(imported / "recording.json")
     if len(recording) != args.frames or recording.camera.width != 640:
         raise DataError("Unexpected true source resolution or frame count")
+    metadata_dir = report_dir / "metadata"
+    metadata_dir.mkdir(exist_ok=False)
+    report["metadata"] = {"imported": archive_metadata({
+        "recording.json": imported / "recording.json",
+        "association.json": imported / "association.json",
+    }, metadata_dir / "imported")}
 
     reel = work / "tum-observed-frames.webm"
     pts = video_from_real_rgb(imported, recording, reel)
@@ -197,6 +235,15 @@ def real_trial(args: argparse.Namespace, report: dict) -> None:
 
     converted = work / "decoded-and-aligned"
     bridge = prepare_history_rgbd(archive, alignment, converted)
+    report["metadata"]["bridge"] = archive_metadata({
+        "capture.json": caption,
+        "history.timeline.json": archive / "history.timeline.json",
+        "alignment-input.json": alignment,
+        "recording.json": converted / "recording.json",
+        "history-alignment.json": converted / "history-alignment.json",
+        "source-history.timeline.json": converted / "source-history.timeline.json",
+        "source-alignment.json": converted / "source-alignment.json",
+    }, metadata_dir / "bridge")
     after = load_recording(converted / "recording.json")
     if len(after) != args.frames:
         raise DataError("Historical RGB-D bridge dropped original TUM frames")
@@ -212,6 +259,9 @@ def real_trial(args: argparse.Namespace, report: dict) -> None:
          "--output", str(mesh_out), "--bounds", *BOUNDS, "--voxel", VOXEL,
          "--max-depth", "4", "--min-observations", str(args.min_observations), "--quiet"], timeout=1200)
     final = json.loads((mesh_out / "report.json").read_text())
+    report["metadata"]["reconstruction"] = archive_metadata({
+        "report.json": mesh_out / "report.json",
+    }, metadata_dir / "reconstruction")
     if final["mesh"]["vertices"] < 3 or final["mesh"]["triangles"] < 1:
         raise DataError("Real TUM historical bridge produced no usable Mesh triangles")
 
