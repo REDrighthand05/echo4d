@@ -71,3 +71,29 @@ def test_nonfinite_rectification_rejected(monkeypatch):
     monkeypatch.setattr(cv2,'stereoRectify',broken)
     with pytest.raises(DataError,match='nonfinite'):
         rectify_geometry(camera,a,b)
+
+
+def test_train_only_pair_backups_are_bounded_and_deterministic():
+    # Train-only synthetic motion. Each selected anchor has alternative partners;
+    # no withheld frame may enter either side of a stereo pair.
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'tools'))
+    from tum_rgb_stereo import select_pairs, HOLDOUT, TOTAL
+    camera, _, _ = setup()
+    frames = []
+    for i in range(TOTAL):
+        pose = np.eye(4)
+        pose[0, 3] = i * .01
+        frames.append({'pose': pose})
+    pairs = select_pairs(frames, camera, max_pairs=12, backups_per_left=3)
+    assert pairs == select_pairs(frames, camera, max_pairs=12, backups_per_left=3)
+    assert len(pairs) <= 36
+    assert len({left for left, _ in pairs}) == 12
+    assert all(left not in HOLDOUT and right not in HOLDOUT for left, right in pairs)
+    assert all(sum(a == left for a, _ in pairs) <= 3 for left, _ in pairs)
+    assert any(sum(a == left for a, _ in pairs) > 1 for left, _ in pairs)
+    with pytest.raises(DataError, match='budget'):
+        select_pairs(frames, camera, max_pairs=0)
+    with pytest.raises(DataError, match='budget'):
+        select_pairs(frames, camera, backups_per_left=5)
