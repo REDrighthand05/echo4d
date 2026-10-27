@@ -1,4 +1,4 @@
-"""Independent held-out RGB-D *view consistency* against a previously fused mesh.
+"""Held-out RGB-D *view consistency* against a previously fused mesh (reused from PR #8).
 
 Renders the actual triangles, not only vertices, into never-fused camera views.
 This does NOT provide laser-scanned surface ground truth or independent poses.

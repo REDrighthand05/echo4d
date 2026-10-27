@@ -1,0 +1,213 @@
+{
+  "schema": "echo4d-desk-v2-real-failed-gate-evidence-1",
+  "provenance": {
+    "experiment": "TUM freiburg1_desk source-paired V2, separate from frozen failed V1",
+    "run_url": "https://github.com/REDrighthand05/echo4d/actions/runs/40356324356",
+    "artifact_url": "https://github.com/REDrighthand05/echo4d/actions/runs/40356324356/artifacts/12665234911",
+    "artifact_zip_sha256": "d6bffd3eb08acccbc7e28b74f2a087c48972408683c2ef8eec324a290ea074a4",
+    "candidate_head_sha": "04501849ba700dcf3c32fe9fd7b7ea57c2edba8c",
+    "actual_tested_merge_checkout_sha": "00f51a9e81a62ed8f807f6042ab5174257d2bc1d",
+    "base_prs": [
+      58,
+      59,
+      60
+    ],
+    "official_archive_sha256": "e983d6830916e66dc4a46a71368046b149b283de87769690e7aa4e0b9483530c",
+    "source_plan_sha256": "368546ed7f3137078992289b0d4f23ce2ac03bf471e87ddedbe325bbdf2e95f2",
+    "frozen_protocol_sha256": "5649a7372eb70bc881b46a6867833e89ef3b0d8ec1e306a7af02cc2458151736",
+    "heldout_report_sha256": "33a2206079430bf46288e8dce5a9ee4b183bf2336782c5732c1a932b90a7474b",
+    "mesh_sha256": "320da61fcd421c0e55aa6fc014750aeaa3e6e2d98b607e9feaae268f83d2a939",
+    "full_report_sha256": "c5b624617ee37d66a675b2908e576f7b767938486a22b27b55bf2c5aefb98002"
+  },
+  "fixed_contract": {
+    "version": "desk-metric-mesh-v2-source-paired",
+    "selection": "Original RGB/depth timestamps and identities only; no GT or holdout depth pixels used to choose frames",
+    "selected_rgb": 75,
+    "first_selected_original_rgb_index": 17,
+    "source_rows_rejected_before_selection": 17,
+    "geometry_train": 48,
+    "geometry_holdout": 12,
+    "scale_anchors": 3,
+    "scale_diagnostics": 7,
+    "max_pairing_gap_s": 0.03,
+    "voxel_m": 0.07,
+    "min_global_coverage": 0.8,
+    "max_global_rmse_m": 0.15
+  },
+  "observed": {
+    "apt_update_s": 13,
+    "apt_install_s": 32,
+    "unit_tests_passed": 12,
+    "registered_rgb": 75,
+    "source_pairs_within_30ms": 68,
+    "source_pairs_required": 68,
+    "mesh_vertices": 4543,
+    "mesh_triangles": 7578,
+    "measured_scale_m_per_sfm_unit": 0.2242269341842314,
+    "holdout_valid_pixels": 169467,
+    "holdout_overlap_pixels": 158851,
+    "coverage": 0.9373565354906855,
+    "overlap_mae_m": 0.05789618122951465,
+    "overlap_rmse_m": 0.16777902462886723,
+    "overlap_p95_abs_m": 0.17552459239959717,
+    "coverage_gate_pass": true,
+    "rmse_gate_pass": false,
+    "final_result": "FAIL_FROZEN_15CM_RMSE_GATE"
+  },
+  "per_view_fields": [
+    "holdout_index",
+    "original_depth_png_sha256",
+    "valid_pixels",
+    "overlap_pixels",
+    "coverage_rounded_6dp",
+    "rmse_m_rounded_6dp",
+    "mae_m_rounded_6dp",
+    "p95_abs_m_rounded_6dp"
+  ],
+  "per_view": [
+    [
+      4,
+      "dc33d66b54f532c852b14e7b6b011297284887c269c95ac004a19143ae374cbd",
+      14021,
+      13077,
+      0.932672,
+      0.298644,
+      0.098517,
+      0.528515
+    ],
+    [
+      9,
+      "94a2a87d474b86cf27da0c63fba441d61707e58395f07a6dcb4d9d26730ec533",
+      14088,
+      13245,
+      0.940162,
+      0.07587,
+      0.024304,
+      0.075068
+    ],
+    [
+      14,
+      "86d68cf7afec872e78304d2cf1bb276086b3e064bebc51264b909e25f5949738",
+      15367,
+      15327,
+      0.997397,
+      0.052082,
+      0.032543,
+      0.093359
+    ],
+    [
+      19,
+      "ec6921eee8875a48e009497be3389dcc0d8817f28c664ad5a6ccb26784fb8555",
+      14219,
+      13595,
+      0.956115,
+      0.139541,
+      0.052044,
+      0.162681
+    ],
+    [
+      24,
+      "62523ae5582cefae2aacf4b8a75dc88c684cb37ff84a7ceaf81c979d1809ce93",
+      12751,
+      12678,
+      0.994275,
+      0.077426,
+      0.036268,
+      0.109066
+    ],
+    [
+      29,
+      "e1c4e2cfe353d77645cbc764bee781e137b61e8e8c981e0c191c09604dfa3d1b",
+      12817,
+      12369,
+      0.965046,
+      0.133738,
+      0.052256,
+      0.331032
+    ],
+    [
+      34,
+      "18c34b2e73a3607632d923cbd5f06e6466448ec3150bc405ae17f27bd6f27f4b",
+      15295,
+      15295,
+      1,
+      0.045451,
+      0.02023,
+      0.053692
+    ],
+    [
+      39,
+      "7072bb1598c07d0a9792b20b358a58bea332141b972bb64759440acda33c7d1b",
+      15162,
+      14806,
+      0.97652,
+      0.081628,
+      0.046186,
+      0.103103
+    ],
+    [
+      44,
+      "8d6c07e69a598ad2e4a3c9d610d58c3f5b731e0e15260502610f69dc97586cb5",
+      13213,
+      10627,
+      0.804284,
+      0.22663,
+      0.1105,
+      0.489674
+    ],
+    [
+      49,
+      "0b10abf770869f8aa1f65158276605a7956067f148d7b55954c84aa9e7fa8de9",
+      13812,
+      13372,
+      0.968144,
+      0.194804,
+      0.062316,
+      0.172481
+    ],
+    [
+      54,
+      "1d5a6acd7ce6544169f1df74ce95866bdf1c6702dacb8fbcc94169b9b9f8926a",
+      14050,
+      10700,
+      0.761566,
+      0.253193,
+      0.098567,
+      0.78952
+    ],
+    [
+      59,
+      "da25db93c295b37b39d43d150ceb64243e0d6288c8a727a5df76740259be3cf8",
+      14672,
+      13760,
+      0.937841,
+      0.234411,
+      0.088567,
+      0.314059
+    ]
+  ],
+  "independent_checks": {
+    "zip_sha_matches_actions_log": true,
+    "mesh_sha_matches_raw_ply": true,
+    "source_plan_sha_matches_protocol_and_report": true,
+    "protocol_sha_matches_report": true,
+    "holdout_sha_matches_report": true,
+    "per_view_valid_pixels_sum": 169467,
+    "per_view_overlap_pixels_sum": 158851,
+    "weighted_rmse_from_per_view_approx_m": 0.1677790247160187,
+    "top_three_squared_error_frames": [
+      4,
+      59,
+      54
+    ],
+    "top_three_fraction_of_squared_error_approx": 0.58331069,
+    "method": "Per-frame overlap_pixels × reported RMSE²; ranking is diagnostic, not justification to remove frames."
+  },
+  "limits": [
+    "Same RGB-D sensor withheld depth is not an independent scanned-surface truth.",
+    "The input is original TUM photos re-encoded as test video, not native phone footage.",
+    "Measured depth was used for scale and mesh, so this is not RGB-only dense reconstruction.",
+    "The failed V2 screening result and all 12 held-out frames must remain unchanged."
+  ],
+  "pre_registered_next_exploration_proposal": "New diagnostic-only experiment: before inspecting pixel residuals, fix bins for depth ranges, image regions and occlusion proxies; report all 12 frames and all valid/overlap pixels, residual counts and weighted totals. Do not change existing threshold, training split, selection or re-label this failure as PASS."
+}

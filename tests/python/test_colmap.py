@@ -139,3 +139,72 @@ def test_duplicate_timestamp_rejected(tmp_path):
     with pytest.raises(DataError, match="unique"):
         import_colmap(args)
     assert not args.output.exists()
+
+
+def test_missing_points2d_cannot_swallow_next_pose(tmp_path):
+    args = fixture(tmp_path)
+    path = args.model / "images.txt"
+    path.write_text(path.read_text().replace("1 a.png\n\n2", "1 a.png\n2"))
+    # A partial CSV must not hide the second pose consumed as an observation row.
+    args.timestamps.write_text("name,t\na.png,9\n")
+    with pytest.raises(DataError, match="POINTS2D"):
+        import_colmap(args)
+    assert not args.output.exists()
+
+
+@pytest.mark.parametrize("row", ["0 0", "nan 0 -1", "0 inf -1", "0 0 1.2", "0 0 -2", "# not an observation"])
+def test_malformed_points2d_rejected_before_publication(tmp_path, row):
+    args = fixture(tmp_path)
+    path = args.model / "images.txt"
+    path.write_text(path.read_text().replace("1 a.png\n\n", f"1 a.png\n{row}\n"))
+    with pytest.raises(DataError, match="POINTS2D"):
+        import_colmap(args)
+    assert not args.output.exists()
+
+
+def test_nonempty_points2d_preserves_all_registered_poses(tmp_path):
+    args = fixture(tmp_path)
+    path = args.model / "images.txt"
+    path.write_text(path.read_text().replace("1 a.png\n\n", "1 a.png\n1.25 2.5 -1 3 4 0\n"))
+    assert import_colmap(args)["frames"] == 2
+    frames = list(load_recording(args.output / "recording.json").iter_frames())
+    assert np.allclose(frames[0][1].camera_to_world[:3, 3], [2, 4, 6])
+
+
+def test_npz_disguised_as_npy_is_closed_and_rejected(tmp_path, monkeypatch):
+    args = fixture(tmp_path)
+    with (args.depth / "a.npy").open("wb") as stream:
+        np.savez(stream, depth=np.ones((6, 8)))
+    archives = []
+    original_load = np.load
+
+    def track_load(*values, **options):
+        loaded = original_load(*values, **options)
+        if isinstance(loaded, np.lib.npyio.NpzFile):
+            archives.append(loaded)
+        return loaded
+
+    monkeypatch.setattr(np, "load", track_load)
+    with pytest.raises(DataError, match="NPY array"):
+        import_colmap(args)
+    assert len(archives) == 1 and archives[0].zip is None
+    assert not args.output.exists()
+
+
+def test_npz_cli_returns_json_error_without_traceback(tmp_path):
+    import subprocess
+    import sys
+    args = fixture(tmp_path)
+    with (args.depth / "a.npy").open("wb") as stream:
+        np.savez(stream, depth=np.ones((6, 8)))
+    result = subprocess.run([
+        sys.executable, "-m", "echo4d.colmap", "--model", str(args.model),
+        "--images", str(args.images), "--depth", str(args.depth),
+        "--timestamps", str(args.timestamps), "--meters-per-colmap-unit", "2",
+        "--scale-source", "measured fixture scale", "--output", str(args.output),
+    ], capture_output=True, text=True, check=False)
+    assert result.returncode == 2
+    assert not result.stdout.strip()
+    error = json.loads(result.stderr)
+    assert error["type"] == "DataError" and "NPY array" in error["error"]
+    assert not args.output.exists()

@@ -1,0 +1,92 @@
+{
+  "source_kind": "measured_registered_z_depth",
+  "source_description": "TUM Freiburg1 XYZ real registered RGB-D depth sensor (1/5000m PNG); externally measured, not RGB inferred",
+  "source_dataset_url": "https://cvg.cit.tum.de/rgbd/dataset/freiburg1/rgbd_dataset_freiburg1_xyz.tgz",
+  "depth_index_sha256": "d5abcc12d67cd2f5ae6f405ab1459a416ab2c1cdfb16d9bbd137d5f77d3285df",
+  "depth_numeric_units_per_meter": 5000,
+  "sensor_timestamps_are_rgb-nearest_not_simultaneous": true,
+  "anchors": [
+    {
+      "name": "frame_00015.png",
+      "depth": "depth/1305031106.166330.png",
+      "timestamp_delta_seconds": -0.009203910827636719,
+      "source_rgb_time_s": 1305031106.175534,
+      "source_depth_time_s": 1305031106.16633,
+      "description": "Observed by registered TUM depth sensor; not used by RGB SfM"
+    },
+    {
+      "name": "frame_00045.png",
+      "depth": "depth/1305031114.174114.png",
+      "timestamp_delta_seconds": -0.00522303581237793,
+      "source_rgb_time_s": 1305031114.179337,
+      "source_depth_time_s": 1305031114.174114,
+      "description": "Observed by registered TUM depth sensor; not used by RGB SfM"
+    },
+    {
+      "name": "frame_00075.png",
+      "depth": "depth/1305031122.183052.png",
+      "timestamp_delta_seconds": 1.0013580322265625e-05,
+      "source_rgb_time_s": 1305031122.183042,
+      "source_depth_time_s": 1305031122.183052,
+      "description": "Observed by registered TUM depth sensor; not used by RGB SfM"
+    }
+  ],
+  "holdouts": [
+    {
+      "name": "frame_00005.png",
+      "depth": "depth/1305031103.494472.png",
+      "timestamp_delta_seconds": -0.0168609619140625,
+      "source_rgb_time_s": 1305031103.511333,
+      "source_depth_time_s": 1305031103.494472,
+      "description": "Observed by registered TUM depth sensor; not used by RGB SfM"
+    },
+    {
+      "name": "frame_00010.png",
+      "depth": "depth/1305031104.830961.png",
+      "timestamp_delta_seconds": -0.012296915054321289,
+      "source_rgb_time_s": 1305031104.843258,
+      "source_depth_time_s": 1305031104.830961,
+      "description": "Observed by registered TUM depth sensor; not used by RGB SfM"
+    },
+    {
+      "name": "frame_00025.png",
+      "depth": "depth/1305031108.835163.png",
+      "timestamp_delta_seconds": -0.00810098648071289,
+      "source_rgb_time_s": 1305031108.843264,
+      "source_depth_time_s": 1305031108.835163,
+      "description": "Observed by registered TUM depth sensor; not used by RGB SfM"
+    },
+    {
+      "name": "frame_00035.png",
+      "depth": "depth/1305031111.503531.png",
+      "timestamp_delta_seconds": -0.00773310661315918,
+      "source_rgb_time_s": 1305031111.511264,
+      "source_depth_time_s": 1305031111.503531,
+      "description": "Observed by registered TUM depth sensor; not used by RGB SfM"
+    },
+    {
+      "name": "frame_00055.png",
+      "depth": "depth/1305031116.840370.png",
+      "timestamp_delta_seconds": -0.00571894645690918,
+      "source_rgb_time_s": 1305031116.846089,
+      "source_depth_time_s": 1305031116.84037,
+      "description": "Observed by registered TUM depth sensor; not used by RGB SfM"
+    },
+    {
+      "name": "frame_00065.png",
+      "depth": "depth/1305031119.511258.png",
+      "timestamp_delta_seconds": 1.7881393432617188e-05,
+      "source_rgb_time_s": 1305031119.51124,
+      "source_depth_time_s": 1305031119.511258,
+      "description": "Observed by registered TUM depth sensor; not used by RGB SfM"
+    },
+    {
+      "name": "frame_00085.png",
+      "depth": "depth/1305031124.850559.png",
+      "timestamp_delta_seconds": 2.4080276489257812e-05,
+      "source_rgb_time_s": 1305031124.850535,
+      "source_depth_time_s": 1305031124.850559,
+      "description": "Observed by registered TUM depth sensor; not used by RGB SfM"
+    }
+  ]
+}

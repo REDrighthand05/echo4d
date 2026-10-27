@@ -1,0 +1,59 @@
+name: Issue47 B pinned TUM RGB reencoded VFR PTS to real COLMAP
+
+on:
+  pull_request:
+    paths:
+      - 'src/echo4d/video_sfm.py'
+      - 'src/echo4d/video_pts.py'
+      - 'tools/tum_video_vfr_pts_check.py'
+      - '.github/workflows/issue47-tum-vfr.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: issue47-vfr-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  real-encoded-vfr-to-colmap:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: requirements.lock
+      - name: Install real bounded FFmpeg COLMAP
+        timeout-minutes: 8
+        run: |
+          sudo apt-get -o Acquire::Retries=1 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20 update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=1 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20 install -y -qq colmap ffmpeg
+      - name: Install locked software environment
+        run: |
+          python -m pip install -r requirements.lock
+          python -m pip install --no-deps -e .
+      - name: Run real RGB VFR timestamp/registered pose audit
+        run: |
+          python tools/tum_video_vfr_pts_check.py \
+            --work "$RUNNER_TEMP/issue47-vfr" \
+            --report-dir "$GITHUB_WORKSPACE/artifacts/issue47-vfr"
+      - name: Include actual success or failure summary
+        if: always()
+        run: |
+          if [ -f artifacts/issue47-vfr/SUMMARY.md ]; then
+            cat artifacts/issue47-vfr/SUMMARY.md >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo 'No machine report generated; consult installation/job errors.' >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Archive original timing/source hashes, trajectory and failures
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: issue47-vfr-colmap-${{ github.run_id }}
+          path: artifacts/issue47-vfr/
+          if-no-files-found: warn
+          retention-days: 14

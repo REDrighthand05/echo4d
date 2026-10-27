@@ -35,3 +35,75 @@ COLMAP 的 qvec / tvec 为 world-to-camera 刚体；echo4d 需要 camera-to-worl
 
 总档案：https://github.com/REDrighthand05/echo4d/issues/1
 上游开发任务：https://github.com/REDrighthand05/echo4d/issues/2
+
+
+## Unified top-level ECHO command (staged for maintainer review)
+
+The canonical adapter is the strict `src/echo4d/colmap.py` implementation
+from PR #6 **with** PR #24's missing-POINTS2D-row and disguised-NPZ rejection
+fixes. The ordinary `echo4d` command now exposes the **same adapter**:
+
+```bash
+python -m echo4d import-colmap \
+  --model ./colmap-text --images ./undistorted-rgb \
+  --depth ./registered-camera-z-npy \
+  --timestamps ./timestamps.csv \
+  --meters-per-colmap-unit 0.0509981667 \
+  --scale-source "three independent measured camera-Z depth anchor frames" \
+  --output ./echo-recording
+```
+
+The numerical value above is **only a demonstration from a specific documented
+TUM experiment**, not a scale to copy into another video. A new recording
+must have its own actual, independently measured scale.
+
+The `--timestamps` file has the precise CSV header `name,t` and one
+registered image name per row. The `--depth` directory must contain a
+matching, already-registered float32/float64 `.npy` camera-Z depth map for
+every COLMAP image, expressed in **metres**. For each camera transform
+COLMAP world-to-camera is inverted and its translation multiplied by
+`--meters-per-colmap-unit` exactly once; **rotation matrices and the
+already-metric sensor Z values are not multiplied**.
+
+The indexed raw-depth convenience of PR #19 is now an optional, explicitly selected preprocessor. It invokes the same hardened `colmap.import_colmap` core as the standard CLI, instead of importing the conflicting PR #19 converter. See below.
+
+The separate measured-sensor bridge `src/echo4d/metric_rgbd.py` from PR #23
+still exists for the real SfM→scale→48-frame scene experiment and produces
+the same `echo-dataset-1` format. It must remain protected by its own
+48/12 non-leakage and sensor-scale checks before any interface consolidation
+into the above general-purpose importer. This is a Draft integration change,
+not approval to merge it into stable main.
+
+## 可选的 indexed raw-depth 输入（GPT A）
+
+**唯一标准命令仍是 `python -m echo4d import-colmap`。** 原有 `--depth` 浮点 `.npy` 米制深度方式不变；仅在指定 `--depth-index` 时，才允许显式转换原始深度。新模式同时要求 `--depth-scale`。
+
+示例：
+
+```bash
+python -m echo4d import-colmap \
+  --model ./colmap-text --images ./undistorted-rgb \
+  --depth ./raw-depth --depth-index ./depth-index.txt \
+  --depth-scale 1000 \
+  --timestamps ./timestamps.csv \
+  --meters-per-colmap-unit <INDEPENDENTLY_MEASURED_VALUE> \
+  --scale-source "physical calibration measurement identifier" \
+  --output ./echo-recording
+```
+
+`<INDEPENDENTLY_MEASURED_VALUE>` 是占位符，绝不能照抄测试数据；只有独立参照物或实测传感器标定的尺度才可填入，不能拿评价集 GT 的事后 Sim3 对齐尺度代替。
+
+`depth-index.txt` 是 UTF-8 无表头的两列文本，左侧为 COLMAP 图像名称，右侧是相对于 `--depth` 目录的深度文件路径：
+
+```text
+a.png sensor/frame-0001.png
+b.png sensor/frame-0003.npy
+```
+
+索引必须恰好覆盖 COLMAP 登记图像，不得重复/越界/软链接跳出目录。时间戳仍是既有 **`name,t` CSV**，不接受 PR #19 的另一个空格分隔时间戳协议。索引深度可为二维灰度 PNG 或数字 NPY，必须是已配准相机光轴 Z 深度。整数值除以 `--depth-scale` 一次；已经是米的浮点 NPY **只允许 `--depth-scale 1`**。若未提供索引，`--depth-scale` 一律报错，以避免误乘。
+
+两个彼此独立的物理量：`--meters-per-colmap-unit` 只将 COLMAP **相机中心平移**从 SfM 单位转换为米，不改变旋转和深度；`--depth-scale` 只将索引文件中原始深度值转换为米，不改变任何位姿。
+
+程序先预处理、验证深度并输出暂存的米制 float32 NPY，再调用 **同一 `src/echo4d/colmap.py::import_colmap`**；不会实现第二套位姿解析/坐标转换。`import-provenance.json` 额外保留索引 SHA-256、原始深度 SHA-256、输出深度 SHA-256、单位换算和源路径；整套输出采用原子目录发布，异常时不留下半成品或覆盖既有结果。
+
+下游接口：视频定位模块需生成 COLMAP 去畸变 TEXT 位姿与逐帧准确时间 CSV；三维重建/TSDF 程序读取产出的 `recording.json`、`depth/*.npy`（米制 camera Z）、`color/*` 和 `cameraToWorld`。目前仍不自动估计视频位姿、真实尺度或密集深度；尺度来源的**真实性**仍需人工或独立实验核验。

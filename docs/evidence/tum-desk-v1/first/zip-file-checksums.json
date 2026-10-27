@@ -1,0 +1,30 @@
+{
+  "SUMMARY.md": {
+    "size": 616,
+    "sha256": "446d20843f4319b011bccf048d2e439bea8ffa4dc7670bd32824ad07897b12a9"
+  },
+  "images.txt": {
+    "size": 5343604,
+    "sha256": "94ed350a694fcf879fb4a6a8fb3562f459e5150415233ad45d6ef152bced8d66"
+  },
+  "cameras.txt": {
+    "size": 185,
+    "sha256": "e794759cc741f021917ac2418d9c46c2ccf1389cccb5e176a565c3ad71f998bc"
+  },
+  "points3D.txt": {
+    "size": 907143,
+    "sha256": "b53bb51b654d8de73e088d5a51e428fd2a640a96b9b2fcef473bd14214f54abb"
+  },
+  "registered_timestamps.csv": {
+    "size": 1655,
+    "sha256": "9aef61ba4645e12d56fe7abc9ce8ae8e1db6a5ae8445f14c15f84934352e06cb"
+  },
+  "report.json": {
+    "size": 79793,
+    "sha256": "ef670de9cf0a5e7bf78f7fdfd581274b5ed9124900840b1bd5245f5361327844"
+  },
+  "trajectory-scale-unknown.json": {
+    "size": 39417,
+    "sha256": "debb9c9f900c39ff75ebd215ebf6b3f5f90ed97abef8f62bc143b22c7106bd26"
+  }
+}

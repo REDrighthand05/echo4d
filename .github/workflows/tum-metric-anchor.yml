@@ -1,0 +1,66 @@
+name: TUM real RGB SfM with independent sensor metric scale
+
+on:
+  pull_request:
+    paths:
+      - 'src/echo4d/metric_anchor.py'
+      - 'tools/tum_metric_anchor.py'
+      - 'tests/python/test_metric_anchor.py'
+      - 'docs/evidence/tum-metric-anchor-v1/**'
+      - '.github/workflows/tum-metric-anchor.yml'
+      - 'src/echo4d/video_sfm.py'
+      - 'src/echo4d/sfm_eval.py'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tum-metric-anchor-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  real-sensor-calibration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: requirements.lock
+      - name: Install real FFmpeg and CPU COLMAP
+        run: |
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq ffmpeg colmap
+          colmap help > /dev/null
+      - name: Install echo4d pinned dependencies
+        run: |
+          python -m pip install -r requirements.lock
+          python -m pip install --no-deps -e .
+      - name: Check known-value sensor scale and negative examples
+        run: python -m pytest tests/python/test_metric_anchor.py -q
+      - name: Re-run real RGB-only SfM, then sensor-depth anchored scale and independent holdouts
+        env:
+          ECHO_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          python tools/tum_metric_anchor.py \
+            --work "$RUNNER_TEMP/tum-metric-anchor" \
+            --report-dir "$GITHUB_WORKSPACE/artifacts/tum-metric-anchor"
+      - name: Show outcome even on failure
+        if: always()
+        run: |
+          if [ -f artifacts/tum-metric-anchor/SUMMARY.md ]; then
+            cat artifacts/tum-metric-anchor/SUMMARY.md >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo 'No report was produced; see failed job logs.' >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Archive measured depth anchor report and scaled trajectory
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tum-metric-anchor-${{ github.run_id }}
+          path: artifacts/tum-metric-anchor/
+          if-no-files-found: warn
+          retention-days: 14

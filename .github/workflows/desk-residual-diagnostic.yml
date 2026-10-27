@@ -1,0 +1,43 @@
+name: Frozen desk Mesh residual diagnosis (no new SfM)
+on:
+  pull_request:
+    paths:
+      - tools/desk_residual_diagnostic.py
+      - tests/python/test_desk_residual_diagnostic.py
+      - docs/experiments/desk-v2-residual-protocol.json
+      - .github/workflows/desk-residual-diagnostic.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Record actual tested checkout
+        run: echo "ECHO_TESTED_CHECKOUT_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install locked dependencies
+        run: python -m pip install -r requirements.lock
+      - name: Install exact source
+        run: python -m pip install --no-deps .
+      - name: Verify partition arithmetic before real pixels
+        run: python -m pytest -q tests/python/test_desk_residual_diagnostic.py
+      - name: Download exact original evidence ZIP
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh api repos/REDrighthand05/echo4d/actions/artifacts/12665234911/zip > "$RUNNER_TEMP/original-desk.zip"
+      - name: Diagnose existing frozen Mesh and all twelve depth views
+        run: python tools/desk_residual_diagnostic.py --evidence-zip "$RUNNER_TEMP/original-desk.zip" --output artifacts/desk-residual-diagnostic
+      - name: Retain diagnosis and failure records
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: desk-residual-diagnostic-${{ github.run_id }}
+          path: artifacts/desk-residual-diagnostic/
+          retention-days: 30
+          if-no-files-found: warn
