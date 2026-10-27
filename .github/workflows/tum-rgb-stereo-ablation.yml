@@ -1,0 +1,73 @@
+name: TUM known-pose RGB stereo depth ablation
+
+on:
+  push:
+    branches:
+      - research/known-pose-rgb-stereo-ablation-20261028
+    paths:
+      - 'src/echo4d/known_pose_stereo.py'
+      - 'tools/tum_rgb_stereo.py'
+      - 'tests/python/test_known_pose_stereo.py'
+      - '.github/workflows/tum-rgb-stereo-ablation.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tum-rgb-stereo-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  real-rgb-stereo:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: requirements.lock
+      - name: Install locked ECHO and pinned OpenCV CPU provider
+        run: |
+          python -m pip install -r requirements.lock
+          python -m pip install --no-deps -e .
+          python -m pip install --no-deps opencv-python-headless==4.12.0.88
+      - name: Synthetic plane oracle and failure counterexamples
+        run: python -m pytest -q tests/python/test_known_pose_stereo.py
+      - name: Run real TUM RGB stereo, retaining known poses but removing measured Z maps
+        env:
+          PYTHONPATH: tools
+        run: |
+          python tools/tum_rgb_stereo.py \
+            --work "$RUNNER_TEMP/tum-rgb-stereo" \
+            --report-dir "$GITHUB_WORKSPACE/artifacts/tum-rgb-stereo"
+      - name: Summarize evidence without upgrading to geometry PASS
+        if: always()
+        run: |
+          if [ -f artifacts/tum-rgb-stereo/report.json ]; then
+            python - <<'PY'
+          import json, os
+          r=json.load(open('artifacts/tum-rgb-stereo/report.json'))
+          lines=[
+            '## Known-pose RGB stereo ablation (no measured depth maps used in reconstruction)',
+            'Status: '+r['status'],
+            'Saved RGB-derived training frames: '+str(r.get('saved_frames','not reached')),
+            'Mesh SHA: '+str(r.get('mesh_sha256','none')),
+            'Error: '+str(r.get('error','none')),
+            'Prior measured-depth TSDF is a separate baseline; this is NOT independent surface truth or #74 acceptance.'
+          ]
+          with open(os.environ['GITHUB_STEP_SUMMARY'],'a') as f:f.write('\n\n'.join(lines)+'\n')
+          PY
+          else
+            echo 'No real report produced; inspect setup and test logs. No Mesh evidence.' >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Preserve actual Mesh, rendered views and failure receipts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tum-known-pose-rgb-stereo-${{ github.run_id }}
+          path: artifacts/tum-rgb-stereo/
+          if-no-files-found: warn
+          retention-days: 14
