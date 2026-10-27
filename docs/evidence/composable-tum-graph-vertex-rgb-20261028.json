@@ -1,0 +1,80 @@
+{
+  "schema": "echo4d-real-mesh-training-vertex-rgb-evidence-1",
+  "experiment": "tum-fr1-xyz-fixed60-typed-graph-tsdf-v1",
+  "tested_checkout_sha": "53f5da6f58e31f62db08788bb3644dd91a325245",
+  "workflow_url": "https://github.com/REDrighthand05/echo4d/actions/runs/40590922339",
+  "workflow_conclusion": "completed_success",
+  "artifact_url": "https://github.com/REDrighthand05/echo4d/actions/runs/40590922339/artifacts/12774935652",
+  "artifact_zip_sha256": "a3b4285f6c6e0dc87f93adc834bc264f52b0455e7f0420261f48135a55f2e783",
+  "artifact_zip_crc": "pass",
+  "artifact_retention_days": 14,
+  "source": {
+    "dataset": "TUM Freiburg1 XYZ",
+    "official_archive_sha256": "a0236d97b8c30cd93b653656d2b6c293ff7c982a4130ef2a1a8beecdb124ef98",
+    "original_rgb_resolution": [
+      640,
+      480
+    ],
+    "training_rgb_resolution": [
+      160,
+      120
+    ],
+    "color_provenance": "TSDF Mesh vertex RGB from 48 training frames; heldout RGB never used for texturing",
+    "original_rgb_republished": false,
+    "holdout_frames": 12
+  },
+  "mesh_sha256": "82d049d99f7b1fa82dabfa0a02e3847896b51de7647f382144c619fba784e658",
+  "views": [
+    {
+      "kind": "heldout_camera",
+      "frame": 4,
+      "predicted_pixels": 306072,
+      "rgb_sha256": "051ccc52efc0d95fc932f676f2eb57a48c975b67f59fcf334cf9f7c87163918d"
+    },
+    {
+      "kind": "heldout_camera",
+      "frame": 24,
+      "predicted_pixels": 305768,
+      "rgb_sha256": "be249b41ebc663e32d81fa2ed7cd1d0134538eec9f57f548e509988c67fb3554"
+    },
+    {
+      "kind": "heldout_camera",
+      "frame": 55,
+      "predicted_pixels": 279780,
+      "rgb_sha256": "5855ebd116d513b956c057641b1a032c839d1666cfd8020a6c15b7f6e84f3fe1"
+    },
+    {
+      "kind": "free_third_person",
+      "frame": null,
+      "predicted_pixels": 26338,
+      "rgb_sha256": "9dde50bcb5b2d2c86c3bc8b6b254020021fd6228344eb07ee9a44475e6a695b5"
+    },
+    {
+      "kind": "free_third_person",
+      "frame": null,
+      "predicted_pixels": 26981,
+      "rgb_sha256": "a3c15bf520ee37848ea9c756a474f4978a14e72a0e29b459add19360b2b8087f"
+    }
+  ],
+  "verification": {
+    "downloaded_zip_sha256_verified": true,
+    "zip_crc_pass": true,
+    "mesh_sha256_matches_ply": true,
+    "all_5_color_and_5_depth_png_sha256_verified": true,
+    "color_and_depth_predicted_pixel_counts_match": true,
+    "linux_windows_python_312_313_verify": "https://github.com/REDrighthand05/echo4d/actions/runs/40590922461",
+    "initial_failed_workflow": "https://github.com/REDrighthand05/echo4d/actions/runs/40590858575",
+    "initial_failure": "Invalid bounded ECHO PLY header due to escaped newline, fixed in tested checkout"
+  },
+  "acceptance": {
+    "algorithm_execution": "PASS",
+    "color_visualization": "EXECUTED_UNREVIEWED",
+    "assistant_observation": "Original camera color projections show blurry/warped surfaces; both free camera views reveal small disconnected partial structure against large unobserved black areas. This does not establish recognizable room geometry.",
+    "independent_human_review": "NOT_PERFORMED",
+    "independent_surface_truth": "NOT_AVAILABLE",
+    "issue_74": "FAIL_NOT_ACCEPTED",
+    "desk_v2_frozen": "FAIL_16.7779cm_gt_15cm",
+    "no_holdout_tuning": true
+  },
+  "reproduce": "Run .github/workflows/tum-composable-graph.yml at tested_checkout_sha; see visual/visual-receipt.json and its five vertex_rgb_render SHA fields. Source RGB remains at pinned official TUM archive."
+}
