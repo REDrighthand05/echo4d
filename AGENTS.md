@@ -2,6 +2,10 @@
 
 适用于使用本仓库的 AI 开发代理及人工协作者。**先核对现场，再行动；Issue 记录为什么与验收，PR 记录实际变更，CI/独立数据负责证实。**本文件不是允许无人值守自动合并或无限制修改仓库的授权。
 
+## 产品初心门禁（所有贡献者必读）
+
+必须同时阅读 [产品北极星](docs/PRODUCT_NORTH_STAR.md)、[前端共享合同](docs/FRONTEND_SYSTEM.md) 及 Issue #1/#4/#74。每项研发须说明如何帮助真实生活场景被可靠重建、自由观察、时间回放；不以新模型名、三角形数、CI/截图的漂亮程度代替实景结构可辨、独立证据和可信边界。任何「完成」声明都要区分 UI 可用、路线已执行、数据已审阅、场景 P0 通过四种不同状态。统一 UI 不得由42条路线复制成42套实现。未经验证的生成/推测不得污染实测层。对冻结实验 head 不进行自动 UI 覆盖或重写。
+
 ## 开始任何一个工作回合
 
 1. 先读取 [Issue #1：愿景与边界](https://github.com/REDrighthand05/echo4d/issues/1)、[Issue #15：下一阶段总实验](https://github.com/REDrighthand05/echo4d/issues/15)；处理米制尺度时再读 [Issue #14：三锚点标定实验](https://github.com/REDrighthand05/echo4d/issues/14)。

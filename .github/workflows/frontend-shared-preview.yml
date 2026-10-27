@@ -1,0 +1,39 @@
+name: frontend-shared-preview
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  quality-frontend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - name: Fetch canonical frontend from main
+        run: git fetch --depth=1 origin main
+      - name: Install shared frontend in ephemeral preview worktree
+        shell: bash
+        run: |
+          git show origin/main:tools/install_frontend.py > /tmp/echo-install-frontend.py
+          python /tmp/echo-install-frontend.py --source origin/main --force
+          node --check dist/quality.mjs
+      - name: Check static assets
+        shell: bash
+        run: |
+          test -s dist/quality.html
+          test -s dist/quality.css
+          test -s dist/quality.mjs
+          grep -q 'quality.mjs' dist/quality.html
+          grep -q 'quality.css' dist/quality.html
+      - uses: actions/upload-artifact@v4
+        with:
+          name: frontend-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            dist/quality.html
+            dist/quality.css
+            dist/quality.mjs
+          retention-days: 14
