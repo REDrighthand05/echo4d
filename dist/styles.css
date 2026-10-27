@@ -2116,3 +2116,8 @@ td:not(:first-child) {
     animation-duration: 2s;
   }
 }
+
+/* Shared mission-driven P0 reality-check entry; no renderer replacement. */
+.quality-entry {white-space:nowrap;color:var(--mint);border:1px solid var(--line);padding:8px 11px;border-radius:8px;font-size:12px;}
+.quality-entry:hover {background:var(--panel);text-decoration:none}
+@media(max-width:650px){.quality-entry{padding:6px 9px;font-size:11px}}
