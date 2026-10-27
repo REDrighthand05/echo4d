@@ -117,6 +117,11 @@ def build_parser() -> argparse.ArgumentParser:
     colmap.add_argument("--scale-source", required=True,
                         help="Traceable independent real-world measurement source, not evaluation GT")
     colmap.add_argument("--output", required=True, type=Path)
+    hist = sub.add_parser("import-history", help="Archive real first-person video + optional IMU/sensors on one history timeline")
+    hist.add_argument("--capture", type=Path, required=True, help="Browser capture JSON")
+    hist.add_argument("--media", type=Path, required=True, help="Unmodified recording video")
+    hist.add_argument("--sensor", type=Path, action="append", default=[], help="Additional timed sensor JSON (repeatable)")
+    hist.add_argument("--output", type=Path, required=True, help="New portable history archive directory")
     return parser
 
 
@@ -141,6 +146,9 @@ def main(argv: list[str] | None = None) -> int:
             with output_transaction(args.output) as output:
                 write_json(output / "recording.echo.json", preview_recording(recording))
             result = {"output":str(args.output.resolve())}
+        elif args.command == "import-history":
+            from .history import import_history
+            result = import_history(args.capture, args.media, args.output, tuple(args.sensor))
         elif args.command == "import-colmap":
             # One strict adapter. Uses #6 + #24 hardening, NOT the incompatible
             # second converter implementation from draft PR #19.
