@@ -43,6 +43,7 @@ code{color:#b5e9ee} .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 <p id="noReplay" class="muted">录制完成，或从设备选择已有的视频后，可以在这里回放。</p>
 <label for="timeline">时间轴 · <output id="position">0.00 s / 0.00 s</output></label>
 <input id="timeline" type="range" min="0" max="0" step="0.05" value="0" disabled>
+<p id="motionAtTime" class="muted">尚无与回放时间对应的运动数据。</p>
 <div class="grid">
 <div><label for="videoImport">打开已有视频（不上传）</label><input type="file" accept="video/*" id="videoImport"></div>
 <div><label for="manifestImport">打开关联的记录清单（可选）</label><input type="file" accept="application/json,.json" id="manifestImport"></div>
@@ -85,10 +86,30 @@ function seekTo(value){
     catch(error){status("浏览器暂不支持对此视频精确定位，可使用播放控件。");}
   }
 }
+function nearestMotion(t){
+  const samples=manifest?.imu?.samples;
+  if(!Array.isArray(samples)||!samples.length)return null;
+  let lo=0,hi=samples.length;
+  while(lo<hi){const mid=(lo+hi)>>>1;if(samples[mid].t_s<t)lo=mid+1;else hi=mid;}
+  const a=samples[Math.min(lo,samples.length-1)];
+  const b=samples[Math.max(0,lo-1)];
+  const best=Math.abs(a.t_s-t)<Math.abs(b.t_s-t)?a:b;
+  return Math.abs(best.t_s-t)<=0.5?best:null;
+}
+function displayMotionAt(t){
+  const s=nearestMotion(t);
+  if(!s){$("motionAtTime").textContent="该时刻没有已关联的运动传感器读数（或时间差超过0.5秒）。";return;}
+  const acc=s.acceleration_including_gravity_m_s2;
+  const gy=s.rotation_rate_deg_s;
+  $("motionAtTime").textContent="运动传感器 t="+timestamp(s.t_s)+
+    "；含重力加速度 "+(acc?acc.map(v=>v.toFixed(2)).join(", ")+" m/s²":"未知")+
+    "；角速度 "+(gy?[gy.alpha,gy.beta,gy.gamma].map(v=>v===null?"?":v.toFixed(1)).join(", ")+" °/s":"未知")+
+    "（浏览器传感器读数，不代表已解算的头部位姿）";
+}
 function setSeekDuration(seconds){
   seekDuration=positiveDuration(seconds);
   $("timeline").max=String(seekDuration);$("timeline").disabled=seekDuration<=0;
-  $("timeline").value="0";updatePosition(0,seekDuration);
+  $("timeline").value="0";updatePosition(0,seekDuration);displayMotionAt(0);
 }
 function download(data,name,type){
   const blob=data instanceof Blob?data:new Blob([data],{type:type||"application/octet-stream"});
@@ -176,12 +197,13 @@ function stopRecording(){
   $("stopBtn").disabled=true;
   try{recorder.stop();}catch(error){status("停止录制失败："+error.message);}
   if(stream){stream.getTracks().forEach((t)=>t.stop());stream=null;}
-  $("live").srcObject=null;$("startBtn").disabled=false;$("useAudio").disabled=false;
+  $("live").srcObject=null;
 }
 $("stopBtn").addEventListener("click",stopRecording);
 function finishRecording(){
+  $("startBtn").disabled=false;$("useAudio").disabled=false;
   if(stream){stream.getTracks().forEach((t)=>t.stop());stream=null;}
-  if(!parts.length){status("录制结束，但浏览器没有返回视频数据。");return;}
+  if(!parts.length){status("录制结束，但浏览器没有返回视频数据。");recorder=null;return;}
   const type=recorder.mimeType||parts[0].type||"video/webm";
   mediaBlob=new Blob(parts,{type:type});
   const ext=type.includes("mp4")?"mp4":"webm";
@@ -245,6 +267,7 @@ $("manifestImport").addEventListener("change",async()=>{
       status("文件名不匹配：这份视频可能不是该清单记录的原始媒体。");
     else status("历史清单已导入。它是设备声明，不代表已验证的空间位姿。");
     if($("replay").hidden)setSeekDuration(obj.duration_s);
+    displayMotionAt(positiveDuration($("replay").currentTime));
   }catch(err){status("未导入清单："+err.message);}
 });
 $("replay").addEventListener("loadedmetadata",()=>{
@@ -254,7 +277,7 @@ $("replay").addEventListener("loadedmetadata",()=>{
 $("replay").addEventListener("timeupdate",()=>{
   const t=positiveDuration($("replay").currentTime);
   $("timeline").value=String(Math.min(t,seekDuration||t));
-  updatePosition(t,seekDuration);
+  updatePosition(t,seekDuration);displayMotionAt(t);
 });
 $("timeline").addEventListener("input",()=>seekTo(Number($("timeline").value)));
 window.addEventListener("pagehide",()=>{
