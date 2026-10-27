@@ -81,7 +81,7 @@ def test_train_split_mutation_fails_before_render(tmp_path, monkeypatch):
     paths = fixture(tmp_path)
     fake_renderer(monkeypatch)
     train = json.loads(paths[1].read_text())
-    train["frames"][0] = json.loads(paths[0].read_text())["frames"][HOLDOUT[0]]
+    train["frames"][0]["depth"] = json.loads(paths[0].read_text())["frames"][HOLDOUT[0]]["depth"]
     paths[1].write_text(json.dumps(train))
     with pytest.raises(DataError, match="complement"):
         gate.score_frozen_holdout(*paths)
