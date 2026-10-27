@@ -1,0 +1,26 @@
+{
+  "version": "echo-strategy-profile-1",
+  "goal": "investigate_limits",
+  "inputs": {
+    "rgb_video": {
+      "status": "present",
+      "notes": "原始视频，尚未验证运动/时间保真"
+    },
+    "camera_calibration": {
+      "status": "present",
+      "notes": "相机标定来源待审核"
+    },
+    "imu": {
+      "status": "absent"
+    },
+    "existing_mesh": {
+      "status": "absent"
+    },
+    "sensor_depth": {
+      "status": "absent"
+    },
+    "metric_anchor": {
+      "status": "absent"
+    }
+  }
+}
