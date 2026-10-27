@@ -1,10 +1,12 @@
 """Frozen E3 B-path selection: one failed match must not quietly alter split."""
 from __future__ import annotations
 
+import hashlib
 import pytest
+import tum_sensor_metric_mesh
 
 from echo4d.model import DataError
-from tum_sensor_metric_mesh import split_names, HOLDOUT_INDICES, ANCHOR_INDICES
+from tum_sensor_metric_mesh import split_names, HOLDOUT_INDICES, ANCHOR_INDICES, archive_training_input_evidence
 
 
 def _frames():
@@ -30,3 +32,40 @@ def test_duplicate_registered_name_fails():
     src[1]["name"] = src[0]["name"]
     with pytest.raises(DataError, match="Duplicate"):
         split_names(src)
+
+
+def test_archive_training_input_evidence_keeps_verifiable_bytes(tmp_path):
+    source, target = tmp_path / "source", tmp_path / "artifact"
+    source.mkdir()
+    target.mkdir()
+    samples = {
+        "recording.json": b'{"frames":[{"depth":[1,2,3]}]}\\n',
+        "sensor-provenance.json": b'{"source_kind":"measured_registered_z_depth"}\\n',
+    }
+    for name, content in samples.items():
+        (source / name).write_bytes(content)
+    receipts = archive_training_input_evidence(source, target)
+    for original, archived, key in (
+        ("recording.json", "b-training-recording.json", "input_manifest_sha256"),
+        ("sensor-provenance.json", "b-sensor-provenance.json", "sensor_provenance_sha256"),
+    ):
+        assert (target / archived).read_bytes() == samples[original]
+        assert receipts[key] == hashlib.sha256(samples[original]).hexdigest()
+    assert sorted(p.name for p in target.iterdir()) == [
+        "b-sensor-provenance.json", "b-training-recording.json"
+    ]
+
+
+def test_archive_training_input_evidence_rejects_corrupted_copy(tmp_path, monkeypatch):
+    source, target = tmp_path / "source", tmp_path / "artifact"
+    source.mkdir()
+    target.mkdir()
+    (source / "recording.json").write_bytes(b"real training input")
+    (source / "sensor-provenance.json").write_bytes(b"real provenance")
+
+    def corrupted_copy(_source, destination):
+        destination.write_bytes(b"corrupted")
+
+    monkeypatch.setattr(tum_sensor_metric_mesh.shutil, "copyfile", corrupted_copy)
+    with pytest.raises(DataError, match="Archived training input hash mismatch"):
+        archive_training_input_evidence(source, target)
