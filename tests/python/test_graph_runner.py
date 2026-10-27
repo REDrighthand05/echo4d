@@ -167,3 +167,29 @@ def test_second_provider_is_distinct_route_but_unbound_is_not_executable(tmp_pat
         execute_graph(candidates[1], (a, b), {"a": Adapter("a", pinned, lambda x, w: {})},
                       {inp: InputFile(manifest, file_sha256(manifest))},
                       out, tmp_path / "run", checkout_sha=checkout())
+
+
+def test_source_image_changed_during_run_cannot_publish_mesh(tmp_path):
+    manifest = synthetic_input(tmp_path)
+    inp, out = ports()
+    pinned = tmp_path / "provider.py"
+    pinned.write_text("provider")
+    module = spec("mutating_provider", inp, out, pinned)
+
+    def mutate_source(inputs, work):
+        depth = manifest.parent / "depth" / "0000.png"
+        depth.write_bytes(depth.read_bytes() + b"changed-after-preflight")
+        mesh = work / "mesh.ply"
+        mesh.write_bytes(b"ply\n")
+        return {out: mesh}
+
+    adapter = Adapter("mutating_provider", pinned, mutate_source)
+    with pytest.raises(GraphFailed, match="Referenced source image changed"):
+        execute_graph(plan(inp, out, module), (module,),
+                      {"mutating_provider": adapter},
+                      {inp: InputFile(manifest, file_sha256(manifest))},
+                      out, tmp_path / "run", checkout_sha=checkout())
+    assert not (tmp_path / "run").exists()
+    failure = json.loads((tmp_path / "run.failed.json").read_text())
+    assert failure["status"] == "failed"
+    assert failure["input_dependencies_sha256"][inp.label()]

@@ -15,7 +15,7 @@ import subprocess
 from typing import Callable, Mapping
 
 from .composable import ArtifactType, ModuleSpec, Route, compose
-from .model import file_sha256
+from .model import file_sha256, load_recording, safe_path
 from .output import output_transaction, write_json
 
 
@@ -95,6 +95,8 @@ def execute_graph(
         raise GraphBlocked("Previous failure receipt exists; use a new experiment destination")
     attempted = ""
     input_hashes: dict[str, str] = {}
+    dependency_hashes: dict[str, dict[str, str]] = {}
+    dependency_paths: list[tuple[Path, str]] = []
     try:
         actual_checkout = _checkout_sha(checkout_sha)
         if not isinstance(route, Route) or not isinstance(target, ArtifactType):
@@ -123,6 +125,23 @@ def execute_graph(
             if digest != item.sha256:
                 raise GraphBlocked(f"Input hash mismatch for {port.label()}")
             input_hashes[port.label()] = digest
+            # The manifest hash alone does not pin referenced RGB/depth bytes.
+            # Hash the entire actual source closure and include it in the run ID.
+            if port.kind == "echo_recording":
+                recording = load_recording(source)
+                dependencies: dict[str, str] = {}
+                if not recording.inline:
+                    for index, entry in enumerate(recording.entries):
+                        for key in ("depth", "color", "mask"):
+                            if key not in entry:
+                                continue
+                            if len(dependencies) >= 20000:
+                                raise GraphBlocked("Too many source dependencies to audit")
+                            image = safe_path(recording.root, entry[key])
+                            sha = file_sha256(image)
+                            dependencies[f"{index}:{key}:{entry[key]}"] = sha
+                            dependency_paths.append((image, sha))
+                dependency_hashes[port.label()] = dependencies
 
         provider_hashes: dict[str, str] = {}
         configs: dict[str, str] = {}
@@ -179,6 +198,9 @@ def execute_graph(
             for port, item in inputs.items():
                 if file_sha256(_file(item.path)) != input_hashes[port.label()]:
                     raise GraphFailed(f"Input changed during execution: {port.label()}")
+            for source_path, expected_sha in dependency_paths:
+                if file_sha256(_file(source_path)) != expected_sha:
+                    raise GraphFailed(f"Referenced source image changed during execution: {source_path.name}")
             if target not in artifacts or target.label() not in produced:
                 raise GraphFailed("Target Mesh was not actually produced by a provider")
             receipt = {
@@ -189,6 +211,7 @@ def execute_graph(
                 "modules": list(route.modules),
                 "checkout_sha": actual_checkout,
                 "input_sha256": input_hashes,
+                "input_dependencies_sha256": dependency_hashes,
                 "provider_sha256": provider_hashes,
                 "config_sha256": configs,
                 "outputs": produced,
@@ -196,8 +219,8 @@ def execute_graph(
             }
             receipt["experiment_id"] = hashlib.sha256(_json_bytes({
                 "path_id": route.path_id, "checkout": actual_checkout,
-                "inputs": input_hashes, "providers": provider_hashes,
-                "configs": configs,
+                "inputs": input_hashes, "source_dependencies": dependency_hashes,
+                "providers": provider_hashes, "configs": configs,
             })).hexdigest()
             write_json(workspace / "execution.json", receipt)
         return receipt
@@ -211,6 +234,7 @@ def execute_graph(
                 "checkout_sha_claim": checkout_sha,
                 "attempted_module": attempted or None,
                 "input_sha256": input_hashes,
+                "input_dependencies_sha256": dependency_hashes,
                 "error_type": type(error).__name__,
                 "error": str(error),
             })
