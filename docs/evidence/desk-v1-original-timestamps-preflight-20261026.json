@@ -1,0 +1,1262 @@
+{
+  "version": "echo-desk-time-index-preflight-v1",
+  "source": "TUM freiburg1_desk original timestamp indexes",
+  "original_rgb_index_sha256": "d1bc510ecca08540e03be8df55af8857753b614d8a5c38526bc669ce6c802284",
+  "original_depth_index_sha256": "e56f037046113192151abebded5513709d03a57b46624b8343eb4efd4419f14c",
+  "frozen_protocol_version": "desk-metric-mesh-v1-frozen",
+  "frozen_max_rgb_depth_gap_s": 0.03,
+  "selected_rgb_source_stride": 8,
+  "selected_rgb_count": 75,
+  "required_role_count": 68,
+  "required_geometry_train_count": 48,
+  "required_geometry_holdout_count": 12,
+  "required_anchor_count": 3,
+  "required_diagnostic_count": 7,
+  "accepted_role_count": 65,
+  "failed_role_count": 3,
+  "status": "BLOCKED_FROZEN_V1_INDEX_PAIRING",
+  "uses_depth_image_pixels": false,
+  "runs_sfm_or_mesh": false,
+  "changes_frozen_frame_selection_or_thresholds": false,
+  "rows": [
+    {
+      "index": 0,
+      "frame": "frame_00000.png",
+      "roles": [
+        "geometry_train"
+      ],
+      "original_rgb_path": "rgb/1305031452.791720.png",
+      "rgb_time_s": 1305031452.79172,
+      "nearest_depth_path": "depth/1305031453.374112.png",
+      "nearest_depth_time_s": 1305031453.374112,
+      "signed_delta_s": 0.5823919773101807,
+      "absolute_delta_ms": 582.3919773101807,
+      "within_frozen_30ms": false,
+      "depth_member_exists": true,
+      "already_used_in_frozen_roles": false,
+      "accepted_for_v1": false,
+      "reasons": [
+        "NO_DEPTH_WITHIN_FROZEN_30MS"
+      ]
+    },
+    {
+      "index": 1,
+      "frame": "frame_00001.png",
+      "roles": [
+        "geometry_train"
+      ],
+      "original_rgb_path": "rgb/1305031453.059754.png",
+      "rgb_time_s": 1305031453.059754,
+      "nearest_depth_path": "depth/1305031453.374112.png",
+      "nearest_depth_time_s": 1305031453.374112,
+      "signed_delta_s": 0.3143579959869385,
+      "absolute_delta_ms": 314.3579959869385,
+      "within_frozen_30ms": false,
+      "depth_member_exists": true,
+      "already_used_in_frozen_roles": false,
+      "accepted_for_v1": false,
+      "reasons": [
+        "NO_DEPTH_WITHIN_FROZEN_30MS"
+      ]
+    },
+    {
+      "index": 2,
+      "frame": "frame_00002.png",
+      "roles": [
+        "geometry_train"
+      ],
+      "original_rgb_path": "rgb/1305031453.323682.png",
+      "rgb_time_s": 1305031453.323682,
+      "nearest_depth_path": "depth/1305031453.374112.png",
+      "nearest_depth_time_s": 1305031453.374112,
+      "signed_delta_s": 0.0504298210144043,
+      "absolute_delta_ms": 50.4298210144043,
+      "within_frozen_30ms": false,
+      "depth_member_exists": true,
+      "already_used_in_frozen_roles": false,
+      "accepted_for_v1": false,
+      "reasons": [
+        "NO_DEPTH_WITHIN_FROZEN_30MS"
+      ]
+    },
+    {
+      "index": 3,
+      "frame": "frame_00003.png",
+      "roles": [
+        "geometry_train"
+      ],
+      "original_rgb_path": "rgb/1305031453.591640.png",
+      "rgb_time_s": 1305031453.59164,
+      "nearest_depth_path": "depth/1305031453.605314.png",
+      "nearest_depth_time_s": 1305031453.605314,
+      "signed_delta_s": 0.013674020767211914,
+      "absolute_delta_ms": 13.674020767211914,
+      "within_frozen_30ms": true,
+      "depth_member_exists": true,
+      "already_used_in_frozen_roles": false,
+      "accepted_for_v1": true,
+      "reasons": []
+    },
+    {
+      "index": 4,
+      "frame": "frame_00004.png",
+      "roles": [
+        "geometry_holdout"
+      ],
+      "original_rgb_path": "rgb/1305031453.859705.png",
+      "rgb_time_s": 1305031453.859705,
+      "nearest_depth_path": "depth/1305031453.869618.png",
+      "nearest_depth_time_s": 1305031453.869618,
+      "signed_delta_s": 0.009912967681884766,
+      "absolute_delta_ms": 9.912967681884766,
+      "within_frozen_30ms": true,
+      "depth_member_exists": true,
+      "already_used_in_frozen_roles": false,
+      "accepted_for_v1": true,
+      "reasons": []
+    },
+    {
+      "index": 5,
+      "frame": "frame_00005.png",
+      "roles": [
+        "geometry_train"
+      ],
+      "original_rgb_path": "rgb/1305031454.127701.png",
+      "rgb_time_s": 1305031454.127701,
+      "nearest_depth_path": "depth/1305031454.141030.png",
+      "nearest_depth_time_s": 1305031454.14103,
+      "signed_delta_s": 0.013329029083251953,
+      "absolute_delta_ms": 13.329029083251953,
+      "within_frozen_30ms": true,
+      "depth_member_exists": true,
+      "already_used_in_frozen_roles": false,
+      "accepted_for_v1": true,
+      "reasons": []
+    },
+    {
+      "index": 6,
+      "frame": "frame_00006.png",
+      "roles": [
+        "geometry_train"
+      ],
+      "original_rgb_path": "rgb/1305031454.391677.png",
+      "rgb_time_s": 1305031454.391677,
+      "nearest_depth_path": "depth/1305031454.401962.png",
+      "nearest_depth_time_s": 1305031454.401962,
+      "signed_delta_s": 0.010285139083862305,
+      "absolute_delta_ms": 10.285139083862305,
+      "within_frozen_30ms": true,
+      "depth_member_exists": true,
+      "already_used_in_frozen_roles": false,
+      "accepted_for_v1": true,
+      "reasons": []
+    },
+    {
+      "index": 7,
+      "frame": "frame_00007.png",
+      "roles": [
+        "geometry_train"
+      ],
+      "original_rgb_path": "rgb/1305031454.659528.png",
+      "rgb_time_s": 1305031454.659528,
+      "nearest_depth_path": "depth/1305031454.669573.png",
+      "nearest_depth_time_s": 1305031454.669573,
+      "signed_delta_s": 0.010045051574707031,
+      "absolute_delta_ms": 10.045051574707031,
+      "within_frozen_30ms": true,
+      "depth_member_exists": true,
+      "already_used_in_frozen_roles": false,
+      "accepted_for_v1": true,
+      "reasons": []
+    },
+    {
+      "index": 8,
+      "frame": "frame_00008.png",
+      "roles": [
+        "geometry_train"
+      ],
+      "original_rgb_path": "rgb/1305031454.927567.png",
+      "rgb_time_s": 1305031454.927567,
+      "nearest_depth_path": "depth/1305031454.940240.png",
+      "nearest_depth_time_s": 1305031454.94024,
+      "signed_delta_s": 0.012672901153564453,
+      "absolute_delta_ms": 12.672901153564453,
+      "within_frozen_30ms": true,
+      "depth_member_exists": true,
+      "already_used_in_frozen_roles": false,
+      "accepted_for_v1": true,
+      "reasons": []
+    },
+    {
+      "index": 9,
+      "frame": "frame_00009.png",
+      "roles": [
+        "geometry_holdout"
+      ],
+      "original_rgb_path": "rgb/1305031455.191655.png",
+      "rgb_time_s": 1305031455.191655,
+      "nearest_depth_path": "depth/1305031455.210307.png",
+      "nearest_depth_time_s": 1305031455.210307,
+      "signed_delta_s": 0.018651962280273438,
+      "absolute_delta_ms": 18.651962280273438,
+      "within_frozen_30ms": true,
+      "depth_member_exists": true,
+      "already_used_in_frozen_roles": false,
+      "accepted_for_v1": true,
+      "reasons": []
+    },
+    {
+      "index": 10,
+      "frame": "frame_00010.png",
+      "roles": [
+        "geometry_train"
+      ],
+      "original_rgb_path": "rgb/1305031455.459589.png",
+      "rgb_time_s": 1305031455.459589,
+      "nearest_depth_path": "depth/1305031455.473168.png",
+      "nearest_depth_time_s": 1305031455.473168,
+      "signed_delta_s": 0.01357889175415039,
+      "absolute_delta_ms": 13.57889175415039,
+      "within_frozen_30ms": true,
+      "depth_member_exists": true,
+      "already_used_in_frozen_roles": false,
+      "accepted_for_v1": true,
+      "reasons": []
+    },
+    {
+      "index": 11,
+      "frame": "frame_00011.png",
+      "roles": [
+        "geometry_train"
+      ],
+      "original_rgb_path": "rgb/1305031455.727628.png",
+      "rgb_time_s": 1305031455.727628,
+      "nearest_depth_path": "depth/1305031455.742005.png",
+      "nearest_depth_time_s": 1305031455.742005,
+      "signed_delta_s": 0.014377117156982422,
+      "absolute_delta_ms": 14.377117156982422,
+      "within_frozen_30ms": true,
+      "depth_member_exists": true,
+      "already_used_in_frozen_roles": false,
+      "accepted_for_v1": true,
+      "reasons": []
+    },
+    {
+      "index": 12,
+      "frame": "frame_00012.png",
+      "roles": [
+        "geometry_train"
+      ],
+      "original_rgb_path": "rgb/1305031455.991694.png",
+      "rgb_time_s": 1305031455.991694,
+      "nearest_depth_path": "depth/1305031456.008998.png",
+      "nearest_depth_time_s": 1305031456.008998,
+      "signed_delta_s": 0.017303943634033203,
+      "absolute_delta_ms": 17.303943634033203,
+      "within_frozen_30ms": true,
+      "depth_member_exists": true,
+      "already_used_in_frozen_roles": false,
+      "accepted_for_v1": true,
+      "reasons": []
+    },
+    {
+      "index": 13,
+      "frame": "frame_00013.png",
+      "roles": [
+        "geometry_train"
+      ],
+      "original_rgb_path": "rgb/1305031456.259614.png",
+      "rgb_time_s": 1305031456.259614,
+      "nearest_depth_path": "depth/1305031456.277928.png",
+      "nearest_depth_time_s": 1305031456.277928,
+      "signed_delta_s": 0.018314123153686523,
+      "absolute_delta_ms": 18.314123153686523,
+      "within_frozen_30ms": true,
+      "depth_member_exists": true,
+      "already_used_in_frozen_roles": false,
+      "accepted_for_v1": true,
+      "reasons": []
+    },
+    {
+      "index": 14,
+      "frame": "frame_00014.png",
+      "roles": [
+        "geometry_holdout"
+      ],
+      "original_rgb_path": "rgb/1305031456.527641.png",
+      "rgb_time_s": 1305031456.527641,
+      "nearest_depth_path": "depth/1305031456.541832.png",
+      "nearest_depth_time_s": 1305031456.541832,
+      "signed_delta_s": 0.014190912246704102,
+      "absolute_delta_ms": 14.190912246704102,
+      "within_frozen_30ms": true,
+      "depth_member_exists": true,
+      "already_used_in_frozen_roles": false,
+      "accepted_for_v1": true,
+      "reasons": []
+    },
+    {
+      "index": 15,
+      "frame": "frame_00015.png",
+      "roles": [
+        "geometry_train",
+        "scale_anchor"
+      ],
+      "original_rgb_path": "rgb/1305031456.791649.png",
+      "rgb_time_s": 1305031456.791649,
+      "nearest_depth_path": "depth/1305031456.777218.png",
+      "nearest_depth_time_s": 1305031456.777218,
+      "signed_delta_s": -0.014430999755859375,
+      "absolute_delta_ms": 14.430999755859375,
+      "within_frozen_30ms": true,
+      "depth_member_exists": true,
+      "already_used_in_frozen_roles": false,
+      "accepted_for_v1": true,
+      "reasons": []
+    },
+    {
+      "index": 16,
+      "frame": "frame_00016.png",
+      "roles": [
+        "geometry_train"
+      ],
+      "original_rgb_path": "rgb/1305031457.059621.png",
+      "rgb_time_s": 1305031457.059621,
+      "nearest_depth_path": "depth/1305031457.076011.png",
+      "nearest_depth_time_s": 1305031457.076011,
+      "signed_delta_s": 0.016389846801757812,
+      "absolute_delta_ms": 16.389846801757812,
+      "within_frozen_30ms": true,
+      "depth_member_exists": true,
+      "already_used_in_frozen_roles": false,
+      "accepted_for_v1": true,
+      "reasons": []
+    },
+    {
+      "index": 17,
+      "frame": "frame_00017.png",
+      "roles": [
+        "geometry_train"
+      ],
+      "original_rgb_path": "rgb/1305031457.327548.png",
+      "rgb_time_s": 1305031457.327548,
+      "nearest_depth_path": "depth/1305031457.342954.png",
+      "nearest_depth_time_s": 1305031457.342954,
+      "signed_delta_s": 0.015405893325805664,
+      "absolute_delta_ms": 15.405893325805664,
+      "within_frozen_30ms": true,
+      "depth_member_exists": true,
+      "already_used_in_frozen_roles": false,
+      "accepted_for_v1": true,
+      "reasons": []
+    },
+    {
+      "index": 18,
+      "frame": "frame_00018.png",
+      "roles": [
+        "geometry_train"
+      ],
+      "original_rgb_path": "rgb/1305031457.591678.png",
+      "rgb_time_s": 1305031457.591678,
+      "nearest_depth_path": "depth/1305031457.576581.png",
+      "nearest_depth_time_s": 1305031457.576581,
+      "signed_delta_s": -0.015096902847290039,
+      "absolute_delta_ms": 15.096902847290039,
+      "within_frozen_30ms": true,
+      "depth_member_exists": true,
+      "already_used_in_frozen_roles": false,
+      "accepted_for_v1": true,
+      "reasons": []
+    },
+    {
+      "index": 19,
+      "frame": "frame_00019.png",
+      "roles": [
+        "geometry_holdout"
+      ],
+      "original_rgb_path": "rgb/1305031457.859623.png",
+      "rgb_time_s": 1305031457.859623,
+      "nearest_depth_path": "depth/1305031457.875920.png",
+      "nearest_depth_time_s": 1305031457.87592,
+      "signed_delta_s": 0.016297101974487305,
+      "absolute_delta_ms": 16.297101974487305,
+      "within_frozen_30ms": true,
+      "depth_member_exists": true,
+      "already_used_in_frozen_roles": false,
+      "accepted_for_v1": true,
+      "reasons": []
+    },
+    {
+      "index": 20,
+      "frame": "frame_00020.png",
+      "roles": [
+        "geometry_train"
+      ],
+      "original_rgb_path": "rgb/1305031458.127605.png",
+      "rgb_time_s": 1305031458.127605,
+      "nearest_depth_path": "depth/1305031458.144808.png",
+      "nearest_depth_time_s": 1305031458.144808,
+      "signed_delta_s": 0.017203092575073242,
+      "absolute_delta_ms": 17.203092575073242,
+      "within_frozen_30ms": true,
+      "depth_member_exists": true,
+      "already_used_in_frozen_roles": false,
+      "accepted_for_v1": true,
+      "reasons": []
+    },
+    {
+      "index": 21,
+      "frame": "frame_00021.png",
+      "roles": [
+        "geometry_train"
+      ],
+      "original_rgb_path": "rgb/1305031458.391626.png",
+      "rgb_time_s": 1305031458.391626,
+      "nearest_depth_path": "depth/1305031458.376213.png",
+      "nearest_depth_time_s": 1305031458.376213,
+      "signed_delta_s": -0.01541280746459961,
+      "absolute_delta_ms": 15.41280746459961,
+      "within_frozen_30ms": true,
+      "depth_member_exists": true,
+      "already_used_in_frozen_roles": false,
+      "accepted_for_v1": true,
+      "reasons": []
+    },
+    {
+      "index": 22,
+      "frame": "frame_00022.png",
+      "roles": [
+        "geometry_train"
+      ],
+      "original_rgb_path": "rgb/1305031458.659623.png",
+      "rgb_time_s": 1305031458.659623,
+      "nearest_depth_path": "depth/1305031458.643659.png",
+      "nearest_depth_time_s": 1305031458.643659,
+      "signed_delta_s": -0.01596379280090332,
+      "absolute_delta_ms": 15.96379280090332,
+      "within_frozen_30ms": true,
+      "depth_member_exists": true,
+      "already_used_in_frozen_roles": false,
+      "accepted_for_v1": true,
+      "reasons": []
+    },
+    {
+      "index": 23,
+      "frame": "frame_00023.png",
+      "roles": [
+        "geometry_train"
+      ],
+      "original_rgb_path": "rgb/1305031458.927621.png",
+      "rgb_time_s": 1305031458.927621,
+      "nearest_depth_path": "depth/1305031458.943997.png",
+      "nearest_depth_time_s": 1305031458.943997,
+      "signed_delta_s": 0.016376018524169922,
+      "absolute_delta_ms": 16.376018524169922,
+      "within_frozen_30ms": true,
+      "depth_member_exists": true,
+      "already_used_in_frozen_roles": false,
+      "accepted_for_v1": true,
+      "reasons": []
+    },
+    {
+      "index": 24,
+      "frame": "frame_00024.png",
+      "roles": [
+        "geometry_holdout"
+      ],
+      "original_rgb_path": "rgb/1305031459.191674.png",
+      "rgb_time_s": 1305031459.191674,
+      "nearest_depth_path": "depth/1305031459.176463.png",
+      "nearest_depth_time_s": 1305031459.176463,
+      "signed_delta_s": -0.015211105346679688,
+      "absolute_delta_ms": 15.211105346679688,
+      "within_frozen_30ms": true,
+      "depth_member_exists": true,
+      "already_used_in_frozen_roles": false,
+      "accepted_for_v1": true,
+      "reasons": []
+    },
+    {
+      "index": 25,
+      "frame": "frame_00025.png",
+      "roles": [
+        "geometry_train"
+      ],
+      "original_rgb_path": "rgb/1305031459.459679.png",
+      "rgb_time_s": 1305031459.459679,
+      "nearest_depth_path": "depth/1305031459.473401.png",
+      "nearest_depth_time_s": 1305031459.473401,
+      "signed_delta_s": 0.01372218132019043,
+      "absolute_delta_ms": 13.72218132019043,
+      "within_frozen_30ms": true,
+      "depth_member_exists": true,
+      "already_used_in_frozen_roles": false,
+      "accepted_for_v1": true,
+      "reasons": []
+    },
+    {
+      "index": 26,
+      "frame": "frame_00026.png",
+      "roles": [
+        "geometry_train"
+      ],
+      "original_rgb_path": "rgb/1305031459.727551.png",
+      "rgb_time_s": 1305031459.727551,
+      "nearest_depth_path": "depth/1305031459.743425.png",
+      "nearest_depth_time_s": 1305031459.743425,
+      "signed_delta_s": 0.01587390899658203,
+      "absolute_delta_ms": 15.873908996582031,
+      "within_frozen_30ms": true,
+      "depth_member_exists": true,
+      "already_used_in_frozen_roles": false,
+      "accepted_for_v1": true,
+      "reasons": []
+    },
+    {
+      "index": 27,
+      "frame": "frame_00027.png",
+      "roles": [
+        "geometry_train"
+      ],
+      "original_rgb_path": "rgb/1305031459.991725.png",
+      "rgb_time_s": 1305031459.991725,
+      "nearest_depth_path": "depth/1305031459.979430.png",
+      "nearest_depth_time_s": 1305031459.97943,
+      "signed_delta_s": -0.012295007705688477,
+      "absolute_delta_ms": 12.295007705688477,
+      "within_frozen_30ms": true,
+      "depth_member_exists": true,
+      "already_used_in_frozen_roles": false,
+      "accepted_for_v1": true,
+      "reasons": []
+    },
+    {
+      "index": 28,
+      "frame": "frame_00028.png",
+      "roles": [
+        "geometry_train"
+      ],
+      "original_rgb_path": "rgb/1305031460.259667.png",
+      "rgb_time_s": 1305031460.259667,
+      "nearest_depth_path": "depth/1305031460.243467.png",
+      "nearest_depth_time_s": 1305031460.243467,
+      "signed_delta_s": -0.016199827194213867,
+      "absolute_delta_ms": 16.199827194213867,
+      "within_frozen_30ms": true,
+      "depth_member_exists": true,
+      "already_used_in_frozen_roles": false,
+      "accepted_for_v1": true,
+      "reasons": []
+    },
+    {
+      "index": 29,
+      "frame": "frame_00029.png",
+      "roles": [
+        "geometry_holdout"
+      ],
+      "original_rgb_path": "rgb/1305031460.527570.png",
+      "rgb_time_s": 1305031460.52757,
+      "nearest_depth_path": "depth/1305031460.544245.png",
+      "nearest_depth_time_s": 1305031460.544245,
+      "signed_delta_s": 0.01667499542236328,
+      "absolute_delta_ms": 16.67499542236328,
+      "within_frozen_30ms": true,
+      "depth_member_exists": true,
+      "already_used_in_frozen_roles": false,
+      "accepted_for_v1": true,
+      "reasons": []
+    },
+    {
+      "index": 30,
+      "frame": "frame_00030.png",
+      "roles": [
+        "geometry_train"
+      ],
+      "original_rgb_path": "rgb/1305031460.791660.png",
+      "rgb_time_s": 1305031460.79166,
+      "nearest_depth_path": "depth/1305031460.779201.png",
+      "nearest_depth_time_s": 1305031460.779201,
+      "signed_delta_s": -0.012459039688110352,
+      "absolute_delta_ms": 12.459039688110352,
+      "within_frozen_30ms": true,
+      "depth_member_exists": true,
+      "already_used_in_frozen_roles": false,
+      "accepted_for_v1": true,
+      "reasons": []
+    },
+    {
+      "index": 31,
+      "frame": "frame_00031.png",
+      "roles": [
+        "geometry_train"
+      ],
+      "original_rgb_path": "rgb/1305031461.059662.png",
+      "rgb_time_s": 1305031461.059662,
+      "nearest_depth_path": "depth/1305031461.043398.png",
+      "nearest_depth_time_s": 1305031461.043398,
+      "signed_delta_s": -0.01626420021057129,
+      "absolute_delta_ms": 16.26420021057129,
+      "within_frozen_30ms": true,
+      "depth_member_exists": true,
+      "already_used_in_frozen_roles": false,
+      "accepted_for_v1": true,
+      "reasons": []
+    },
+    {
+      "index": 32,
+      "frame": "frame_00032.png",
+      "roles": [
+        "geometry_train"
+      ],
+      "original_rgb_path": "rgb/1305031461.327751.png",
+      "rgb_time_s": 1305031461.327751,
+      "nearest_depth_path": "depth/1305031461.311240.png",
+      "nearest_depth_time_s": 1305031461.31124,
+      "signed_delta_s": -0.016510963439941406,
+      "absolute_delta_ms": 16.510963439941406,
+      "within_frozen_30ms": true,
+      "depth_member_exists": true,
+      "already_used_in_frozen_roles": false,
+      "accepted_for_v1": true,
+      "reasons": []
+    },
+    {
+      "index": 33,
+      "frame": "frame_00033.png",
+      "roles": [
+        "geometry_train"
+      ],
+      "original_rgb_path": "rgb/1305031461.591690.png",
+      "rgb_time_s": 1305031461.59169,
+      "nearest_depth_path": "depth/1305031461.578847.png",
+      "nearest_depth_time_s": 1305031461.578847,
+      "signed_delta_s": -0.012843132019042969,
+      "absolute_delta_ms": 12.843132019042969,
+      "within_frozen_30ms": true,
+      "depth_member_exists": true,
+      "already_used_in_frozen_roles": false,
+      "accepted_for_v1": true,
+      "reasons": []
+    },
+    {
+      "index": 34,
+      "frame": "frame_00034.png",
+      "roles": [
+        "geometry_holdout"
+      ],
+      "original_rgb_path": "rgb/1305031461.859767.png",
+      "rgb_time_s": 1305031461.859767,
+      "nearest_depth_path": "depth/1305031461.847090.png",
+      "nearest_depth_time_s": 1305031461.84709,
+      "signed_delta_s": -0.01267695426940918,
+      "absolute_delta_ms": 12.67695426940918,
+      "within_frozen_30ms": true,
+      "depth_member_exists": true,
+      "already_used_in_frozen_roles": false,
+      "accepted_for_v1": true,
+      "reasons": []
+    },
+    {
+      "index": 35,
+      "frame": "frame_00035.png",
+      "roles": [
+        "geometry_train"
+      ],
+      "original_rgb_path": "rgb/1305031462.127739.png",
+      "rgb_time_s": 1305031462.127739,
+      "nearest_depth_path": "depth/1305031462.112081.png",
+      "nearest_depth_time_s": 1305031462.112081,
+      "signed_delta_s": -0.015657901763916016,
+      "absolute_delta_ms": 15.657901763916016,
+      "within_frozen_30ms": true,
+      "depth_member_exists": true,
+      "already_used_in_frozen_roles": false,
+      "accepted_for_v1": true,
+      "reasons": []
+    },
+    {
+      "index": 36,
+      "frame": "frame_00036.png",
+      "roles": [
+        "geometry_train"
+      ],
+      "original_rgb_path": "rgb/1305031462.391695.png",
+      "rgb_time_s": 1305031462.391695,
+      "nearest_depth_path": "depth/1305031462.379950.png",
+      "nearest_depth_time_s": 1305031462.37995,
+      "signed_delta_s": -0.011744976043701172,
+      "absolute_delta_ms": 11.744976043701172,
+      "within_frozen_30ms": true,
+      "depth_member_exists": true,
+      "already_used_in_frozen_roles": false,
+      "accepted_for_v1": true,
+      "reasons": []
+    },
+    {
+      "index": 37,
+      "frame": "frame_00037.png",
+      "roles": [
+        "geometry_train"
+      ],
+      "original_rgb_path": "rgb/1305031462.659660.png",
+      "rgb_time_s": 1305031462.65966,
+      "nearest_depth_path": "depth/1305031462.648708.png",
+      "nearest_depth_time_s": 1305031462.648708,
+      "signed_delta_s": -0.010951995849609375,
+      "absolute_delta_ms": 10.951995849609375,
+      "within_frozen_30ms": true,
+      "depth_member_exists": true,
+      "already_used_in_frozen_roles": false,
+      "accepted_for_v1": true,
+      "reasons": []
+    },
+    {
+      "index": 38,
+      "frame": "frame_00038.png",
+      "roles": [
+        "geometry_train"
+      ],
+      "original_rgb_path": "rgb/1305031462.927607.png",
+      "rgb_time_s": 1305031462.927607,
+      "nearest_depth_path": "depth/1305031462.916800.png",
+      "nearest_depth_time_s": 1305031462.9168,
+      "signed_delta_s": -0.010807037353515625,
+      "absolute_delta_ms": 10.807037353515625,
+      "within_frozen_30ms": true,
+      "depth_member_exists": true,
+      "already_used_in_frozen_roles": false,
+      "accepted_for_v1": true,
+      "reasons": []
+    },
+    {
+      "index": 39,
+      "frame": "frame_00039.png",
+      "roles": [
+        "geometry_holdout"
+      ],
+      "original_rgb_path": "rgb/1305031463.195657.png",
+      "rgb_time_s": 1305031463.195657,
+      "nearest_depth_path": "depth/1305031463.180505.png",
+      "nearest_depth_time_s": 1305031463.180505,
+      "signed_delta_s": -0.0151519775390625,
+      "absolute_delta_ms": 15.1519775390625,
+      "within_frozen_30ms": true,
+      "depth_member_exists": true,
+      "already_used_in_frozen_roles": false,
+      "accepted_for_v1": true,
+      "reasons": []
+    },
+    {
+      "index": 40,
+      "frame": "frame_00040.png",
+      "roles": [
+        "geometry_train"
+      ],
+      "original_rgb_path": "rgb/1305031463.459756.png",
+      "rgb_time_s": 1305031463.459756,
+      "nearest_depth_path": "depth/1305031463.444773.png",
+      "nearest_depth_time_s": 1305031463.444773,
+      "signed_delta_s": -0.014982938766479492,
+      "absolute_delta_ms": 14.982938766479492,
+      "within_frozen_30ms": true,
+      "depth_member_exists": true,
+      "already_used_in_frozen_roles": false,
+      "accepted_for_v1": true,
+      "reasons": []
+    },
+    {
+      "index": 41,
+      "frame": "frame_00041.png",
+      "roles": [
+        "geometry_train"
+      ],
+      "original_rgb_path": "rgb/1305031463.727588.png",
+      "rgb_time_s": 1305031463.727588,
+      "nearest_depth_path": "depth/1305031463.716110.png",
+      "nearest_depth_time_s": 1305031463.71611,
+      "signed_delta_s": -0.011477947235107422,
+      "absolute_delta_ms": 11.477947235107422,
+      "within_frozen_30ms": true,
+      "depth_member_exists": true,
+      "already_used_in_frozen_roles": false,
+      "accepted_for_v1": true,
+      "reasons": []
+    },
+    {
+      "index": 42,
+      "frame": "frame_00042.png",
+      "roles": [
+        "geometry_train"
+      ],
+      "original_rgb_path": "rgb/1305031463.995821.png",
+      "rgb_time_s": 1305031463.995821,
+      "nearest_depth_path": "depth/1305031463.983748.png",
+      "nearest_depth_time_s": 1305031463.983748,
+      "signed_delta_s": -0.012073040008544922,
+      "absolute_delta_ms": 12.073040008544922,
+      "within_frozen_30ms": true,
+      "depth_member_exists": true,
+      "already_used_in_frozen_roles": false,
+      "accepted_for_v1": true,
+      "reasons": []
+    },
+    {
+      "index": 43,
+      "frame": "frame_00043.png",
+      "roles": [
+        "geometry_train"
+      ],
+      "original_rgb_path": "rgb/1305031464.259644.png",
+      "rgb_time_s": 1305031464.259644,
+      "nearest_depth_path": "depth/1305031464.247602.png",
+      "nearest_depth_time_s": 1305031464.247602,
+      "signed_delta_s": -0.012042045593261719,
+      "absolute_delta_ms": 12.042045593261719,
+      "within_frozen_30ms": true,
+      "depth_member_exists": true,
+      "already_used_in_frozen_roles": false,
+      "accepted_for_v1": true,
+      "reasons": []
+    },
+    {
+      "index": 44,
+      "frame": "frame_00044.png",
+      "roles": [
+        "geometry_holdout"
+      ],
+      "original_rgb_path": "rgb/1305031464.527574.png",
+      "rgb_time_s": 1305031464.527574,
+      "nearest_depth_path": "depth/1305031464.513688.png",
+      "nearest_depth_time_s": 1305031464.513688,
+      "signed_delta_s": -0.013885974884033203,
+      "absolute_delta_ms": 13.885974884033203,
+      "within_frozen_30ms": true,
+      "depth_member_exists": true,
+      "already_used_in_frozen_roles": false,
+      "accepted_for_v1": true,
+      "reasons": []
+    },
+    {
+      "index": 45,
+      "frame": "frame_00045.png",
+      "roles": [
+        "geometry_train",
+        "scale_anchor"
+      ],
+      "original_rgb_path": "rgb/1305031464.796021.png",
+      "rgb_time_s": 1305031464.796021,
+      "nearest_depth_path": "depth/1305031464.784268.png",
+      "nearest_depth_time_s": 1305031464.784268,
+      "signed_delta_s": -0.011753082275390625,
+      "absolute_delta_ms": 11.753082275390625,
+      "within_frozen_30ms": true,
+      "depth_member_exists": true,
+      "already_used_in_frozen_roles": false,
+      "accepted_for_v1": true,
+      "reasons": []
+    },
+    {
+      "index": 46,
+      "frame": "frame_00046.png",
+      "roles": [
+        "geometry_train"
+      ],
+      "original_rgb_path": "rgb/1305031465.059749.png",
+      "rgb_time_s": 1305031465.059749,
+      "nearest_depth_path": "depth/1305031465.048430.png",
+      "nearest_depth_time_s": 1305031465.04843,
+      "signed_delta_s": -0.01131892204284668,
+      "absolute_delta_ms": 11.31892204284668,
+      "within_frozen_30ms": true,
+      "depth_member_exists": true,
+      "already_used_in_frozen_roles": false,
+      "accepted_for_v1": true,
+      "reasons": []
+    },
+    {
+      "index": 47,
+      "frame": "frame_00047.png",
+      "roles": [
+        "geometry_train"
+      ],
+      "original_rgb_path": "rgb/1305031465.327674.png",
+      "rgb_time_s": 1305031465.327674,
+      "nearest_depth_path": "depth/1305031465.315985.png",
+      "nearest_depth_time_s": 1305031465.315985,
+      "signed_delta_s": -0.011688947677612305,
+      "absolute_delta_ms": 11.688947677612305,
+      "within_frozen_30ms": true,
+      "depth_member_exists": true,
+      "already_used_in_frozen_roles": false,
+      "accepted_for_v1": true,
+      "reasons": []
+    },
+    {
+      "index": 48,
+      "frame": "frame_00048.png",
+      "roles": [
+        "geometry_train"
+      ],
+      "original_rgb_path": "rgb/1305031465.595599.png",
+      "rgb_time_s": 1305031465.595599,
+      "nearest_depth_path": "depth/1305031465.583570.png",
+      "nearest_depth_time_s": 1305031465.58357,
+      "signed_delta_s": -0.012028932571411133,
+      "absolute_delta_ms": 12.028932571411133,
+      "within_frozen_30ms": true,
+      "depth_member_exists": true,
+      "already_used_in_frozen_roles": false,
+      "accepted_for_v1": true,
+      "reasons": []
+    },
+    {
+      "index": 49,
+      "frame": "frame_00049.png",
+      "roles": [
+        "geometry_holdout"
+      ],
+      "original_rgb_path": "rgb/1305031465.859861.png",
+      "rgb_time_s": 1305031465.859861,
+      "nearest_depth_path": "depth/1305031465.852860.png",
+      "nearest_depth_time_s": 1305031465.85286,
+      "signed_delta_s": -0.007000923156738281,
+      "absolute_delta_ms": 7.000923156738281,
+      "within_frozen_30ms": true,
+      "depth_member_exists": true,
+      "already_used_in_frozen_roles": false,
+      "accepted_for_v1": true,
+      "reasons": []
+    },
+    {
+      "index": 50,
+      "frame": "frame_00050.png",
+      "roles": [
+        "geometry_train"
+      ],
+      "original_rgb_path": "rgb/1305031466.127640.png",
+      "rgb_time_s": 1305031466.12764,
+      "nearest_depth_path": "depth/1305031466.116400.png",
+      "nearest_depth_time_s": 1305031466.1164,
+      "signed_delta_s": -0.011240005493164062,
+      "absolute_delta_ms": 11.240005493164062,
+      "within_frozen_30ms": true,
+      "depth_member_exists": true,
+      "already_used_in_frozen_roles": false,
+      "accepted_for_v1": true,
+      "reasons": []
+    },
+    {
+      "index": 51,
+      "frame": "frame_00051.png",
+      "roles": [
+        "geometry_train"
+      ],
+      "original_rgb_path": "rgb/1305031466.395784.png",
+      "rgb_time_s": 1305031466.395784,
+      "nearest_depth_path": "depth/1305031466.384479.png",
+      "nearest_depth_time_s": 1305031466.384479,
+      "signed_delta_s": -0.011304855346679688,
+      "absolute_delta_ms": 11.304855346679688,
+      "within_frozen_30ms": true,
+      "depth_member_exists": true,
+      "already_used_in_frozen_roles": false,
+      "accepted_for_v1": true,
+      "reasons": []
+    },
+    {
+      "index": 52,
+      "frame": "frame_00052.png",
+      "roles": [
+        "geometry_train"
+      ],
+      "original_rgb_path": "rgb/1305031466.659688.png",
+      "rgb_time_s": 1305031466.659688,
+      "nearest_depth_path": "depth/1305031466.648654.png",
+      "nearest_depth_time_s": 1305031466.648654,
+      "signed_delta_s": -0.011034011840820312,
+      "absolute_delta_ms": 11.034011840820312,
+      "within_frozen_30ms": true,
+      "depth_member_exists": true,
+      "already_used_in_frozen_roles": false,
+      "accepted_for_v1": true,
+      "reasons": []
+    },
+    {
+      "index": 53,
+      "frame": "frame_00053.png",
+      "roles": [
+        "geometry_train"
+      ],
+      "original_rgb_path": "rgb/1305031466.927756.png",
+      "rgb_time_s": 1305031466.927756,
+      "nearest_depth_path": "depth/1305031466.919411.png",
+      "nearest_depth_time_s": 1305031466.919411,
+      "signed_delta_s": -0.00834512710571289,
+      "absolute_delta_ms": 8.34512710571289,
+      "within_frozen_30ms": true,
+      "depth_member_exists": true,
+      "already_used_in_frozen_roles": false,
+      "accepted_for_v1": true,
+      "reasons": []
+    },
+    {
+      "index": 54,
+      "frame": "frame_00054.png",
+      "roles": [
+        "geometry_holdout"
+      ],
+      "original_rgb_path": "rgb/1305031467.195663.png",
+      "rgb_time_s": 1305031467.195663,
+      "nearest_depth_path": "depth/1305031467.184216.png",
+      "nearest_depth_time_s": 1305031467.184216,
+      "signed_delta_s": -0.011446952819824219,
+      "absolute_delta_ms": 11.446952819824219,
+      "within_frozen_30ms": true,
+      "depth_member_exists": true,
+      "already_used_in_frozen_roles": false,
+      "accepted_for_v1": true,
+      "reasons": []
+    },
+    {
+      "index": 55,
+      "frame": "frame_00055.png",
+      "roles": [
+        "geometry_train"
+      ],
+      "original_rgb_path": "rgb/1305031467.459692.png",
+      "rgb_time_s": 1305031467.459692,
+      "nearest_depth_path": "depth/1305031467.452057.png",
+      "nearest_depth_time_s": 1305031467.452057,
+      "signed_delta_s": -0.0076351165771484375,
+      "absolute_delta_ms": 7.6351165771484375,
+      "within_frozen_30ms": true,
+      "depth_member_exists": true,
+      "already_used_in_frozen_roles": false,
+      "accepted_for_v1": true,
+      "reasons": []
+    },
+    {
+      "index": 56,
+      "frame": "frame_00056.png",
+      "roles": [
+        "geometry_train"
+      ],
+      "original_rgb_path": "rgb/1305031467.727535.png",
+      "rgb_time_s": 1305031467.727535,
+      "nearest_depth_path": "depth/1305031467.718326.png",
+      "nearest_depth_time_s": 1305031467.718326,
+      "signed_delta_s": -0.009208917617797852,
+      "absolute_delta_ms": 9.208917617797852,
+      "within_frozen_30ms": true,
+      "depth_member_exists": true,
+      "already_used_in_frozen_roles": false,
+      "accepted_for_v1": true,
+      "reasons": []
+    },
+    {
+      "index": 57,
+      "frame": "frame_00057.png",
+      "roles": [
+        "geometry_train"
+      ],
+      "original_rgb_path": "rgb/1305031467.995754.png",
+      "rgb_time_s": 1305031467.995754,
+      "nearest_depth_path": "depth/1305031467.988523.png",
+      "nearest_depth_time_s": 1305031467.988523,
+      "signed_delta_s": -0.007230997085571289,
+      "absolute_delta_ms": 7.230997085571289,
+      "within_frozen_30ms": true,
+      "depth_member_exists": true,
+      "already_used_in_frozen_roles": false,
+      "accepted_for_v1": true,
+      "reasons": []
+    },
+    {
+      "index": 58,
+      "frame": "frame_00058.png",
+      "roles": [
+        "geometry_train"
+      ],
+      "original_rgb_path": "rgb/1305031468.259754.png",
+      "rgb_time_s": 1305031468.259754,
+      "nearest_depth_path": "depth/1305031468.252517.png",
+      "nearest_depth_time_s": 1305031468.252517,
+      "signed_delta_s": -0.007236957550048828,
+      "absolute_delta_ms": 7.236957550048828,
+      "within_frozen_30ms": true,
+      "depth_member_exists": true,
+      "already_used_in_frozen_roles": false,
+      "accepted_for_v1": true,
+      "reasons": []
+    },
+    {
+      "index": 59,
+      "frame": "frame_00059.png",
+      "roles": [
+        "geometry_holdout"
+      ],
+      "original_rgb_path": "rgb/1305031468.527756.png",
+      "rgb_time_s": 1305031468.527756,
+      "nearest_depth_path": "depth/1305031468.520786.png",
+      "nearest_depth_time_s": 1305031468.520786,
+      "signed_delta_s": -0.006969928741455078,
+      "absolute_delta_ms": 6.969928741455078,
+      "within_frozen_30ms": true,
+      "depth_member_exists": true,
+      "already_used_in_frozen_roles": false,
+      "accepted_for_v1": true,
+      "reasons": []
+    },
+    {
+      "index": 60,
+      "frame": "frame_00060.png",
+      "roles": [
+        "scale_diagnostic"
+      ],
+      "original_rgb_path": "rgb/1305031468.795796.png",
+      "rgb_time_s": 1305031468.795796,
+      "nearest_depth_path": "depth/1305031468.788562.png",
+      "nearest_depth_time_s": 1305031468.788562,
+      "signed_delta_s": -0.007233858108520508,
+      "absolute_delta_ms": 7.233858108520508,
+      "within_frozen_30ms": true,
+      "depth_member_exists": true,
+      "already_used_in_frozen_roles": false,
+      "accepted_for_v1": true,
+      "reasons": []
+    },
+    {
+      "index": 61,
+      "frame": "frame_00061.png",
+      "roles": [
+        "scale_diagnostic"
+      ],
+      "original_rgb_path": "rgb/1305031469.059832.png",
+      "rgb_time_s": 1305031469.059832,
+      "nearest_depth_path": "depth/1305031469.056318.png",
+      "nearest_depth_time_s": 1305031469.056318,
+      "signed_delta_s": -0.0035140514373779297,
+      "absolute_delta_ms": 3.5140514373779297,
+      "within_frozen_30ms": true,
+      "depth_member_exists": true,
+      "already_used_in_frozen_roles": false,
+      "accepted_for_v1": true,
+      "reasons": []
+    },
+    {
+      "index": 62,
+      "frame": "frame_00062.png",
+      "roles": [
+        "scale_diagnostic"
+      ],
+      "original_rgb_path": "rgb/1305031469.327618.png",
+      "rgb_time_s": 1305031469.327618,
+      "nearest_depth_path": "depth/1305031469.319772.png",
+      "nearest_depth_time_s": 1305031469.319772,
+      "signed_delta_s": -0.007845878601074219,
+      "absolute_delta_ms": 7.845878601074219,
+      "within_frozen_30ms": true,
+      "depth_member_exists": true,
+      "already_used_in_frozen_roles": false,
+      "accepted_for_v1": true,
+      "reasons": []
+    },
+    {
+      "index": 63,
+      "frame": "frame_00063.png",
+      "roles": [
+        "scale_diagnostic"
+      ],
+      "original_rgb_path": "rgb/1305031469.595755.png",
+      "rgb_time_s": 1305031469.595755,
+      "nearest_depth_path": "depth/1305031469.588500.png",
+      "nearest_depth_time_s": 1305031469.5885,
+      "signed_delta_s": -0.007255077362060547,
+      "absolute_delta_ms": 7.255077362060547,
+      "within_frozen_30ms": true,
+      "depth_member_exists": true,
+      "already_used_in_frozen_roles": false,
+      "accepted_for_v1": true,
+      "reasons": []
+    },
+    {
+      "index": 64,
+      "frame": "frame_00064.png",
+      "roles": [
+        "scale_diagnostic"
+      ],
+      "original_rgb_path": "rgb/1305031469.859574.png",
+      "rgb_time_s": 1305031469.859574,
+      "nearest_depth_path": "depth/1305031469.854359.png",
+      "nearest_depth_time_s": 1305031469.854359,
+      "signed_delta_s": -0.005215167999267578,
+      "absolute_delta_ms": 5.215167999267578,
+      "within_frozen_30ms": true,
+      "depth_member_exists": true,
+      "already_used_in_frozen_roles": false,
+      "accepted_for_v1": true,
+      "reasons": []
+    },
+    {
+      "index": 65,
+      "frame": "frame_00065.png",
+      "roles": [
+        "scale_anchor"
+      ],
+      "original_rgb_path": "rgb/1305031470.127633.png",
+      "rgb_time_s": 1305031470.127633,
+      "nearest_depth_path": "depth/1305031470.124820.png",
+      "nearest_depth_time_s": 1305031470.12482,
+      "signed_delta_s": -0.002813100814819336,
+      "absolute_delta_ms": 2.813100814819336,
+      "within_frozen_30ms": true,
+      "depth_member_exists": true,
+      "already_used_in_frozen_roles": false,
+      "accepted_for_v1": true,
+      "reasons": []
+    },
+    {
+      "index": 66,
+      "frame": "frame_00066.png",
+      "roles": [
+        "scale_diagnostic"
+      ],
+      "original_rgb_path": "rgb/1305031470.395823.png",
+      "rgb_time_s": 1305031470.395823,
+      "nearest_depth_path": "depth/1305031470.388056.png",
+      "nearest_depth_time_s": 1305031470.388056,
+      "signed_delta_s": -0.0077669620513916016,
+      "absolute_delta_ms": 7.766962051391602,
+      "within_frozen_30ms": true,
+      "depth_member_exists": true,
+      "already_used_in_frozen_roles": false,
+      "accepted_for_v1": true,
+      "reasons": []
+    },
+    {
+      "index": 67,
+      "frame": "frame_00067.png",
+      "roles": [
+        "scale_diagnostic"
+      ],
+      "original_rgb_path": "rgb/1305031470.659690.png",
+      "rgb_time_s": 1305031470.65969,
+      "nearest_depth_path": "depth/1305031470.656787.png",
+      "nearest_depth_time_s": 1305031470.656787,
+      "signed_delta_s": -0.002902984619140625,
+      "absolute_delta_ms": 2.902984619140625,
+      "within_frozen_30ms": true,
+      "depth_member_exists": true,
+      "already_used_in_frozen_roles": false,
+      "accepted_for_v1": true,
+      "reasons": []
+    }
+  ],
+  "limitations": [
+    "Index-only availability, not sensor calibration or verified image overlap",
+    "Does not claim physical Mesh fidelity or independently scanned geometry",
+    "V1 failures cannot be fixed by quietly replacing frames or changing 30ms"
+  ],
+  "source_archive_sha256": "e983d6830916e66dc4a46a71368046b149b283de87769690e7aa4e0b9483530c",
+  "source_archive_bytes": 344011403
+}
