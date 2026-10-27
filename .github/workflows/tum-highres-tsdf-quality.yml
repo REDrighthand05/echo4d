@@ -1,0 +1,61 @@
+name: TUM high-information real Mesh quality experiment
+
+on:
+  push:
+    branches:
+      - research/highres-rgbd-tsdf-quality-20261028
+    paths:
+      - 'tools/tum_highres_tsdf.py'
+      - 'tests/python/test_tum_highres_tsdf.py'
+      - '.github/workflows/tum-highres-tsdf-quality.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tum-highres-geometry-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  real-geometry-ab:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: requirements.lock
+      - name: Install locked CPU dependencies
+        run: |
+          python -m pip install -r requirements.lock
+          python -m pip install --no-deps -e .
+      - name: Verify source identity and image guards
+        env:
+          PYTHONPATH: tools
+        run: python -m pytest -q tests/python/test_tum_highres_tsdf.py
+      - name: Run real 160 versus 320 RGB-D reconstruction and five-view comparison
+        env:
+          PYTHONPATH: tools
+          OPENBLAS_NUM_THREADS: '1'
+          OMP_NUM_THREADS: '1'
+        run: |
+          python tools/tum_highres_tsdf.py \
+            --work "$RUNNER_TEMP/tum-highres-geometry" \
+            --report-dir "$GITHUB_WORKSPACE/artifacts/tum-highres-geometry"
+      - name: Show actual result or failure
+        if: always()
+        run: |
+          if [ -f artifacts/tum-highres-geometry/SUMMARY.md ]; then
+            cat artifacts/tum-highres-geometry/SUMMARY.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Preserve real Meshes, five comparisons and failure receipt
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tum-highres-geometry-${{ github.run_id }}
+          path: artifacts/tum-highres-geometry/
+          if-no-files-found: warn
+          retention-days: 14
