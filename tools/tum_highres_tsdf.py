@@ -26,7 +26,7 @@ from tum_public_roundtrip import (BOUNDS, PINNED_ARCHIVE_BYTES,
 # Predeclared before reading any candidate holdout metrics.
 CONFIGS = {
     "baseline-160": {"downsample": 4, "voxel_m": 0.05},
-    "candidate-320": {"downsample": 2, "voxel_m": 0.025},
+    "candidate-320": {"downsample": 2, "voxel_m": 0.035},
 }
 VIEWS = (4, 24, 55)
 MAX_VOXELS = 4_000_000
@@ -82,6 +82,29 @@ def training_manifest(source: Path) -> None:
         sort_keys=True, allow_nan=False) + "\n", encoding="utf8")
     if len(load_recording(target)) != TOTAL - len(HOLDOUT):
         raise DataError("Expected exactly 48 training frames")
+
+
+def face_components(vertex_count: int, faces: np.ndarray) -> dict:
+    """Actual mesh vertex-sharing components, not cosmetic deletion or hole fill."""
+    if vertex_count < 3 or faces.ndim != 2 or faces.shape[1] != 3:
+        raise DataError("Invalid mesh for connectivity analysis")
+    parent = np.arange(vertex_count, dtype=np.int32)
+    def find(i: int) -> int:
+        while parent[i] != i:
+            parent[i] = parent[parent[i]]
+            i = int(parent[i])
+        return i
+    for a, b, c in faces:
+        root = find(int(a))
+        for index in (int(b), int(c)):
+            other = find(index)
+            parent[other] = root
+    labels = np.asarray([find(i) for i in range(vertex_count)], dtype=np.int32)
+    _, inverse = np.unique(labels[faces[:, 0]], return_inverse=True)
+    counts = np.bincount(inverse)
+    return {"face_components": int(len(counts)),
+            "largest_component_face_fraction": float(counts.max() / len(faces)),
+            "largest_component_faces": int(counts.max())}
 
 
 def reconstruct(source: Path, target: Path, voxel: float, report: dict) -> None:
@@ -203,6 +226,7 @@ def experiment(args: argparse.Namespace, report: dict) -> None:
         report.setdefault("results", {})[key] = {
             "mesh_sha256": file_sha256(output / "mesh.ply"),
             "mesh_vertices": len(verts), "mesh_faces": len(faces),
+            "connectivity": face_components(len(verts), faces),
             "reconstruction_report_sha256": file_sha256(output / "report.json"),
             "training_manifest_sha256": file_sha256(inputs[key] / "recording-train.json"),
             "same_sensor_holdout_diagnostic_only": {k: diagnostic[k] for k in
@@ -219,12 +243,13 @@ def main() -> int:
     parser.add_argument("--archive", type=Path)
     args = parser.parse_args()
     args.report_dir.mkdir(parents=True, exist_ok=True)
-    report = {"experiment": "TUM-fr1_xyz-highres-TSDF-160-vs-320-v1",
+    report = {"experiment": "TUM-fr1_xyz-highres-TSDF-160-vs-320-v2",
               "started_utc": datetime.now(timezone.utc).isoformat(),
               "checkout_sha": os.environ.get("GITHUB_SHA"),
               "dataset_url": URL, "dataset_sha256": PINNED_ARCHIVE_SHA256,
               "original_rgb_resolution": [640, 480],
               "frozen_holdout_indices": list(HOLDOUT), "configurations": CONFIGS,
+              "research_note": "35mm candidate selected after reviewing 25mm same-scene results; exploratory only, not fresh validation",
               "desk_v2": "FAIL 16.7779cm > 15cm; unchanged",
               "issue_74": "FAIL / NOT ACCEPTED", "status": "started",
               "commands": [], "independent_surface_truth": "not_available",
