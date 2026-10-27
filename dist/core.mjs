@@ -349,6 +349,25 @@ export function validateScene(scene) {
   )
     throw new Error("场景版本或算法标记无效。");
   validateRecording(scene.recording);
+  // Preview metadata is descriptive, not authenticated. Reject internally
+  // contradictory claims instead of displaying fabricated dimensions.
+  const p = scene.recording.preview_provenance;
+  if (p !== undefined) {
+    const source = p?.loaded_recording_resolution_px;
+    const preview = p?.exported_preview_resolution_px;
+    const stride = p?.pixel_stride_xy;
+    const size = (s) => s && Number.isSafeInteger(s.width) &&
+      Number.isSafeInteger(s.height) && s.width > 0 && s.height > 0;
+    if (!size(source) || !size(preview) || !Array.isArray(stride) ||
+        stride.length !== 2 || !stride.every((n) => Number.isSafeInteger(n) && n > 0) ||
+        !Number.isSafeInteger(p.frame_stride) || p.frame_stride < 1 ||
+        p.is_original_capture !== false || p.original_capture_resolution_px !== null ||
+        preview.width !== scene.recording.intrinsics.width ||
+        preview.height !== scene.recording.intrinsics.height ||
+        Math.ceil(source.width / stride[0]) !== preview.width ||
+        Math.ceil(source.height / stride[1]) !== preview.height)
+      throw new Error("场景预览分辨率来源与实际深度像素尺寸不一致。");
+  }
   const m = scene.mesh;
   if (
     !m ||

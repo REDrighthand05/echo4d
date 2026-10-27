@@ -19,4 +19,36 @@ test('unknown motion can stay unknown and is never extrapolated',()=>{const e=de
 test('time cutoff never uses future depth',()=>{const m=reconstruct(demo,{until:2});assert.ok(m.usedFrames>0);assert.ok(m.vertices.every(v=>v.last<=2));});
 test('PLY counts match body',()=>{const m=reconstruct(demo,{stride:12}),p=toPLY(m);assert.ok(p.includes(`element vertex ${m.vertices.length}`));assert.ok(p.includes(`element face ${m.faces.length}`));assert.equal(p.split('end_header\n')[1].trim().split('\n').length,m.vertices.length+m.faces.length);});
 test('native scene topology and evidence validated',()=>{const s={version:'echo-scene-1',algorithm:'projective-tsdf-v1',recording:demo,mesh:{vertices:[[0,0,0],[1,0,0],[0,1,0]],faces:[[0,1,2]],colors:[[1,2,3],[1,2,3],[1,2,3]],observations:[1,2,3],first:[0,0,0],last:[1,1,1]}};validateScene(s);assert.equal(unpackScene(s).vertices[1].supportCount,2);s.mesh.faces[0][2]=3;assert.throws(()=>validateScene(s));});
-if(process.env.ECHO_NATIVE_SCENE)test('Python export obeys browser contract',()=>{const s=JSON.parse(readFileSync(process.env.ECHO_NATIVE_SCENE,'utf8'));validateScene(s);assert.ok(unpackScene(s).faces.length>0);});
+test('preview provenance rejects contradictory dimensions and false original-capture claims',()=>{
+ const scene={version:'echo-scene-1',algorithm:'projective-tsdf-v1',
+   recording:structuredClone(demo),
+   mesh:{vertices:[[0,0,0],[1,0,0],[0,1,0]],faces:[[0,1,2]],
+     colors:[[1,2,3],[1,2,3],[1,2,3]],observations:[1,2,3],
+     first:[0,0,0],last:[1,1,1]}};
+ const k=scene.recording.intrinsics;
+ scene.recording.preview_provenance={
+   loaded_recording_resolution_px:{width:k.width*2,height:k.height*2},
+   exported_preview_resolution_px:{width:k.width,height:k.height},
+   pixel_stride_xy:[2,2],frame_stride:1,
+   original_capture_resolution_px:null,is_original_capture:false};
+ validateScene(scene);
+ const mutate=(fn)=>{const bad=structuredClone(scene);fn(bad.recording.preview_provenance);
+   assert.throws(()=>validateScene(bad),/预览分辨率/);};
+ mutate(p=>p.exported_preview_resolution_px.width++);
+ mutate(p=>p.loaded_recording_resolution_px.height++);
+ mutate(p=>p.pixel_stride_xy[0]=1);
+ mutate(p=>p.is_original_capture=true);
+ mutate(p=>p.original_capture_resolution_px={width:640,height:480});
+ delete scene.recording.preview_provenance; // legacy scene remains loadable
+ validateScene(scene);
+});
+if(process.env.ECHO_NATIVE_SCENE)test('Python export obeys browser contract',()=>{
+ const s=JSON.parse(readFileSync(process.env.ECHO_NATIVE_SCENE,'utf8'));
+ validateScene(s);
+ assert.ok(unpackScene(s).faces.length>0);
+ const p=s.recording.preview_provenance;
+ assert.equal(p?.is_original_capture,false);
+ assert.equal(p?.original_capture_resolution_px,null);
+ assert.deepEqual(p?.exported_preview_resolution_px,
+   {width:s.recording.intrinsics.width,height:s.recording.intrinsics.height});
+});
