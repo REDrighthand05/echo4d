@@ -39,3 +39,20 @@ test('media switch while manifest read is pending rejects stale completion',asyn
   h.el('videoImport').files=[{name:'new.webm'}];h.el('videoImport').handlers.change();resolve(JSON.stringify(manifest()));await reading;
   assert.equal(h.run('manifest'),null);assert.match(h.el('notice').textContent,/读取期间视频已切换/);
 });
+
+test('normalized history archive reconnects the original video timeline and IMU without reconstructing geometry',async()=>{
+  const h=setup();h.run('boundVideoFile="old.webm"');
+  const timeline={
+    ...manifest(),
+    version:'echo-history-timeline-1',
+    started_utc:'2026-10-28T09:00:00Z',
+    geometry_status:'not_reconstructed',
+    auxiliary_streams:[{sensor_id:'depth-a',clock_status:'source_claim_same_clock_unverified'}],
+  };
+  h.el('manifestImport').files=[{size:1000,text:async()=>JSON.stringify(timeline)}];
+  await h.el('manifestImport').handlers.change();
+  assert.equal(h.run('manifest.version'),'echo-history-timeline-1');
+  assert.match(h.el('metadata').textContent,/附加传感流：1/);
+  assert.match(h.el('metadata').textContent,/2026-10-28T09:00:00Z/);
+  assert.match(h.el('metadata').textContent,/not_reconstructed/);
+});
