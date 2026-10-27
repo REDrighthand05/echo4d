@@ -143,3 +143,38 @@ def test_existing_output_never_overwritten(source, tmp_path):
     prepare_history_rgbd(archive, alignment, output)
     with pytest.raises(DataError, match="already exists"):
         prepare_history_rgbd(archive, alignment, output)
+
+
+@pytest.mark.parametrize("which", ["timeline", "alignment"])
+def test_metadata_change_during_decode_rolls_back(source, tmp_path, monkeypatch, which):
+    from echo4d import history_rgbd as bridge
+    archive, alignment, _, _ = source
+    original = bridge._command
+    target = archive / "history.timeline.json" if which == "timeline" else alignment
+    def mutate(command, timeout):
+        result = original(command, timeout)
+        if command[0] == "ffmpeg":
+            target.write_bytes(target.read_bytes() + b" ")
+        return result
+    monkeypatch.setattr(bridge, "_command", mutate)
+    output = tmp_path / "rgbd"
+    with pytest.raises(DataError, match="changed"):
+        bridge.prepare_history_rgbd(archive, alignment, output)
+    assert not output.exists()
+
+
+def test_original_alignment_metadata_bytes_retained(source, tmp_path):
+    archive, alignment, _, _ = source
+    timeline = archive / "history.timeline.json"
+    # Distinct whitespace must survive, rather than reserializing parsed fields.
+    alignment.write_bytes(alignment.read_bytes() + b"\r\n")
+    timeline.write_bytes(timeline.read_bytes() + b"\r\n")
+    output = tmp_path / "rgbd"
+    prepare_history_rgbd(archive, alignment, output)
+    receipt = json.loads((output / "history-alignment.json").read_text())
+    for key, name, original in [
+        ("alignment_sha256", "source-alignment.json", alignment),
+        ("history_timeline_sha256", "source-history.timeline.json", timeline),
+    ]:
+        assert (output / name).read_bytes() == original.read_bytes()
+        assert receipt[key] == file_sha256(output / name)

@@ -16,7 +16,7 @@ from PIL import Image
 
 from .model import Camera, DataError, Frame, file_sha256, finite_number, rigid_matrix, safe_path, load_recording
 from .output import output_transaction, write_json
-from .history import TIMELINE_VERSION, _read_json
+from .history import TIMELINE_VERSION, _json_snapshot
 
 VERSION = "echo-history-rgbd-alignment-1"
 MAX_FRAMES = 256
@@ -53,7 +53,7 @@ def prepare_history_rgbd(history: Path, alignment_path: Path, output: Path) -> d
     """Decode selected source frames once; pair measured depth and known poses."""
     history, alignment_path, output = Path(history), Path(alignment_path), Path(output)
     timeline_path = history / "history.timeline.json"
-    timeline = _read_json(timeline_path)
+    timeline, timeline_raw, timeline_sha = _json_snapshot(timeline_path)
     if timeline.get("version") != TIMELINE_VERSION or timeline.get("geometry_status") != "not_reconstructed":
         raise DataError("A genuine unreconstructed history timeline is required")
     media_info = timeline.get("media")
@@ -65,7 +65,7 @@ def prepare_history_rgbd(history: Path, alignment_path: Path, output: Path) -> d
             media_info.get("bytes") != media.stat().st_size):
         raise DataError("Historical video was modified after archival")
 
-    alignment = _read_json(alignment_path)
+    alignment, alignment_raw, alignment_sha = _json_snapshot(alignment_path)
     if (alignment.get("version") != VERSION or
             alignment.get("source_media_sha256") != media_sha):
         raise DataError("RGB-D alignment must bind the exact original video")
@@ -175,9 +175,11 @@ def prepare_history_rgbd(history: Path, alignment_path: Path, output: Path) -> d
         })
         write_json(dest / "history-alignment.json", {
             "version": VERSION,
-            "history_timeline_sha256": file_sha256(timeline_path),
+            "history_timeline_sha256": timeline_sha,
             "source_media_sha256": media_sha,
-            "alignment_sha256": file_sha256(alignment_path),
+            "alignment_sha256": alignment_sha,
+            "original_inputs": {"history_timeline": "source-history.timeline.json",
+                                "alignment": "source-alignment.json"},
             "depth_kind": alignment["depth_kind"],
             "depth_source": depth_source, "pose_source": pose_source,
             "clock_sync": sync, "frames": receipts,
@@ -187,6 +189,8 @@ def prepare_history_rgbd(history: Path, alignment_path: Path, output: Path) -> d
                 "Browser IMU alone is not metric position or depth",
             ],
         })
+        (dest / "source-history.timeline.json").write_bytes(timeline_raw)
+        (dest / "source-alignment.json").write_bytes(alignment_raw)
         # Read the full derived ECHO dataset with the existing reconstruction loader.
         data = load_recording(dest / "recording.json")
         if len(data) != len(checked):
@@ -195,6 +199,9 @@ def prepare_history_rgbd(history: Path, alignment_path: Path, output: Path) -> d
             raise DataError("Source video changed before result publication")
         if any(file_sha256(path) != sha for _, _, path, sha, _, _ in checked):
             raise DataError("Measured depth changed during video decoding")
+        if (file_sha256(timeline_path) != timeline_sha
+                or file_sha256(alignment_path) != alignment_sha):
+            raise DataError("History timeline or alignment changed during video decoding")
     return {"output": str(output.resolve()), "frames": len(checked),
             "source_media_sha256": media_sha,
             "next_command": "echo4d reconstruct <output>/recording.json --output <mesh-dir> --bounds <six scene coordinates>",
