@@ -1,0 +1,613 @@
+{
+  "source_kind": "measured_registered_z_depth",
+  "source_description": "TUM Freiburg1 Desk sensor-measured camera-Z; not RGB-only depth",
+  "depth_numeric_units_per_meter": 5000,
+  "train": [
+    {
+      "name": "frame_00000.png",
+      "depth": "depth/1305031453.374112.png",
+      "timestamp_delta_seconds": 0.014427900314331055,
+      "source_rgb_time_s": 1305031453.359684,
+      "source_depth_time_s": 1305031453.374112
+    },
+    {
+      "name": "frame_00001.png",
+      "depth": "depth/1305031453.636951.png",
+      "timestamp_delta_seconds": 0.009244918823242188,
+      "source_rgb_time_s": 1305031453.627706,
+      "source_depth_time_s": 1305031453.636951
+    },
+    {
+      "name": "frame_00002.png",
+      "depth": "depth/1305031453.905519.png",
+      "timestamp_delta_seconds": 0.013808965682983398,
+      "source_rgb_time_s": 1305031453.89171,
+      "source_depth_time_s": 1305031453.905519
+    },
+    {
+      "name": "frame_00003.png",
+      "depth": "depth/1305031454.172688.png",
+      "timestamp_delta_seconds": 0.013015985488891602,
+      "source_rgb_time_s": 1305031454.159672,
+      "source_depth_time_s": 1305031454.172688
+    },
+    {
+      "name": "frame_00005.png",
+      "depth": "depth/1305031454.702030.png",
+      "timestamp_delta_seconds": 0.010145902633666992,
+      "source_rgb_time_s": 1305031454.691884,
+      "source_depth_time_s": 1305031454.70203
+    },
+    {
+      "name": "frame_00006.png",
+      "depth": "depth/1305031454.973081.png",
+      "timestamp_delta_seconds": 0.013433218002319336,
+      "source_rgb_time_s": 1305031454.959648,
+      "source_depth_time_s": 1305031454.973081
+    },
+    {
+      "name": "frame_00007.png",
+      "depth": "depth/1305031455.240960.png",
+      "timestamp_delta_seconds": 0.01337885856628418,
+      "source_rgb_time_s": 1305031455.227581,
+      "source_depth_time_s": 1305031455.24096
+    },
+    {
+      "name": "frame_00008.png",
+      "depth": "depth/1305031455.509397.png",
+      "timestamp_delta_seconds": 0.017760038375854492,
+      "source_rgb_time_s": 1305031455.491637,
+      "source_depth_time_s": 1305031455.509397
+    },
+    {
+      "name": "frame_00010.png",
+      "depth": "depth/1305031456.041930.png",
+      "timestamp_delta_seconds": 0.014159917831420898,
+      "source_rgb_time_s": 1305031456.02777,
+      "source_depth_time_s": 1305031456.04193
+    },
+    {
+      "name": "frame_00011.png",
+      "depth": "depth/1305031456.277928.png",
+      "timestamp_delta_seconds": -0.013746976852416992,
+      "source_rgb_time_s": 1305031456.291675,
+      "source_depth_time_s": 1305031456.277928
+    },
+    {
+      "name": "frame_00012.png",
+      "depth": "depth/1305031456.576087.png",
+      "timestamp_delta_seconds": 0.016479015350341797,
+      "source_rgb_time_s": 1305031456.559608,
+      "source_depth_time_s": 1305031456.576087
+    },
+    {
+      "name": "frame_00013.png",
+      "depth": "depth/1305031456.841050.png",
+      "timestamp_delta_seconds": 0.013446807861328125,
+      "source_rgb_time_s": 1305031456.827603,
+      "source_depth_time_s": 1305031456.84105
+    },
+    {
+      "name": "frame_00015.png",
+      "depth": "depth/1305031457.376037.png",
+      "timestamp_delta_seconds": 0.016324996948242188,
+      "source_rgb_time_s": 1305031457.359712,
+      "source_depth_time_s": 1305031457.376037
+    },
+    {
+      "name": "frame_00016.png",
+      "depth": "depth/1305031457.643534.png",
+      "timestamp_delta_seconds": 0.01600790023803711,
+      "source_rgb_time_s": 1305031457.627526,
+      "source_depth_time_s": 1305031457.643534
+    },
+    {
+      "name": "frame_00017.png",
+      "depth": "depth/1305031457.906126.png",
+      "timestamp_delta_seconds": 0.014533042907714844,
+      "source_rgb_time_s": 1305031457.891593,
+      "source_depth_time_s": 1305031457.906126
+    },
+    {
+      "name": "frame_00018.png",
+      "depth": "depth/1305031458.144808.png",
+      "timestamp_delta_seconds": -0.014829874038696289,
+      "source_rgb_time_s": 1305031458.159638,
+      "source_depth_time_s": 1305031458.144808
+    },
+    {
+      "name": "frame_00020.png",
+      "depth": "depth/1305031458.676991.png",
+      "timestamp_delta_seconds": -0.014683008193969727,
+      "source_rgb_time_s": 1305031458.691674,
+      "source_depth_time_s": 1305031458.676991
+    },
+    {
+      "name": "frame_00021.png",
+      "depth": "depth/1305031458.943997.png",
+      "timestamp_delta_seconds": -0.015619993209838867,
+      "source_rgb_time_s": 1305031458.959617,
+      "source_depth_time_s": 1305031458.943997
+    },
+    {
+      "name": "frame_00022.png",
+      "depth": "depth/1305031459.244159.png",
+      "timestamp_delta_seconds": 0.016551971435546875,
+      "source_rgb_time_s": 1305031459.227607,
+      "source_depth_time_s": 1305031459.244159
+    },
+    {
+      "name": "frame_00023.png",
+      "depth": "depth/1305031459.473401.png",
+      "timestamp_delta_seconds": -0.018153905868530273,
+      "source_rgb_time_s": 1305031459.491555,
+      "source_depth_time_s": 1305031459.473401
+    },
+    {
+      "name": "frame_00025.png",
+      "depth": "depth/1305031460.011909.png",
+      "timestamp_delta_seconds": -0.015655994415283203,
+      "source_rgb_time_s": 1305031460.027565,
+      "source_depth_time_s": 1305031460.011909
+    },
+    {
+      "name": "frame_00026.png",
+      "depth": "depth/1305031460.279164.png",
+      "timestamp_delta_seconds": -0.012524843215942383,
+      "source_rgb_time_s": 1305031460.291689,
+      "source_depth_time_s": 1305031460.279164
+    },
+    {
+      "name": "frame_00027.png",
+      "depth": "depth/1305031460.544245.png",
+      "timestamp_delta_seconds": -0.015402078628540039,
+      "source_rgb_time_s": 1305031460.559647,
+      "source_depth_time_s": 1305031460.544245
+    },
+    {
+      "name": "frame_00028.png",
+      "depth": "depth/1305031460.843836.png",
+      "timestamp_delta_seconds": 0.01617598533630371,
+      "source_rgb_time_s": 1305031460.82766,
+      "source_depth_time_s": 1305031460.843836
+    },
+    {
+      "name": "frame_00030.png",
+      "depth": "depth/1305031461.346875.png",
+      "timestamp_delta_seconds": -0.01283407211303711,
+      "source_rgb_time_s": 1305031461.359709,
+      "source_depth_time_s": 1305031461.346875
+    },
+    {
+      "name": "frame_00031.png",
+      "depth": "depth/1305031461.609662.png",
+      "timestamp_delta_seconds": -0.017879009246826172,
+      "source_rgb_time_s": 1305031461.627541,
+      "source_depth_time_s": 1305031461.609662
+    },
+    {
+      "name": "frame_00032.png",
+      "depth": "depth/1305031461.879162.png",
+      "timestamp_delta_seconds": -0.012560844421386719,
+      "source_rgb_time_s": 1305031461.891723,
+      "source_depth_time_s": 1305031461.879162
+    },
+    {
+      "name": "frame_00033.png",
+      "depth": "depth/1305031462.147634.png",
+      "timestamp_delta_seconds": -0.012012004852294922,
+      "source_rgb_time_s": 1305031462.159646,
+      "source_depth_time_s": 1305031462.147634
+    },
+    {
+      "name": "frame_00035.png",
+      "depth": "depth/1305031462.680788.png",
+      "timestamp_delta_seconds": -0.01175999641418457,
+      "source_rgb_time_s": 1305031462.692548,
+      "source_depth_time_s": 1305031462.680788
+    },
+    {
+      "name": "frame_00036.png",
+      "depth": "depth/1305031462.947939.png",
+      "timestamp_delta_seconds": -0.01173710823059082,
+      "source_rgb_time_s": 1305031462.959676,
+      "source_depth_time_s": 1305031462.947939
+    },
+    {
+      "name": "frame_00037.png",
+      "depth": "depth/1305031463.217123.png",
+      "timestamp_delta_seconds": -0.010660886764526367,
+      "source_rgb_time_s": 1305031463.227784,
+      "source_depth_time_s": 1305031463.217123
+    },
+    {
+      "name": "frame_00038.png",
+      "depth": "depth/1305031463.480415.png",
+      "timestamp_delta_seconds": -0.015213966369628906,
+      "source_rgb_time_s": 1305031463.495629,
+      "source_depth_time_s": 1305031463.480415
+    },
+    {
+      "name": "frame_00040.png",
+      "depth": "depth/1305031464.015867.png",
+      "timestamp_delta_seconds": -0.011836051940917969,
+      "source_rgb_time_s": 1305031464.027703,
+      "source_depth_time_s": 1305031464.015867
+    },
+    {
+      "name": "frame_00041.png",
+      "depth": "depth/1305031464.283694.png",
+      "timestamp_delta_seconds": -0.011972904205322266,
+      "source_rgb_time_s": 1305031464.295667,
+      "source_depth_time_s": 1305031464.283694
+    },
+    {
+      "name": "frame_00042.png",
+      "depth": "depth/1305031464.548007.png",
+      "timestamp_delta_seconds": -0.011696100234985352,
+      "source_rgb_time_s": 1305031464.559703,
+      "source_depth_time_s": 1305031464.548007
+    },
+    {
+      "name": "frame_00043.png",
+      "depth": "depth/1305031464.816195.png",
+      "timestamp_delta_seconds": -0.011564016342163086,
+      "source_rgb_time_s": 1305031464.827759,
+      "source_depth_time_s": 1305031464.816195
+    },
+    {
+      "name": "frame_00045.png",
+      "depth": "depth/1305031465.351729.png",
+      "timestamp_delta_seconds": -0.008219003677368164,
+      "source_rgb_time_s": 1305031465.359948,
+      "source_depth_time_s": 1305031465.351729
+    },
+    {
+      "name": "frame_00046.png",
+      "depth": "depth/1305031465.615685.png",
+      "timestamp_delta_seconds": -0.012002944946289062,
+      "source_rgb_time_s": 1305031465.627688,
+      "source_depth_time_s": 1305031465.615685
+    },
+    {
+      "name": "frame_00047.png",
+      "depth": "depth/1305031465.884370.png",
+      "timestamp_delta_seconds": -0.011123895645141602,
+      "source_rgb_time_s": 1305031465.895494,
+      "source_depth_time_s": 1305031465.88437
+    },
+    {
+      "name": "frame_00048.png",
+      "depth": "depth/1305031466.152540.png",
+      "timestamp_delta_seconds": -0.007888078689575195,
+      "source_rgb_time_s": 1305031466.160428,
+      "source_depth_time_s": 1305031466.15254
+    },
+    {
+      "name": "frame_00050.png",
+      "depth": "depth/1305031466.684412.png",
+      "timestamp_delta_seconds": -0.011409997940063477,
+      "source_rgb_time_s": 1305031466.695822,
+      "source_depth_time_s": 1305031466.684412
+    },
+    {
+      "name": "frame_00051.png",
+      "depth": "depth/1305031466.952451.png",
+      "timestamp_delta_seconds": -0.007277011871337891,
+      "source_rgb_time_s": 1305031466.959728,
+      "source_depth_time_s": 1305031466.952451
+    },
+    {
+      "name": "frame_00052.png",
+      "depth": "depth/1305031467.220466.png",
+      "timestamp_delta_seconds": -0.007238149642944336,
+      "source_rgb_time_s": 1305031467.227704,
+      "source_depth_time_s": 1305031467.220466
+    },
+    {
+      "name": "frame_00053.png",
+      "depth": "depth/1305031467.484357.png",
+      "timestamp_delta_seconds": -0.011700868606567383,
+      "source_rgb_time_s": 1305031467.496058,
+      "source_depth_time_s": 1305031467.484357
+    },
+    {
+      "name": "frame_00055.png",
+      "depth": "depth/1305031468.020491.png",
+      "timestamp_delta_seconds": -0.0076160430908203125,
+      "source_rgb_time_s": 1305031468.028107,
+      "source_depth_time_s": 1305031468.020491
+    },
+    {
+      "name": "frame_00056.png",
+      "depth": "depth/1305031468.288361.png",
+      "timestamp_delta_seconds": -0.0074689388275146484,
+      "source_rgb_time_s": 1305031468.29583,
+      "source_depth_time_s": 1305031468.288361
+    },
+    {
+      "name": "frame_00057.png",
+      "depth": "depth/1305031468.552701.png",
+      "timestamp_delta_seconds": -0.007038116455078125,
+      "source_rgb_time_s": 1305031468.559739,
+      "source_depth_time_s": 1305031468.552701
+    },
+    {
+      "name": "frame_00058.png",
+      "depth": "depth/1305031468.817997.png",
+      "timestamp_delta_seconds": -0.011250019073486328,
+      "source_rgb_time_s": 1305031468.829247,
+      "source_depth_time_s": 1305031468.817997
+    }
+  ],
+  "holdout": [
+    "frame_00004.png",
+    "frame_00009.png",
+    "frame_00014.png",
+    "frame_00019.png",
+    "frame_00024.png",
+    "frame_00029.png",
+    "frame_00034.png",
+    "frame_00039.png",
+    "frame_00044.png",
+    "frame_00049.png",
+    "frame_00054.png",
+    "frame_00059.png"
+  ],
+  "protocol": {
+    "version": "desk-metric-mesh-v2-source-paired",
+    "source": "TUM freiburg1_desk, 75 real RGB images re-encoded as 4fps MP4",
+    "selected_indices": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20,
+      21,
+      22,
+      23,
+      24,
+      25,
+      26,
+      27,
+      28,
+      29,
+      30,
+      31,
+      32,
+      33,
+      34,
+      35,
+      36,
+      37,
+      38,
+      39,
+      40,
+      41,
+      42,
+      43,
+      44,
+      45,
+      46,
+      47,
+      48,
+      49,
+      50,
+      51,
+      52,
+      53,
+      54,
+      55,
+      56,
+      57,
+      58,
+      59
+    ],
+    "holdout_indices": [
+      4,
+      9,
+      14,
+      19,
+      24,
+      29,
+      34,
+      39,
+      44,
+      49,
+      54,
+      59
+    ],
+    "scale_anchor_indices": [
+      15,
+      45,
+      65
+    ],
+    "scale_check_indices": [
+      60,
+      61,
+      62,
+      63,
+      64,
+      66,
+      67
+    ],
+    "train_names": [
+      "frame_00000.png",
+      "frame_00001.png",
+      "frame_00002.png",
+      "frame_00003.png",
+      "frame_00005.png",
+      "frame_00006.png",
+      "frame_00007.png",
+      "frame_00008.png",
+      "frame_00010.png",
+      "frame_00011.png",
+      "frame_00012.png",
+      "frame_00013.png",
+      "frame_00015.png",
+      "frame_00016.png",
+      "frame_00017.png",
+      "frame_00018.png",
+      "frame_00020.png",
+      "frame_00021.png",
+      "frame_00022.png",
+      "frame_00023.png",
+      "frame_00025.png",
+      "frame_00026.png",
+      "frame_00027.png",
+      "frame_00028.png",
+      "frame_00030.png",
+      "frame_00031.png",
+      "frame_00032.png",
+      "frame_00033.png",
+      "frame_00035.png",
+      "frame_00036.png",
+      "frame_00037.png",
+      "frame_00038.png",
+      "frame_00040.png",
+      "frame_00041.png",
+      "frame_00042.png",
+      "frame_00043.png",
+      "frame_00045.png",
+      "frame_00046.png",
+      "frame_00047.png",
+      "frame_00048.png",
+      "frame_00050.png",
+      "frame_00051.png",
+      "frame_00052.png",
+      "frame_00053.png",
+      "frame_00055.png",
+      "frame_00056.png",
+      "frame_00057.png",
+      "frame_00058.png"
+    ],
+    "holdout_names": [
+      "frame_00004.png",
+      "frame_00009.png",
+      "frame_00014.png",
+      "frame_00019.png",
+      "frame_00024.png",
+      "frame_00029.png",
+      "frame_00034.png",
+      "frame_00039.png",
+      "frame_00044.png",
+      "frame_00049.png",
+      "frame_00054.png",
+      "frame_00059.png"
+    ],
+    "max_rgb_depth_gap_s": 0.03,
+    "depth_numeric_units_per_meter": 5000,
+    "voxel_m": 0.07,
+    "max_voxels": 1500000,
+    "max_depth_m": 4.0,
+    "min_observations": 2,
+    "downsample": 4,
+    "bounds_method": {
+      "percentiles": [
+        2.0,
+        98.0
+      ],
+      "margin_m": 0.3,
+      "source": "training depth only"
+    },
+    "screening_gates": {
+      "min_coverage": 0.8,
+      "max_overlap_rmse_m": 0.15
+    },
+    "source_cohort_mode": "v2-source-paired",
+    "source_cohort_plan_sha256": "368546ed7f3137078992289b0d4f23ce2ac03bf471e87ddedbe325bbdf2e95f2",
+    "original_source_indices": [
+      17,
+      25,
+      33,
+      41,
+      49,
+      57,
+      65,
+      73,
+      81,
+      89,
+      97,
+      105,
+      113,
+      121,
+      129,
+      137,
+      145,
+      153,
+      161,
+      169,
+      177,
+      185,
+      193,
+      201,
+      209,
+      217,
+      225,
+      233,
+      241,
+      249,
+      257,
+      265,
+      273,
+      281,
+      289,
+      297,
+      305,
+      313,
+      321,
+      329,
+      337,
+      345,
+      353,
+      361,
+      369,
+      377,
+      385,
+      393,
+      401,
+      409,
+      417,
+      425,
+      433,
+      441,
+      449,
+      457,
+      465,
+      473,
+      481,
+      489,
+      497,
+      505,
+      513,
+      521,
+      529,
+      537,
+      545,
+      553,
+      561,
+      569,
+      577,
+      585,
+      593,
+      601,
+      609
+    ]
+  }
+}
