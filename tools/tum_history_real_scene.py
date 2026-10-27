@@ -210,7 +210,7 @@ def real_trial(args: argparse.Namespace, report: dict) -> None:
     mesh_out = work / "real-tum-mesh"
     cmd([sys.executable, "-m", "echo4d", "reconstruct", str(converted / "recording.json"),
          "--output", str(mesh_out), "--bounds", *BOUNDS, "--voxel", VOXEL,
-         "--max-depth", "4", "--min-observations", "2", "--quiet"], timeout=1200)
+         "--max-depth", "4", "--min-observations", str(args.min_observations), "--quiet"], timeout=1200)
     final = json.loads((mesh_out / "report.json").read_text())
     if final["mesh"]["vertices"] < 3 or final["mesh"]["triangles"] < 1:
         raise DataError("Real TUM historical bridge produced no usable Mesh triangles")
@@ -235,6 +235,8 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--work", type=Path, required=True)
     parser.add_argument("--report-dir", type=Path, required=True)
+    parser.add_argument("--min-observations", type=int, choices=[1, 2], default=1,
+                        help="1 = preserve singly observed geometry; 2 = stricter original baseline")
     parser.add_argument("--frames", type=int, choices=[30, 60], default=DEFAULT_FRAMES,
                         help="Controlled 30 vs 60 real-frame ablation; same scene, bounds and voxel size")
     parser.add_argument("--dataset", type=Path,
@@ -246,6 +248,7 @@ def main() -> int:
          "official_source": URL, "source_archive_pin": PINNED_ARCHIVE_SHA256,
          "source_archive_bytes": PINNED_ARCHIVE_BYTES,
          "sample_count": args.frames, "stride": STRIDE, "source_downsample": 1,
+         "min_observations": args.min_observations,
          "commit": os.getenv("GITHUB_SHA"), "status": "started"}
     start = time.monotonic()
     try:
