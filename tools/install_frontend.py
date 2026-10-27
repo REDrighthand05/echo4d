@@ -15,6 +15,15 @@ ASSETS = ("dist/quality.html", "dist/quality.css", "dist/quality.mjs")
 def git(*args):
     return subprocess.run(["git", *args], check=True, capture_output=True)
 
+def unsafe_target(root, destination):
+    """Reject symlinks at every path component, including missing leaf files."""
+    relative = destination.relative_to(root)
+    if any(root.joinpath(*relative.parts[:i]).is_symlink()
+           for i in range(1, len(relative.parts) + 1)):
+        return True
+    return destination.exists() and not destination.is_file()
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source", default="origin/main", help="trusted local/fetched Git ref")
@@ -37,7 +46,7 @@ def main():
             failed = True
             continue
         destination = root / relative
-        if destination.is_symlink() or (destination.exists() and not destination.is_file()):
+        if unsafe_target(root, destination):
             print("BLOCKED unsafe target: " + relative, file=sys.stderr)
             failed = True
             continue
