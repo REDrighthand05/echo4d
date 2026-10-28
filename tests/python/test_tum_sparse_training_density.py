@@ -66,7 +66,8 @@ def dense_source():
                 0., 0., 1., 0., i * .004, (i % 13) * .002, 0., 1.]
         return {"t": i * .1, "cameraToWorld": pose}
     def association(i):
-        return {"rgb_path": f"rgb/{i}.png", "depth_path": f"depth/{i}.png",
+        return {"depth_timestamp": i * .1, "rgb_timestamp": i * .1,
+                "rgb_path": f"rgb/{i}.png", "depth_path": f"depth/{i}.png",
                 "rgb_sha256": f"rgb-{i}", "depth_sha256": f"depth-{i}"}
     dense = {"version": "echo-dataset-1", "source": "recorded",
              "frames": [frame(i) for i in range(240)]}
