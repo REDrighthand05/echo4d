@@ -1,7 +1,7 @@
 """Synthetic CPU stereo unit checks; these do not constitute a room Mesh run."""
 import numpy as np
-import cv2
 import pytest
+cv2 = pytest.importorskip('cv2', reason='Optional OpenCV stereo tested by dedicated real-room workflow')
 from types import SimpleNamespace
 
 from echo4d.model import DataError
