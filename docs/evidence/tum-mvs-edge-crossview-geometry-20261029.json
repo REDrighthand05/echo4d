@@ -1,0 +1,106 @@
+{
+  "experiment": "tum-fr1_xyz-frozen-48-mvs-edge-crossview-20261029",
+  "status": "FAIL_visual_recognition_not_accepted",
+  "branch": "research/mvs-edge-crossview-geometry-20261029",
+  "tested_head": "1bdc47ba518ff80900104c725ca5d1f2dd942987",
+  "real_run_url": "https://github.com/REDrighthand05/echo4d/actions/runs/40731038842",
+  "real_artifact_url": "https://github.com/REDrighthand05/echo4d/actions/runs/40731038842/artifacts/12835071973",
+  "source": {
+    "dataset": "TUM RGB-D fr1_xyz, J. Sturm et al., CC BY 4.0",
+    "archive_sha256": "a0236d97b8c30cd93b653656d2b6c293ff7c982a4130ef2a1a8beecdb124ef98",
+    "original_rgb_resolution": [
+      640,
+      480
+    ],
+    "fusion_rgb_resolution": [
+      320,
+      240
+    ],
+    "training_frames": 48,
+    "poses": "supplied metric camera poses",
+    "inferred_depth": "frozen RGB-only Plane-Sweep depth maps from run 40692184301",
+    "removed": [
+      "measured sensor depth during reconstruction",
+      "external prior Mesh"
+    ],
+    "posthoc_sensor_depth_only": true
+  },
+  "algorithm": "Preserve 8419 original same-volume TSDF faces; keep additional observed-edge faces only if two camera centers separated >=4cm agree in inferred Z at face centroid within max(10cm,4% Z); remove detached new islands.",
+  "old_observed_edge": {
+    "mesh_sha256": "cd38fb6bb15485a7121fb46e8d018c443976a7b985693f928843723ff2752587",
+    "faces": 10744,
+    "edge_connected_components": 568,
+    "largest_component_faces_local_trimesh": 4503,
+    "largest_component_fraction_local_trimesh": 0.41911764705882354
+  },
+  "new_crossview_filtered": {
+    "mesh_sha256": "4e887c722aa5f9d0c1cdd2eefc74e287e2ad33f02fabcccd7d6a79118254daa2",
+    "faces": 9268,
+    "edge_connected_components": 649,
+    "largest_component_faces_local_trimesh": 3905,
+    "largest_component_fraction_local_trimesh": 0.4213422529132499,
+    "candidate_extra_faces": 2325,
+    "retained_extra_faces": 849,
+    "rejected_extra_faces": 1476,
+    "baseline_faces_preserved": 8419
+  },
+  "frozen_five": [
+    {
+      "view": "heldout-4",
+      "old": 47309,
+      "new": 46620
+    },
+    {
+      "view": "heldout-24",
+      "old": 42095,
+      "new": 41278
+    },
+    {
+      "view": "heldout-55",
+      "old": 31666,
+      "new": 31207
+    },
+    {
+      "view": "free-a",
+      "old": 34622,
+      "new": 32742
+    },
+    {
+      "view": "free-b",
+      "old": 29054,
+      "new": 26929
+    }
+  ],
+  "visual_artifact": {
+    "montage_sha256": "ff7f6ea975152e6aa7a655b25d9d7a39c3c781088d46bd9cf6385fb051a75226",
+    "new_colored_glb_sha256": "81794cc5d806a181357082f4d0d8e203492525f9a525c5bbaed39a1b7f768a79",
+    "three_original_rgb_photos": true,
+    "two_free_views": true,
+    "rotatable_glb_available": true,
+    "echo4d_browser_integration_verified": false
+  },
+  "posthoc_sensor_diagnostic": {
+    "removed_sensor_valid_pixels": 1207,
+    "removed_over_30cm_fraction": 0.44656172328086163,
+    "removed_mae_m": 0.39653298192115094,
+    "retained_old_sensor_valid_pixels": 94539,
+    "retained_old_over_30cm_fraction": 0.0483927268111573,
+    "retained_new_over_30cm_fraction": 0.049228360782322636,
+    "sensor_depth_not_used_for_reconstruction": true,
+    "not_independent_scanned_gt": true
+  },
+  "tests": {
+    "synthetic_and_baseline_tests_passed": 10,
+    "real_workflow_conclusion": "success"
+  },
+  "interpretation": "The new filter disproportionately removes incorrect inferred surfaces (44.7% of removed sensor-valid pixels >30cm wrong) but also removes valid geometry, increases disconnected face groups 568->649 and shrinks largest component 4503->3905; all five frozen views lose coverage. Desk/monitor and free-view structure still fragmented. #74 FAIL. A geometric error tradeoff, not recognizable room recovery.",
+  "historical_failures": [
+    "PR #83 adaptive texture added fragments",
+    "PR #84 local consensus free views regressed",
+    "PR #85 crossview fusion barely improved Mesh",
+    "PR #86 local occlusion still failed continuity",
+    "PR #87 subpixel TSDF regressed",
+    "PR #88 observed-edge added coverage but 14.6% of new-only sensor-valid pixels >30cm wrong"
+  ],
+  "next_shortest_unblock": "Do not tune to heldout sensor Z. Use RGB-inferred edge/triangle support and topology jointly so correct bridges survive without retaining unsupported floating surfaces; rerun fixed 48 training maps and five poses."
+}
