@@ -7,6 +7,7 @@ on:
     paths:
       - 'src/echo4d/known_pose_edge_extraction.py'
       - 'tools/tum_mvs_observed_edges.py'
+      - 'tools/tum_mvs_edge_sensor_check.py'
       - 'tests/python/test_known_pose_edge_extraction.py'
       - '.github/workflows/tum-mvs-observed-edges-real-ab.yml'
   workflow_dispatch:
@@ -88,6 +89,14 @@ jobs:
           print('FROZEN_COVERAGE',[(v['view'],v['old_covered_pixels'],v['new_covered_pixels']) for v in ab['views']])
           print('VISUAL_ACCEPTANCE',new['visual_acceptance'])
           PY
+      - name: Posthoc heldout sensor depth diagnosis (not reconstruction input)
+        env:
+          PYTHONPATH: tools
+        run: |
+          python tools/tum_mvs_edge_sensor_check.py \
+            --old artifacts/old --new artifacts/new \
+            --source-root "$RUNNER_TEMP/tum-observed-edge/dataset" \
+            --output artifacts/heldout-diagnostic
       - name: Preserve original photos, real PLY/GLB and five-view negative or positive evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -101,5 +110,6 @@ jobs:
             artifacts/new/report.json
             artifacts/new/reconstruction/mesh.ply
             artifacts/frozen-five/
+            artifacts/heldout-diagnostic/
           if-no-files-found: warn
           retention-days: 14
