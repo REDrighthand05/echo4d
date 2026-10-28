@@ -108,5 +108,14 @@
     "note": "The earlier baseline_covered_pixels field is from the cited experiment report; dense320_frozen_same_poses_covered_pixels is rerendered here from that artifact's dense-320/mesh.ply with exact MVS old five poses; do not mix camera or mesh variants."
   },
   "assessment": "FAIL: edge-connected components 774 to 702, largest fraction 38.55% to 42.27%; heldout coverage only +0.04% to +0.47%, two frozen free views lose 4.84% and 7.59%. Visually still discontinuous floating fragments; table/floor/walls not reliably recognizable. No life replay or #74 PASS.",
-  "next": "Do not further tune cosmetic filtering. Replace local Z smoothing with cross-view surface consistency or learned depth source under measured pose, then compare to RGB-D baseline at frozen five views. First obtain clear original 640x480 RGB beside model views."
+  "next": "Do not further tune cosmetic filtering. Replace local Z smoothing with cross-view surface consistency or learned depth source under measured pose, then compare to RGB-D baseline at frozen five views. First obtain clear original 640x480 RGB beside model views.",
+  "reproducibility": {
+    "receipt_fix_commit": "c7dce9c5a084b683804a6db6575c3e0c297949c4",
+    "receipt_fix": "per-anchor valid/unknown/fraction now reflect saved regularized Z; original inference stats retained separately",
+    "repeat_real_run": "https://github.com/REDrighthand05/echo4d/actions/runs/40684039839",
+    "repeat_mesh_sha256": "3cc08e890c1fed00f55d6fde1d4251eb3c997f51f5d6a7f370fb0a8d7a2cb258",
+    "same_mesh_sha_as_original": true,
+    "repeat_synthetic_tests_passed": 25,
+    "repeat_artifact": "https://github.com/REDrighthand05/echo4d/actions/runs/40684039839/artifacts/12813363667"
+  }
 }
