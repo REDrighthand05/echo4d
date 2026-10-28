@@ -1,0 +1,143 @@
+{
+  "experiment": "tum-fr1_xyz-known-pose-rgb-crossview-reprojection-20261028",
+  "status": "FAIL_visual_recognition_not_accepted",
+  "scope": "same real scene, identical 48 training / 12 frozen holdout, 4 MVS sources, 64 planes; two actual TSDF meshes",
+  "inputs": {
+    "official_url": "https://cvg.cit.tum.de/rgbd/dataset/freiburg1/rgbd_dataset_freiburg1_xyz.tgz",
+    "archive_sha256": "a0236d97b8c30cd93b653656d2b6c293ff7c982a4130ef2a1a8beecdb124ef98",
+    "original_rgb": [
+      640,
+      480
+    ],
+    "algorithm_rgb": [
+      320,
+      240
+    ],
+    "retained": [
+      "observed RGB",
+      "measured metric camera poses",
+      "camera intrinsics",
+      "depth.txt timestamps for frozen frame selection"
+    ],
+    "removed": [
+      "measured depth pixels",
+      "prior Mesh"
+    ],
+    "holdout_indices": [
+      4,
+      5,
+      9,
+      10,
+      14,
+      19,
+      24,
+      25,
+      29,
+      34,
+      35,
+      55
+    ],
+    "train": 48,
+    "source_views_per_mvs_anchor": 4,
+    "inverse_depth_planes": 64,
+    "depth_source": "RGB-inferred camera-Z; metric scale supplied by measured poses"
+  },
+  "method": {
+    "name": "two-view RGB-supported cross-view depth reprojection before TSDF",
+    "newly_supported_depth_pixels": 367919,
+    "adjusted_depth_pixels": 691932,
+    "original_valid_training_depth_pixels": 1407212,
+    "new_valid_training_depth_pixels": 1775131,
+    "neighbor_candidates_max": 6,
+    "independent_source_baseline_min_m": 0.035,
+    "anchor_baseline_range_m": [
+      0.05,
+      0.28
+    ],
+    "depth_tolerance_m": 0.12,
+    "relative_tolerance": 0.04,
+    "observed_rgb_mean_absolute_difference_max": 45,
+    "no_measured_depth_or_hallucinated_holes": true
+  },
+  "execution": {
+    "code_tested_head": "8b4deeaba75d64e8baadd32399568db3e8a43c27",
+    "real_run": "https://github.com/REDrighthand05/echo4d/actions/runs/40692184301",
+    "artifact": "https://github.com/REDrighthand05/echo4d/actions/runs/40692184301/artifacts/12817971681",
+    "verify": "https://github.com/REDrighthand05/echo4d/actions/runs/40692218263",
+    "artifact_zip_sha256": "a6c6d7eac711e013dfb7b7ef50ed68545e46c2b4ba5c3d8c0bb0e62177c2dccb",
+    "command_control": "python tools/tum_plane_sweep.py --work <empty> --report-dir <old> --max-anchors 48 --max-sources 4 --planes 64 --pairing top2 --source-visibility --visibility-mode soft --window-mode adaptive --depth-regularization rgb-consensus",
+    "command_new": "python tools/tum_plane_sweep.py --archive <pinned-tum-archive> --work <empty> --report-dir <new> --max-anchors 48 --max-sources 4 --planes 64 --pairing top2 --source-visibility --visibility-mode soft --window-mode adaptive --depth-regularization rgb-consensus --crossview-fusion"
+  },
+  "mesh": {
+    "old": {
+      "sha256": "3cc08e890c1fed00f55d6fde1d4251eb3c997f51f5d6a7f370fb0a8d7a2cb258",
+      "vertices": 7540,
+      "triangles": 8419,
+      "edge_connected_components": 702,
+      "largest_face_component_fraction": 0.42273429148354913,
+      "glb_sha256": "3a2d6ae7c9936b46042e268263a7c24beb67a64373a5793a5b2bb444fb78a805"
+    },
+    "new": {
+      "sha256": "cf35048ba39387d937bbdc09b1225d6f6815c141f7fa17cf8f5a209fb963aede",
+      "vertices": 7643,
+      "triangles": 8586,
+      "edge_connected_components": 702,
+      "largest_face_component_fraction": 0.387724202189611,
+      "glb_sha256": "b392fc368ff636cd407268942b2fddd11ad79fb1e5e37a03f490a44914e373de"
+    }
+  },
+  "frozen_five_views": [
+    {
+      "name": "heldout-4",
+      "old_covered_pixels": 44579,
+      "new_covered_pixels": 45691,
+      "delta": 1112
+    },
+    {
+      "name": "heldout-24",
+      "old_covered_pixels": 39302,
+      "new_covered_pixels": 40236,
+      "delta": 934
+    },
+    {
+      "name": "heldout-55",
+      "old_covered_pixels": 29776,
+      "new_covered_pixels": 30527,
+      "delta": 751
+    },
+    {
+      "name": "free-a",
+      "old_covered_pixels": 31534,
+      "new_covered_pixels": 32017,
+      "delta": 483
+    },
+    {
+      "name": "free-b",
+      "old_covered_pixels": 25945,
+      "new_covered_pixels": 26949,
+      "delta": 1004
+    }
+  ],
+  "photos": [
+    {
+      "index": 4,
+      "original_sha256": "965eefeeb53c411760fdcf86f588b4d6bdca31c914a3fbcbcc9debf97543ac87"
+    },
+    {
+      "index": 24,
+      "original_sha256": "4a28a0a38aeaeaf984b54c13c0ed4dcdfb530b95a06e56423ab4a7520adf729b"
+    },
+    {
+      "index": 55,
+      "original_sha256": "91f469505a185f5e98ee6e82a7776b0c263b46241eb493bd534071da2e9e84b2"
+    }
+  ],
+  "visual": {
+    "artifact_frozen_montage_sha256": "27590534e0ecbb24650c888c6577d53ae952e43bc360a0949517696618794eb6",
+    "local_colored_montage_sha256": "a0e6dbc4c94697ca2c7324ec7f5b0ef70ff7976800895d4342ea0ca685366fd1",
+    "description": "three original 640x480 RGB frames + actual old/new Mesh at matching camera poses + two fixed free views; local colored montage not committed",
+    "attribution": "TUM RGB-D Dataset, J. Sturm et al. IROS 2012, CC BY 4.0"
+  },
+  "assessment": "FAIL: all five camera views cover slightly more pixels (+1.5% to +3.9%) but actual room/desk still discontinuous; 702 fragments unchanged, largest component drops 42.27% to 38.77%. More depth pixels do not mean more correct surface. No #74 acceptance or full life replay.",
+  "next": "Diagnose transferred depth against frozen measured RGB-D reference in real 3D, reject spurious support, prioritize coherent table and monitor edges instead of increasing pixel coverage."
+}
