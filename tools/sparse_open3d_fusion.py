@@ -18,9 +18,9 @@ from echo4d.output import output_transaction, write_json, write_ply
 
 
 def validate_settings(voxel_m: float, truncation_m: float, max_depth_m: float,
-                      pixel_stride: int) -> None:
+                      pixel_stride: int, edge_guard_m: float = 0.0) -> None:
     if not all(isinstance(v, (float, int)) and not isinstance(v, bool)
-               and math.isfinite(v) for v in (voxel_m, truncation_m, max_depth_m)):
+               and math.isfinite(v) for v in (voxel_m, truncation_m, max_depth_m, edge_guard_m)):
         raise DataError("Sparse TSDF distances must be finite numbers")
     if not 0.005 <= voxel_m <= 0.10:
         raise DataError("Sparse voxel must be between 5mm and 10cm")
@@ -30,18 +30,48 @@ def validate_settings(voxel_m: float, truncation_m: float, max_depth_m: float,
         raise DataError("Sparse maximum depth must be within (0.2,10] metres")
     if type(pixel_stride) is not int or pixel_stride not in (1, 2, 4, 8):
         raise DataError("Sparse depth pixel stride must be 1, 2, 4 or 8")
+    if not 0 <= edge_guard_m <= 0.30:
+        raise DataError("Sparse depth edge guard must be between 0 and 30cm")
+
+
+def reject_far_side_of_depth_edges(depth: np.ndarray, jump_m: float) -> tuple[np.ndarray, int]:
+    """Suppress only the farther pixel at measured occlusion jumps, never fill holes.
+
+    The far-side pixel next to a foreground occluder is prone to mixed-pixel
+    depth and phantom TSDF bridges. Keep the nearer side and untouched interiors.
+    Zero/invalid depth does not trigger rejection of adjacent valid observations.
+    This is an experimental geometry filter, not a confidence measurement.
+    """
+    if jump_m == 0:
+        return depth, 0
+    if depth.ndim != 2:
+        raise DataError("Edge guard requires a 2D depth image")
+    valid = np.isfinite(depth) & (depth > 0)
+    reject = np.zeros(depth.shape, dtype=bool)
+    for a_slice, b_slice in ((np.s_[:-1, :], np.s_[1:, :]),
+                             (np.s_[:, :-1], np.s_[:, 1:])):
+        a, b = depth[a_slice], depth[b_slice]
+        both = valid[a_slice] & valid[b_slice]
+        # A relative floor avoids over-rejecting distant surfaces.
+        threshold = np.maximum(jump_m, 0.04 * np.minimum(a, b))
+        discontinuity = both & (np.abs(a - b) > threshold)
+        reject[a_slice] |= discontinuity & (a > b)
+        reject[b_slice] |= discontinuity & (b > a)
+    result = depth.copy()
+    result[reject] = 0
+    return result, int(np.count_nonzero(reject))
 
 
 def fuse_sparse(recording_path: Path, destination: Path, *, voxel_m: float = 0.03,
                 truncation_m: float = 0.09, max_depth_m: float = 4.0,
-                pixel_stride: int = 2) -> dict:
+                pixel_stride: int = 2, edge_guard_m: float = 0.0) -> dict:
     """Integrate registered RGB and camera-Z metric depth; output strict ECHO color PLY.
 
     Open3D expects world-to-camera extrinsics, whereas ECHO stores camera-to-world.
     Unobserved/excluded pixels are zeroed before integration. The exporter does not
     pretend to know per-vertex independent observation counts.
     """
-    validate_settings(voxel_m, truncation_m, max_depth_m, pixel_stride)
+    validate_settings(voxel_m, truncation_m, max_depth_m, pixel_stride, edge_guard_m)
     recording = load_recording(recording_path)
     if len(recording) > 120:
         raise DataError("Sparse quality experiment is bounded to 120 input frames")
@@ -57,7 +87,7 @@ def fuse_sparse(recording_path: Path, destination: Path, *, voxel_m: float = 0.0
         voxel_length=float(voxel_m), sdf_trunc=float(truncation_m),
         color_type=o3d.pipelines.integration.TSDFVolumeColorType.RGB8,
         volume_unit_resolution=16, depth_sampling_stride=pixel_stride)
-    count, valid_pixels = 0, 0
+    count, valid_pixels, edge_removed_pixels = 0, 0, 0
     start = time.perf_counter()
     with output_transaction(destination) as output:
         for _, frame, _ in recording.iter_frames():
@@ -68,6 +98,8 @@ def fuse_sparse(recording_path: Path, destination: Path, *, voxel_m: float = 0.0
             if frame.excluded is not None:
                 invalid |= frame.excluded
             depth[invalid] = 0
+            depth, removed = reject_far_side_of_depth_edges(depth, edge_guard_m)
+            edge_removed_pixels += removed
             valid_pixels += int(np.count_nonzero(depth))
             rgbd = o3d.geometry.RGBDImage.create_from_color_and_depth(
                 o3d.geometry.Image(np.ascontiguousarray(frame.color)),
@@ -108,6 +140,8 @@ def fuse_sparse(recording_path: Path, destination: Path, *, voxel_m: float = 0.0
             "vertices": len(vertices), "triangles": len(faces),
             "voxel_m": voxel_m, "truncation_m": truncation_m,
             "max_depth_m": max_depth_m, "pixel_stride": pixel_stride,
+            "edge_guard_m": edge_guard_m,
+            "edge_removed_pixels": edge_removed_pixels,
             "seconds": round(time.perf_counter() - start, 3),
             "input_manifest_sha256": recording.manifest_sha256,
             "mesh_sha256": file_sha256(output / "mesh.ply"),

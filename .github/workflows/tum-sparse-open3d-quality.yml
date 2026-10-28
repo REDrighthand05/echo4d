@@ -42,7 +42,7 @@ jobs:
           OPENBLAS_NUM_THREADS: '1'
           OMP_NUM_THREADS: '1'
         run: python -m pytest -q tests/python/test_sparse_open3d.py tests/python/test_tum_sparse_training_density.py
-      - name: Reconstruct real sparse 640 Mesh at 48 versus expanded training views; render 3+2
+      - name: Compare real 88-view sparse Mesh with and without occlusion edge guard; render 3+2
         env:
           PYTHONPATH: tools
           OPENBLAS_NUM_THREADS: '1'
@@ -50,7 +50,8 @@ jobs:
         run: |
           python tools/tum_sparse_training_density.py \
             --work "$RUNNER_TEMP/tum-sparse-density" \
-            --report-dir "$GITHUB_WORKSPACE/artifacts/tum-sparse-density"
+            --report-dir "$GITHUB_WORKSPACE/artifacts/tum-sparse-density" \
+            --edge-compare
       - name: Summarize actual result or failure
         if: always()
         run: |

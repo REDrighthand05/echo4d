@@ -8,7 +8,7 @@ import pytest
 
 from echo4d.holdout import read_echo_ply
 from echo4d.model import DataError
-from sparse_open3d_fusion import fuse_sparse, validate_settings
+from sparse_open3d_fusion import fuse_sparse, validate_settings, reject_far_side_of_depth_edges
 from tum_sparse_open3d import comparison_sheet, verify_inputs
 
 
@@ -84,3 +84,33 @@ def test_missing_registered_rgb_rejected(tmp_path):
     source = make_recording(tmp_path / "source", color=False)
     with pytest.raises(DataError, match="registered training RGB"):
         fuse_sparse(source, tmp_path / "output", pixel_stride=1)
+
+
+def test_edge_guard_rejects_only_far_side_of_measured_jump():
+    depth = np.array([[1., 1., 2., 2.],
+                      [1., 1., 2., 2.],
+                      [1., 1., 2., 2.]], dtype=np.float32)
+    filtered, removed = reject_far_side_of_depth_edges(depth, .08)
+    assert removed == 3
+    assert np.array_equal(filtered[:, :2], depth[:, :2])
+    assert np.all(filtered[:, 2] == 0)
+    assert np.array_equal(filtered[:, 3], depth[:, 3])
+    assert np.array_equal(depth[:, 2], np.full(3, 2., dtype=np.float32))
+
+
+def test_edge_guard_keeps_unobserved_boundaries_and_smooth_planes():
+    depth = np.array([[0., 1., 1.02, 1.],
+                      [0., 1., 1.02, 1.]], dtype=np.float32)
+    filtered, removed = reject_far_side_of_depth_edges(depth, .08)
+    assert removed == 0
+    assert np.array_equal(filtered, depth)
+    unchanged, removed = reject_far_side_of_depth_edges(depth, 0.)
+    assert removed == 0 and unchanged is depth
+    with pytest.raises(DataError, match="2D"):
+        reject_far_side_of_depth_edges(depth[0], .08)
+
+
+def test_edge_guard_rejects_invalid_settings():
+    for bad in (-.01, .31, float("nan"), True):
+        with pytest.raises(DataError):
+            validate_settings(.03, .09, 4., 2, bad)

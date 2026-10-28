@@ -174,7 +174,9 @@ def select_pose_diverse_training(base: dict, dense: dict, base_assoc: dict,
     }
 
 def sheet(original: Image.Image | None, old: np.ndarray, new: np.ndarray,
-          target: Path, title: str) -> None:
+          target: Path, title: str,
+          labels: tuple[str, str] = ("Sparse TSDF 640 | uniform extra views",
+                                     "Sparse TSDF 640 | pose-diverse extra views")) -> None:
     if any(x.shape != (240, 320, 3) or x.dtype != np.uint8 for x in (old, new)):
         raise DataError("Mesh renders must be real 320x240 RGB arrays")
     image = Image.new("RGB", (1920, 514), (22, 26, 32))
@@ -188,17 +190,17 @@ def sheet(original: Image.Image | None, old: np.ndarray, new: np.ndarray,
             (640, 480), resample=Image.Resampling.NEAREST), (x, 34))
     for x, label in zip((0, 640, 1280), (
             title + (" | original 640x480" if original else " | free camera"),
-            "Sparse TSDF 640 | uniform extra views",
-            "Sparse TSDF 640 | pose-diverse extra views")):
+            *labels)):
         draw.text((x + 7, 9), label, fill=(238, 238, 238))
     image.save(target)
 
 
-def render_views(dataset: Path, original_import: Path, target: Path) -> list[dict]:
+def render_views(dataset: Path, original_import: Path, target: Path, *,
+                 comparison: tuple[str, str] = ("sparse-expanded", "sparse-pose-diverse")) -> list[dict]:
     rec = load_recording(original_import / "recording.json")
     assoc = json.loads((original_import / "association.json").read_text(encoding="utf8"))
     meshes = {}
-    for name in ("sparse-expanded", "sparse-pose-diverse"):
+    for name in comparison:
         path = target / name / "mesh.ply"
         v, f = read_echo_ply(path)
         meshes[name] = (v, f, read_vertex_rgb(path, len(v)))
@@ -206,6 +208,12 @@ def render_views(dataset: Path, original_import: Path, target: Path) -> list[dic
     visual.mkdir(exist_ok=True)
     camera = rec.camera.scaled(2)
     result = []
+    edge_trial = comparison[1] == "sparse-edge-guard"
+    suffix = "pose-vs-edge" if edge_trial else "uniform-vs-pose"
+    labels = (("Pose-diverse 88 | unfiltered RGB-D",
+               "Pose-diverse 88 | far-side edge guard 8cm") if edge_trial
+              else ("Sparse TSDF 640 | uniform extra views",
+                    "Sparse TSDF 640 | pose-diverse extra views"))
     for i in VIEWS:
         pose = np.asarray(rec.entries[i]["cameraToWorld"]).reshape(4, 4, order="F")
         spec = assoc["frames"][i]
@@ -216,21 +224,21 @@ def render_views(dataset: Path, original_import: Path, target: Path) -> list[dic
             original = image.convert("RGB").copy()
         renders = [rasterize_vertex_rgb(*meshes[key], camera, pose,
                    near=.15, far=MAX_DEPTH_M)[0]
-                   for key in ("sparse-expanded", "sparse-pose-diverse")]
-        name = f"heldout-{i:02d}-uniform-vs-pose.png"
-        sheet(original, *renders, visual / name, f"TUM withheld camera {i}")
+                   for key in comparison]
+        name = f"heldout-{i:02d}-{suffix}.png"
+        sheet(original, *renders, visual / name, f"TUM withheld camera {i}", labels)
         result.append({"kind": "original_camera", "index": i, "image": name,
                        "sha256": file_sha256(visual / name)})
-    verts = meshes["sparse-pose-diverse"][0]
+    verts = meshes[comparison[1]][0]
     center = (verts.min(axis=0) + verts.max(axis=0)) / 2
     span = max(float(np.max(np.ptp(verts, axis=0))), .5)
     for j, offset in enumerate(((.45, -1.25, .3), (1.2, .35, .45)), 1):
         pose = look_at(center + span * np.asarray(offset), center)
         renders = [rasterize_vertex_rgb(*meshes[key], camera, pose,
                    near=.15, far=10.)[0]
-                   for key in ("sparse-expanded", "sparse-pose-diverse")]
-        name = f"free-{j}-uniform-vs-pose.png"
-        sheet(None, *renders, visual / name, f"Free camera {j}")
+                   for key in comparison]
+        name = f"free-{j}-{suffix}.png"
+        sheet(None, *renders, visual / name, f"Free camera {j}", labels)
         result.append({"kind": "free_camera", "image": name,
                        "sha256": file_sha256(visual / name),
                        "camera_to_world": pose.flatten(order="F").tolist()})
@@ -285,8 +293,11 @@ def run(args: argparse.Namespace, report: dict) -> None:
         budget=len(extra["frames"]))
     report["training_selection"] = {"uniform": selection, "pose_diverse": diversity}
     manifests = {}
-    for name, folder, data in (("sparse-expanded", expanded, extra),
-                               ("sparse-pose-diverse", dense, pose)):
+    routes = ((("sparse-pose-diverse", dense, pose),
+               ("sparse-edge-guard", dense, pose)) if args.edge_compare
+              else (("sparse-expanded", expanded, extra),
+                    ("sparse-pose-diverse", dense, pose)))
+    for name, folder, data in routes:
         manifest = folder / ("train-" + name + ".json")
         manifest.write_text(json.dumps(data, allow_nan=False, sort_keys=True) + "\n", encoding="utf8")
         manifests[name] = manifest
@@ -295,7 +306,8 @@ def run(args: argparse.Namespace, report: dict) -> None:
     for name, manifest in manifests.items():
         report.setdefault("fusion", {})[name] = fuse_sparse(
             manifest, target / name, voxel_m=VOXEL_M, truncation_m=TRUNC_M,
-            max_depth_m=MAX_DEPTH_M, pixel_stride=2)
+            max_depth_m=MAX_DEPTH_M, pixel_stride=2,
+            edge_guard_m=0.08 if name == "sparse-edge-guard" else 0.0)
         mesh = target / name / "mesh.ply"
         vertices, faces = read_echo_ply(mesh)
         score = evaluate_frames(vertices, faces, old_rec, list(HOLDOUT),
@@ -306,7 +318,8 @@ def run(args: argparse.Namespace, report: dict) -> None:
             "connectivity": face_components(len(vertices), faces),
             "same_sensor_holdout_diagnostic_only": {k: score[k] for k in
                 ("heldout_frames", "observed_depth_coverage", "rmse_m", "mae_m", "p95_abs_m")}}
-    report["visual"] = render_views(dataset, old, target)
+    report["visual"] = render_views(
+        dataset, old, target, comparison=(routes[0][0], routes[1][0]))
     report["status"] = "real_meshes_rendered_visual_review_pending"
 
 
@@ -315,17 +328,21 @@ def main() -> int:
     parser.add_argument("--work", required=True, type=Path)
     parser.add_argument("--report-dir", required=True, type=Path)
     parser.add_argument("--archive", type=Path)
+    parser.add_argument("--edge-compare", action="store_true",
+                        help="Compare identical pose-diverse training frames with/without edge guard")
     args = parser.parse_args()
     args.report_dir.mkdir(parents=True, exist_ok=True)
     report = {
-        "experiment": "TUM-fr1_xyz-Open3D-sparse-88-uniform-vs-pose-diverse-v1",
+        "experiment": ("TUM-fr1_xyz-Open3D-sparse-88-edge-guard-v1" if args.edge_compare
+                       else "TUM-fr1_xyz-Open3D-sparse-88-uniform-vs-pose-diverse-v1"),
         "started_utc": datetime.now(timezone.utc).isoformat(),
         "checkout_sha": os.environ.get("GITHUB_SHA"),
         "dataset_url": URL, "dataset_sha256": PINNED_ARCHIVE_SHA256,
         "original_rgb_resolution": [640, 480],
         "frozen_holdout_indices": list(HOLDOUT),
         "geometry": {"voxel_m": VOXEL_M, "truncation_m": TRUNC_M,
-                     "pixel_stride": 2, "max_depth_m": MAX_DEPTH_M},
+                     "pixel_stride": 2, "max_depth_m": MAX_DEPTH_M,
+                     "edge_guard_m": 0.08 if args.edge_compare else 0.0},
         "independent_surface_truth": "not_available",
         "human_visual_review": "not_performed",
         "issue_74": "FAIL / NOT ACCEPTED",
@@ -345,9 +362,12 @@ def main() -> int:
         (args.report_dir / "training-density-report.json").write_text(
             json.dumps(report, indent=2, allow_nan=False) + "\n", encoding="utf8")
         (args.report_dir / "SUMMARY.md").write_text("\n".join([
-            "# TUM real sparse RGB-D camera-pose diversity comparison",
+            "# TUM real sparse RGB-D edge guard comparison" if args.edge_compare
+            else "# TUM real sparse RGB-D camera-pose diversity comparison",
             f"- Status: {report['status']}",
-            "- Original 640x480 RGB-D; same 30mm sparse TSDF, matched-count uniform vs pose-diverse frames.",
+            ("- Original 640x480 RGB-D; same 88 pose-diverse frames, 30mm TSDF; "
+             "only far-side 8cm occlusion-edge guard differs." if args.edge_compare
+             else "- Original 640x480 RGB-D; same 30mm sparse TSDF, matched-count uniform vs pose-diverse frames."),
             f"- Training: {report.get('training_selection', {})}",
             f"- Meshes: {list(report.get('results', {}))}",
             f"- Actual 3+2 visual images: {len(report.get('visual', []))}",
