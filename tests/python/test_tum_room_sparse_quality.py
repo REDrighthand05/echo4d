@@ -5,7 +5,7 @@ import pytest
 
 from echo4d.model import DataError
 from tum_room_sparse_quality import (
-    BASE_FRAMES, EXPANDED_FRAMES, DENSE_FRAMES, HOLDOUT, IMPORT_FRAMES, select_training, geometry_variants,
+    BASE_FRAMES, EXPANDED_FRAMES, DENSE_FRAMES, ALL_FRAMES, HOLDOUT, IMPORT_FRAMES, select_training, geometry_variants,
 )
 
 
@@ -54,7 +54,7 @@ def test_rejects_missing_real_frames_and_insufficient_budget():
     with pytest.raises(DataError, match="140-180"):
         select_training(changed)
     with pytest.raises(DataError, match="budget"):
-        select_training(original, baseline=48, expanded=121)
+        select_training(original, baseline=48, expanded=181)
     with pytest.raises(DataError, match="budget"):
         select_training(original, baseline=48, expanded=96, guard_s=0.4)
 
@@ -96,3 +96,24 @@ def test_dense_views_geometry_only_changes_real_training_frame_count():
     assert dense == ("room-120-fine-wide", .025, .12, 0.)
     with pytest.raises(DataError, match="one real geometry"):
         geometry_variants(dense_views=True, cross_frame=True)
+
+
+def test_all_158_eligible_real_view_budget_nests_120_without_holdout_leakage():
+    # 0.3s synthetic spacing mirrors the actual 170-frame TUM import's
+    # >=0.16s held-out guard. No held-out frame enters either fusion.
+    manifest = synthetic_manifest(170)
+    for i, frame in enumerate(manifest["frames"]):
+        frame["t"] = .3 * i
+    _, mid, mid_receipt = select_training(manifest, expanded=DENSE_FRAMES)
+    _, full, full_receipt = select_training(manifest, expanded=ALL_FRAMES)
+    assert full_receipt["eligible_train"] == ALL_FRAMES
+    assert len(full["frames"]) == ALL_FRAMES
+    assert set(mid_receipt["expanded_indices"]).issubset(full_receipt["expanded_indices"])
+    assert set(full_receipt["expanded_indices"]).isdisjoint(full_receipt["holdout_indices"])
+    assert full_receipt["min_train_holdout_time_gap_s"] > .16
+    assert geometry_variants(all_views=True) == (
+        ("room-120-fine-wide", .025, .12, 0.),
+        ("room-158-fine-wide", .025, .12, 0.),
+    )
+    with pytest.raises(DataError, match="one real geometry"):
+        geometry_variants(all_views=True, dense_views=True)
