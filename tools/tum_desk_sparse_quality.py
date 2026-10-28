@@ -141,10 +141,10 @@ def select_training(manifest: dict, *, baseline: int = BASE_FRAMES,
     }
 
 
-def render_five(dataset: Path, imported: Path, target: Path) -> list[dict]:
+def render_five(dataset: Path, imported: Path, target: Path, *, local_truncation: bool = False) -> list[dict]:
     rec = load_recording(imported / "recording.json")
     assoc = json.loads((imported / "association.json").read_text(encoding="utf8"))
-    keys = ("desk-96-wide", "desk-96-bilateral")
+    keys = ("desk-96-wide", "desk-96-local-edge" if local_truncation else "desk-96-bilateral")
     meshes = {}
     for key in keys:
         mesh_path = target / key / "mesh.ply"
@@ -164,9 +164,9 @@ def render_five(dataset: Path, imported: Path, target: Path) -> list[dict]:
             original = raw.convert("RGB").copy()
         views = [rasterize_vertex_rgb(*meshes[key], camera, pose,
                  near=.15, far=MAX_DEPTH_M)[0] for key in keys]
-        name = f"heldout-{i:03d}-desk-bilateral-ab.png"
+        name = f"heldout-{i:03d}-desk-{"local-edge" if local_truncation else "bilateral"}-ab.png"
         sheet(original, *views, visual / name, f"Real TUM fr1_desk camera {i}",
-              ("96 views / 12cm TSDF", "12cm TSDF / bilateral 3cm"))
+              ("96 views / 12cm TSDF", "7.5cm local edge / 12cm interior" if local_truncation else "12cm TSDF / bilateral 3cm"))
         images.append({"kind": "heldout_camera", "index": i, "name": name,
                        "sha256": file_sha256(visual / name),
                        "source_rgb_sha256": source["rgb_sha256"]})
@@ -179,10 +179,10 @@ def render_five(dataset: Path, imported: Path, target: Path) -> list[dict]:
         pose = look_at(eye, target_point)
         renders = [rasterize_vertex_rgb(*meshes[key], camera, pose,
                    near=.15, far=10.) for key in keys]
-        name = f"free-{i}-desk-bilateral-ab.png"
+        name = f"free-{i}-desk-{"local-edge" if local_truncation else "bilateral"}-ab.png"
         sheet(None, *[render[0] for render in renders], visual / name,
               f"Real TUM desk shifted free camera {i}",
-              ("96 views / 12cm TSDF", "12cm TSDF / bilateral 3cm"))
+              ("96 views / 12cm TSDF", "7.5cm local edge / 12cm interior" if local_truncation else "12cm TSDF / bilateral 3cm"))
         images.append({"kind": "free_camera", "name": name,
                        "sha256": file_sha256(visual / name),
                        "anchor_holdout_index": index,
@@ -218,12 +218,16 @@ def run(args: argparse.Namespace, report: dict) -> None:
         json.dumps(extra, allow_nan=False, sort_keys=True) + "\n", encoding="utf8")
     # Same measured RGB-D frames, poses, 12cm truncation and voxel grid.
     # Candidate alone applies a local edge-preserving filter to observed depth.
-    for name, smooth_m in (("desk-96-wide", 0.0),
-                           ("desk-96-bilateral", 0.03)):
+    variants = (("desk-96-wide", 0.0, 0.0),
+                ("desk-96-local-edge", 0.0, 0.075)) if args.local_truncation else (
+                ("desk-96-wide", 0.0, 0.0),
+                ("desk-96-bilateral", 0.03, 0.0))
+    for name, smooth_m, narrow_m in variants:
         report.setdefault("fusion", {})[name] = fuse_sparse(
             training_path, target / name, voxel_m=0.025,
             truncation_m=0.12, max_depth_m=MAX_DEPTH_M, pixel_stride=1,
-            depth_smooth_sigma_m=smooth_m)
+            depth_smooth_sigma_m=smooth_m,
+            local_edge_truncation_m=narrow_m)
         mesh = target / name / "mesh.ply"
         vertices, faces = read_echo_ply(mesh)
         score = evaluate_frames(vertices, faces, rec, list(HOLDOUT),
@@ -234,8 +238,8 @@ def run(args: argparse.Namespace, report: dict) -> None:
             "connectivity": face_components(len(vertices), faces),
             "same_sensor_holdout_diagnostic_only": {k: score[k] for k in (
                 "heldout_frames", "observed_depth_coverage", "rmse_m", "mae_m", "p95_abs_m")}}
-    report["visual"] = render_five(dataset, imported, target)
-    report["status"] = "real_desk_wide_tsdf_edge_halo_ab_meshes_rendered_visual_review_pending"
+    report["visual"] = render_five(dataset, imported, target, local_truncation=args.local_truncation)
+    report["status"] = "real_desk_local_edge_ab_meshes_rendered_visual_review_pending" if args.local_truncation else "real_desk_bilateral_ab_meshes_rendered_visual_review_pending"
 
 
 def main() -> int:
@@ -243,10 +247,11 @@ def main() -> int:
     parser.add_argument("--work", type=Path, required=True)
     parser.add_argument("--report-dir", type=Path, required=True)
     parser.add_argument("--archive", type=Path)
+    parser.add_argument("--local-truncation", action="store_true", help="Compare 12cm wide TSDF against 7.5cm near measured depth jumps")
     args = parser.parse_args()
     args.report_dir.mkdir(parents=True, exist_ok=True)
     report = {
-        "experiment": "TUM-fr1_desk-96view-wide-tsdf-bilateral-3cm-ab-v1",
+        "experiment": "TUM-fr1_desk-96view-local-edge-tsdf-ab-v1" if args.local_truncation else "TUM-fr1_desk-96view-wide-tsdf-bilateral-3cm-ab-v1",
         "started_utc": datetime.now(timezone.utc).isoformat(),
         "checkout_sha": os.environ.get("GITHUB_SHA"),
         "official_source": URL, "pinned_source_sha256": PINNED_SHA256,
@@ -254,6 +259,7 @@ def main() -> int:
         "camera_poses": "TUM motion-capture ground truth (not inferred)",
         "depth": "TUM sensor measurement (not predicted)",
         "geometry": {"voxel_m": 0.025, "pixel_stride": 1,
+                     "local_edge_truncation_m": 0.075 if args.local_truncation else 0.0,
                      "max_depth_m": MAX_DEPTH_M,
                      "variants": {"desk-96-wide": {"truncation_m": 0.12, "depth_smooth_sigma_m": 0.0},
                                   "desk-96-bilateral": {"truncation_m": 0.12,
@@ -277,7 +283,7 @@ def main() -> int:
         (args.report_dir / "desk-sparse-quality-report.json").write_text(
             json.dumps(report, indent=2, allow_nan=False) + "\n", encoding="utf8")
         (args.report_dir / "SUMMARY.md").write_text("\n".join([
-            "# Real fr1_desk 96-view 12cm TSDF: raw depth vs 3cm bilateral denoising",
+            "# Real fr1_desk 96-view 12cm wide TSDF vs 7.5cm local-edge TSDF" if args.local_truncation else "# Real fr1_desk 96-view 12cm TSDF: raw depth vs 3cm bilateral denoising",
             f"- Status: {report['status']}",
             "- Original RGB 640x480; same 96 known-pose measured-depth views per variant.",
             f"- Mesh results: {list(report.get('results', {}))}",
