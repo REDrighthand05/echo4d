@@ -1,0 +1,143 @@
+{
+  "provider": "Open3D project_images_to_albedo",
+  "version": "0.19.0",
+  "mesh_sha256": "65b8b25e5f8d46f494acbd1e4ab905fd7b5415e885705c104c00cee75704c741",
+  "manifest_sha256": "f5e7c2144ded8fb6421672fe6cca64bae7f6384dd1a7c535451e959283d74607",
+  "geometry_modified": false,
+  "texture_size": 2048,
+  "image_count": 24,
+  "source": "existing measured-depth scan + calibrated real RGB",
+  "unknown_regions": "No geometry added; unpainted surface may appear black",
+  "vertices": 231610,
+  "faces": 422714,
+  "inputs": [
+    {
+      "color": "rgb/1305031910.765238.png",
+      "sha256": "94afe78f6c0efac7e2f268392a8014c7f5da3b763524eb098cd44265dded94c2",
+      "source_index": 0
+    },
+    {
+      "color": "rgb/1305031913.697243.png",
+      "sha256": "0306ef0c2b4b75aeea30990894fb1d0c1d6862305081dab3c66ac35b26559f49",
+      "source_index": 11
+    },
+    {
+      "color": "rgb/1305031915.033152.png",
+      "sha256": "dbd85a97fc050c089a8b89c728cc7fe3f9642f202a6b7c46e6a36d4fa37abf30",
+      "source_index": 16
+    },
+    {
+      "color": "rgb/1305031916.101115.png",
+      "sha256": "09605869eee41912c1bba4da299365baa8ec47485fbc33555948d81c41679ee5",
+      "source_index": 20
+    },
+    {
+      "color": "rgb/1305031917.965346.png",
+      "sha256": "b5c7dd93104d84bf4b01f1e1ffff58c63ed67cf66e66a6cf127137b38beac848",
+      "source_index": 27
+    },
+    {
+      "color": "rgb/1305031919.033082.png",
+      "sha256": "eb683882dc24b28fa75e49591ca4e47e6934eaa8a4f4f5c672e23af3a9e32cce",
+      "source_index": 31
+    },
+    {
+      "color": "rgb/1305031920.365130.png",
+      "sha256": "ff6dd5784f989f0a39a76b7a4bff8746395c3f8f5b1fb1066be393f2295a8985",
+      "source_index": 36
+    },
+    {
+      "color": "rgb/1305031921.733068.png",
+      "sha256": "72b2ea9357b508638ba880f4b32d56087d5a35a46153e4545fe2c48953d9d7d7",
+      "source_index": 41
+    },
+    {
+      "color": "rgb/1305031924.401095.png",
+      "sha256": "bf0dee55834ca8e364e4c795f63a039a5e19ce144a31424adc33ebbe087d893d",
+      "source_index": 51
+    },
+    {
+      "color": "rgb/1305031927.070528.png",
+      "sha256": "af575521e49d195f6076bcc256d6a92c70f5af9461ce5d6be35dc18430b619e4",
+      "source_index": 61
+    },
+    {
+      "color": "rgb/1305031929.201163.png",
+      "sha256": "9ad2c65ccc9b6ba20ea3836cf05384ca035af63da529f7cb3c29d6581b6c0cf8",
+      "source_index": 69
+    },
+    {
+      "color": "rgb/1305031931.868988.png",
+      "sha256": "b285fd42314aa89d5fa01c07313c24d4e9ec376c81d383d51b950a4e74a19281",
+      "source_index": 79
+    },
+    {
+      "color": "rgb/1305031934.801627.png",
+      "sha256": "93aab0be2a70380c94de323ad45f3484bac7e8fe2a0b61483545fab4106c25c6",
+      "source_index": 90
+    },
+    {
+      "color": "rgb/1305031936.668885.png",
+      "sha256": "ad95d81b2a552d6b313ad0b614b750ab7098053412351165bf5ac040c50ec025",
+      "source_index": 97
+    },
+    {
+      "color": "rgb/1305031937.736899.png",
+      "sha256": "69a09752fc9fb6de3ec7ad5e606507ba57e0b723f39f5fc27cc05b3f8e30c3ea",
+      "source_index": 101
+    },
+    {
+      "color": "rgb/1305031940.403665.png",
+      "sha256": "93d2f1ffcca2a746385259efde071d3db61fd563a86ea8088f9d5954030bd7a8",
+      "source_index": 111
+    },
+    {
+      "color": "rgb/1305031941.736866.png",
+      "sha256": "336ccd98033d562533ba7111a6a165138ba621ddc300f77df0a4eb88b01f685c",
+      "source_index": 116
+    },
+    {
+      "color": "rgb/1305031944.406233.png",
+      "sha256": "6798de14ec06016c4b0a12813c496d086508044fe00779bdc224b386a518fd88",
+      "source_index": 126
+    },
+    {
+      "color": "rgb/1305031946.806647.png",
+      "sha256": "6f430259535d51fa0c8cdfbe3b3ea8a12075f6d5f5df3ba9230adbd5b6c3e15a",
+      "source_index": 135
+    },
+    {
+      "color": "rgb/1305031948.136951.png",
+      "sha256": "9159de71e1f5eda8ac4de1eca1791d8fc44556a1824e4eedaf864b3492ab1632",
+      "source_index": 140
+    },
+    {
+      "color": "rgb/1305031949.736949.png",
+      "sha256": "a16367cd5807f5c830b519a24e8950878b9d83aa259e57e8f51d776eafa1d841",
+      "source_index": 146
+    },
+    {
+      "color": "rgb/1305031951.336937.png",
+      "sha256": "6b95ff641554a8c69ffde014c2605b92c10752b1994a89913f17018e9922d112",
+      "source_index": 152
+    },
+    {
+      "color": "rgb/1305031953.736982.png",
+      "sha256": "c4446080ddc7fece25fa936eb67fbd593a61c6ea300e3f1ae7de8f60dd8cb224",
+      "source_index": 161
+    },
+    {
+      "color": "rgb/1305031955.872917.png",
+      "sha256": "03fa4a72bcc0ad6efc44b2e7d88732bcd17ec63e398520e6462c87170edeabdc",
+      "source_index": 169
+    }
+  ],
+  "seconds": 58.28459518,
+  "atlas_result": [
+    0.16659563779830933,
+    4446,
+    8
+  ],
+  "glb_sha256": "70ad7edbafeead40ab7cc37f189d1774b94108d9a677bcb13673d6a99f4dfe78",
+  "albedo_sha256": "0dc3aedb30d57c8d7d3aa6a4c6586331f38ed7b5e87a12edfb8f4f93d60909c6"
+}
