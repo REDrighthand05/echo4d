@@ -21,12 +21,12 @@ import numpy as np
 from PIL import Image
 
 from echo4d.holdout import read_echo_ply
-from echo4d.model import Camera, DataError, file_sha256, safe_path
+from echo4d.model import Camera, DataError, file_sha256, safe_path, load_recording
 from sparse_open3d_fusion import fuse_sparse
 from tum_highres_tsdf import face_components, invoke
 from tum_room_sparse_quality import ROOT, get_archive, extract_rgbd, select_training
 from tum_room_rgb_stereo_ablation import (
-    compare_five, preserve_replay_inputs, correct_inferred_mesh_provenance)
+    preserve_replay_inputs, correct_inferred_mesh_provenance)
 
 ANCHORS = 32
 NEIGHBORS = 4
@@ -212,6 +212,50 @@ def build_manifest(imported: Path, target: Path, report: dict) -> Path:
     return path
 
 
+
+def compare_multiview_five(imported: Path, control: Path, candidate: Path,
+                           high: dict, target: Path, control_label: str) -> list[dict]:
+    """Same frozen 3 source camera views + 2 free views; truthful provider names."""
+    from tum_graph_visual import rasterize_vertex_rgb, read_vertex_rgb
+    from tum_sparse_training_density import sheet
+    original = load_recording(imported/"recording.json")
+    assoc = json.loads((imported/"association.json").read_text())
+    meshes = []
+    for mesh in (control, candidate):
+        v, f = read_echo_ply(mesh)
+        meshes.append((v, f, read_vertex_rgb(mesh, len(v))))
+    camera = original.camera.scaled(2)
+    target.mkdir(parents=True, exist_ok=False)
+    results = []
+    for item in high["visual"]:
+        if item["kind"] == "heldout_camera":
+            idx = item["index"]
+            pose = np.asarray(original.entries[idx]["cameraToWorld"]).reshape(4, 4, order="F")
+            source = safe_path(imported.parent/"source"/ROOT, assoc["frames"][idx]["rgb_path"])
+            if file_sha256(source) != assoc["frames"][idx]["rgb_sha256"]:
+                raise DataError("Original room RGB checksum changed")
+            with Image.open(source) as im:
+                raw = im.convert("RGB").copy()
+        else:
+            pose = np.asarray(item["camera_to_world"]).reshape(4, 4, order="F")
+            raw = None
+        renders = [rasterize_vertex_rgb(*mesh, camera, pose, near=.15, far=10.)
+                   for mesh in meshes]
+        filename = ("heldout-"+str(idx) if raw is not None else
+                    "free-"+str(len(results)))+".png"
+        sheet(raw, renders[0][0], renders[1][0], target/filename,
+              "TUM real room: "+control_label+" vs known-pose RGB multi-view plane sweep",
+              (control_label, "multi-view RGB inferred Z / no prior Mesh"))
+        results.append({
+            "kind": item["kind"], "filename": filename,
+            "sha256": file_sha256(target/filename),
+            "control_covered_pixels": renders[0][1],
+            "candidate_covered_pixels": renders[1][1],
+            "camera_to_world": pose.flatten(order="F").tolist()})
+    return results
+
+
+
 def run(args, report):
     work = args.work.resolve()
     work.mkdir(parents=True, exist_ok=False)
@@ -263,8 +307,9 @@ def run(args, report):
     report["new_mesh"] = {"sha256": file_sha256(ply), "vertices": len(v),
                           "faces": len(f), "connectivity": face_components(len(v), f)}
     report["baseline_mesh"] = {"sha256": file_sha256(high_mesh), "role": "posthoc comparison"}
-    report["visual_highinfo_vs_multiview"] = compare_five(
-        imported, high_mesh, ply, high, args.report_dir/"visual-highinfo-vs-multiview")
+    report["visual_highinfo_vs_multiview"] = compare_multiview_five(
+        imported, high_mesh, ply, high, args.report_dir/"visual-highinfo-vs-multiview",
+        "measured RGB-D Mesh / no prior Mesh")
     if args.stereo is not None:
         stereo_mesh = args.stereo/"rgb-stereo-mesh"/"mesh.ply"
         stereo_report = args.stereo/"report.json"
@@ -285,8 +330,9 @@ def run(args, report):
 
         report["stereo_mesh"] = {"sha256": file_sha256(stereo_mesh),
                                  "role": "posthoc same-room previous RGB-only algorithm"}
-        report["visual_stereo_vs_multiview"] = compare_five(
-            imported, stereo_mesh, ply, high, args.report_dir/"visual-stereo-vs-multiview")
+        report["visual_stereo_vs_multiview"] = compare_multiview_five(
+            imported, stereo_mesh, ply, high, args.report_dir/"visual-stereo-vs-multiview",
+            "one-pair RGB stereo inferred Z / no prior Mesh")
     import trimesh
     from tum_graph_visual import read_vertex_rgb
     for name, mesh in (("measured-room", high_mesh), ("multiview-rgb", ply)):
