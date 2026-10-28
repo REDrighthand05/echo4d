@@ -196,9 +196,56 @@ def reduce_native_depth_for_fusion(depth: np.ndarray) -> np.ndarray:
     return np.where((count > 0) & agree, mid, 0).astype(np.float32)
 
 
+
+def fuse_stereo_candidate_depths(depths: list[np.ndarray]) -> tuple[np.ndarray, dict]:
+    """Fuse up to three independent RGB stereo baselines in one *original* camera.
+
+    Zero is unobserved. Keep isolated supported pixels, take agreeing pairs,
+    and discard conflicting overlaps; do not fill unseen surfaces or use Z GT.
+    """
+    if not 1 <= len(depths) <= 3:
+        raise DataError('Stereo consensus requires one to three depth candidates')
+    shape = depths[0].shape
+    if len(shape) != 2 or any(
+        not isinstance(d, np.ndarray) or d.shape != shape
+        or not np.issubdtype(d.dtype, np.number)
+        or not np.isfinite(d).all() or (d < 0).any() for d in depths
+    ):
+        raise DataError('Stereo consensus requires same-size finite nonnegative depth')
+    stack = np.stack(depths).astype(np.float32)
+    valid = stack > 0
+    count = valid.sum(axis=0)
+    ordered = np.sort(np.where(valid, stack, np.inf), axis=0)
+    a = ordered[0]
+    b = ordered[1] if len(depths) > 1 else np.full(shape, np.inf, np.float32)
+    c = ordered[2] if len(depths) > 2 else np.full(shape, np.inf, np.float32)
+    agree_ab = (b - a) <= np.maximum(.08, .05 * a)
+    agree_bc = (c - b) <= np.maximum(.08, .05 * b)
+    merged = np.zeros(shape, np.float32)
+    merged[count == 1] = a[count == 1]
+    two = (count == 2) & agree_ab
+    merged[two] = (a[two] + b[two]) * .5
+    three = count == 3
+    both = three & agree_ab & agree_bc
+    merged[both] = b[both]
+    lower = three & agree_ab & ~agree_bc
+    merged[lower] = (a[lower] + b[lower]) * .5
+    upper = three & agree_bc & ~agree_ab
+    merged[upper] = (b[upper] + c[upper]) * .5
+    # With three mutually inconsistent depths, the pixel is unknown.
+    rejected = (count >= 2) & (merged == 0)
+    return merged, {
+        'candidate_count': len(depths),
+        'single_candidate_pixels': int(np.count_nonzero(count == 1)),
+        'agreed_multi_candidate_pixels': int(np.count_nonzero((count >= 2) & (merged > 0))),
+        'conflict_rejected_pixels': int(np.count_nonzero(rejected)),
+        'fused_valid_pixels': int(np.count_nonzero(merged)),
+    }
+
+
 def build_stereo_recording(frames: list[dict], target: Path, report: dict,
                            *, stereo_width: int = 640, fusion_width: int = 320,
-                           max_anchors: int = 48) -> Path:
+                           max_anchors: int = 48, merge_backups: bool = False) -> Path:
     camera, _stride, num_disparities = stereo_resolution(stereo_width)
     fusion_camera, _fusion_stride, _ = stereo_resolution(fusion_width)
     if fusion_width > stereo_width:
@@ -206,6 +253,7 @@ def build_stereo_recording(frames: list[dict], target: Path, report: dict,
     report['tsdf_fusion_resolution'] = [fusion_camera.width, fusion_camera.height]
     report['stereo_algorithm_resolution'] = [camera.width, camera.height]
     report['stereo_num_disparities'] = num_disparities
+    report['merge_backups'] = merge_backups
     pairs = select_pairs(frames, camera, max_pairs=max_anchors)
     report['anchor_budget'] = max_anchors
     report['eligible_anchor_count'] = len({left for left, _ in pairs})
@@ -218,9 +266,10 @@ def build_stereo_recording(frames: list[dict], target: Path, report: dict,
     (target / 'depth').mkdir()
     entries, pair_evidence = [], []
     accepted_left: set[int] = set()
+    pending_depths: dict[int, list[np.ndarray]] = {}
     for left_idx, right_idx in pairs:
-        if left_idx in accepted_left:
-            continue  # The first usable candidate wins; do not double-count a view.
+        if left_idx in accepted_left and not merge_backups:
+            continue  # Legacy control: first usable pair wins.
         left, right = frames[left_idx], frames[right_idx]
         a = load_stereo_rgb(left['rgb'], stereo_width)
         b = load_stereo_rgb(right['rgb'], stereo_width)
@@ -253,6 +302,10 @@ def build_stereo_recording(frames: list[dict], target: Path, report: dict,
             projected = reduce_native_depth_for_fusion(projected)
         if np.count_nonzero(projected) < 100:
             continue
+        if merge_backups:
+            pending_depths.setdefault(left_idx, []).append(projected)
+            item['candidate_for_consensus'] = True
+            continue
         n=len(entries)
         Image.fromarray(load_stereo_rgb(left['rgb'], fusion_width)).save(
             target / 'color' / f'{n:05d}.png')
@@ -263,6 +316,22 @@ def build_stereo_recording(frames: list[dict], target: Path, report: dict,
         item['saved_depth_sha256']=file_sha256(target / 'depth' / f'{n:05d}.npy')
         item['reprojected_valid_pixels']=int(np.count_nonzero(projected))
         accepted_left.add(left_idx)
+    if merge_backups:
+        report['anchor_consensus'] = []
+        for left_idx, candidates in sorted(pending_depths.items()):
+            fused, stats = fuse_stereo_candidate_depths(candidates)
+            report['anchor_consensus'].append({'left_index': left_idx, **stats})
+            if np.count_nonzero(fused) < 100:
+                continue
+            left = frames[left_idx]
+            n = len(entries)
+            Image.fromarray(load_stereo_rgb(left['rgb'], fusion_width)).save(
+                target / 'color' / f'{n:05d}.png')
+            np.save(target / 'depth' / f'{n:05d}.npy', fused, allow_pickle=False)
+            entries.append({'t': float(left['t_s'] - frames[0]['t_s']),
+                            'cameraToWorld': left['pose'].flatten(order='F').tolist(),
+                            'color': f'color/{n:05d}.png', 'depth': f'depth/{n:05d}.npy'})
+            accepted_left.add(left_idx)
     report['pairs']=pair_evidence
     if len(entries)<6:
         raise DataError(f'Only {len(entries)} RGB-derived depth frames have >=100 valid pixels')
@@ -332,7 +401,8 @@ def execute(args: argparse.Namespace, report: dict) -> None:
     manifest=build_stereo_recording(frames,work/'stereo',report,
                                     stereo_width=args.stereo_width,
                                     fusion_width=args.fusion_width,
-                                    max_anchors=args.max_anchors)
+                                    max_anchors=args.max_anchors,
+                                    merge_backups=args.merge_backups)
     report['archived_inputs'] = archive_stereo_inputs(
         manifest, frames, work/'dataset'/ROOT, args.report_dir/'inputs')
     target=args.report_dir/'reconstruction'
@@ -362,12 +432,15 @@ def main(argv=None):
                    help='TSDF depth width: conservative 320 (default), or native 640')
     p.add_argument('--max-anchors',type=int,default=48,
                    help='Max fixed training anchors, never includes 12 frozen holdouts')
+    p.add_argument('--merge-backups',action='store_true',
+                   help='Use all valid train-only stereo backup baselines per anchor; reject conflicting overlap')
     args=p.parse_args(argv)
     args.report_dir.mkdir(parents=True,exist_ok=True)
     report={'experiment':'tum-xyz-known-pose-RGB-stereo-no-measured-depth-v1',
             'status':'running','started_utc':datetime.now(timezone.utc).isoformat(),
             'checkout_sha':os.environ.get('GITHUB_SHA'), 'source_url':URL,
             'input_removed':'measured depth maps from reconstruction',
+            'stereo_candidate_fusion':'train-only multi-baseline agreement' if args.merge_backups else 'first-valid control',
             'inputs_retained':['640x480 source RGB','TUM known metric poses','camera calibration',
                                'depth.txt timestamps for matching the frozen prior frame selection'],
             'quality':'not independent surface accuracy; no #74 acceptance'}
