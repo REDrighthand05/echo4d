@@ -67,7 +67,7 @@ jobs:
           HF_HUB_DOWNLOAD_TIMEOUT: '120'
           ECHO_PREVIOUS_ZNCC: ${{ runner.temp }}/room-old-zncc
         run: |
-          python tools/tum_room_depthanything_small.py \
+          python tools/tum_room_da2_consensus.py \
             --work "$RUNNER_TEMP/tum-room-da2-consensus" \
             --baseline "$RUNNER_TEMP/room-highinfo" \
             --stereo "$RUNNER_TEMP/room-stereo" \
