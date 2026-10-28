@@ -1,6 +1,6 @@
 """Real TUM fr1_room: full-room loop trajectory, known poses + measured RGB-D.
 
-Compare nested 96 vs 120 real training views with fixed 4m measured depth
+Compare 96 real training views with and without bounded frame-to-TSDF ICP
 on the SAME room scene with 12 frozen holdouts. Neither route uses holdout depth for fusion or geometry selection.
 No inferred depth, mesh completion, or claim of independent surface truth.
 """
@@ -22,6 +22,7 @@ from PIL import Image
 from echo4d.holdout import evaluate_frames, read_echo_ply
 from echo4d.model import DataError, file_sha256, load_recording, safe_path
 from sparse_open3d_fusion import fuse_sparse
+from room_pose_icp import refine_training_poses
 from pathlib import PurePosixPath
 from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
@@ -195,7 +196,7 @@ def select_training(manifest: dict, *, baseline: int = BASE_FRAMES,
 def render_five(dataset: Path, imported: Path, target: Path, holdout: list[int]) -> list[dict]:
     rec = load_recording(imported / "recording.json")
     assoc = json.loads((imported / "association.json").read_text(encoding="utf8"))
-    keys = ("room-96-4m", "room-120-4m")
+    keys = ("room-96-4m", "room-96-icp")
     meshes = {}
     for key in keys:
         mesh_path = target / key / "mesh.ply"
@@ -215,9 +216,9 @@ def render_five(dataset: Path, imported: Path, target: Path, holdout: list[int])
             original = raw.convert("RGB").copy()
         views = [rasterize_vertex_rgb(*meshes[key], camera, pose,
                  near=.15, far=MAX_DEPTH_M)[0] for key in keys]
-        name = f"heldout-{i:03d}-room-96-vs-120.png"
+        name = f"heldout-{i:03d}-room-96-vs-icp.png"
         sheet(original, *views, visual / name, f"Real TUM fr1_room camera {i}",
-              ("96 real views / depth <=4m", "120 real views / depth <=4m"))
+              ("96 known poses / measured depth", "96 training-only ICP poses / measured depth"))
         images.append({"kind": "heldout_camera", "index": i, "name": name,
                        "sha256": file_sha256(visual / name),
                        "source_rgb_sha256": source["rgb_sha256"]})
@@ -234,9 +235,9 @@ def render_five(dataset: Path, imported: Path, target: Path, holdout: list[int])
         renders = [rasterize_vertex_rgb(*meshes[key], camera, pose,
                    near=.15, far=10.) for key in keys]
         views = [render[0] for render in renders]
-        name = f"free-{i}-room-96-vs-120.png"
+        name = f"free-{i}-room-96-vs-icp.png"
         sheet(None, *views, visual / name, f"Real TUM room shifted free camera {i}",
-              ("96 real views / depth <=4m", "120 real views / depth <=4m"))
+              ("96 known poses / measured depth", "96 bounded ICP poses / measured depth"))
         images.append({"kind": "free_camera", "name": name,
                        "sha256": file_sha256(visual / name),
                        "anchor_holdout_index": index,
@@ -265,18 +266,22 @@ def run(args: argparse.Namespace, report: dict) -> None:
         raise DataError("Expected full 640x480 measured RGB-D")
     manifest = json.loads((imported / "recording.json").read_text(encoding="utf8"))
     _, extra, selection = select_training(manifest)
-    _, dense, dense_selection = select_training(manifest, expanded=DENSE_FRAMES)
-    if not set(selection["expanded_indices"]).issubset(dense_selection["expanded_indices"]):
-        raise DataError("120-view selection must preserve all 96 training views")
-    selection["dense_indices"] = dense_selection["expanded_indices"]
-    selection["dense_contains_96"] = True
     report["training_selection"] = selection
-    for name, data in (("room-96-4m", extra), ("room-120-4m", dense)):
-        path = imported / ("train-" + name + ".json")
-        path.write_text(json.dumps(data, allow_nan=False, sort_keys=True) + "\n", encoding="utf8")
-        report.setdefault("fusion", {})[name] = fuse_sparse(
-            path, target / name, voxel_m=VOXEL_M, truncation_m=TRUNC_M,
-            max_depth_m=MAX_DEPTH_M, pixel_stride=2)
+    baseline_manifest = imported / "train-room-96-4m.json"
+    baseline_manifest.write_text(
+        json.dumps(extra, allow_nan=False, sort_keys=True) + "\n", encoding="utf8")
+    baseline_target = target / "room-96-4m"
+    report.setdefault("fusion", {})["room-96-4m"] = fuse_sparse(
+        baseline_manifest, baseline_target, voxel_m=VOXEL_M, truncation_m=TRUNC_M,
+        max_depth_m=MAX_DEPTH_M, pixel_stride=2)
+    refined_manifest = imported / "train-room-96-icp.json"
+    report["pose_refinement"] = refine_training_poses(
+        baseline_manifest, baseline_target / "mesh.ply", refined_manifest)
+    report["fusion"]["room-96-icp"] = fuse_sparse(
+        refined_manifest, target / "room-96-icp",
+        voxel_m=VOXEL_M, truncation_m=TRUNC_M,
+        max_depth_m=MAX_DEPTH_M, pixel_stride=2)
+    for name in ("room-96-4m", "room-96-icp"):
         mesh = target / name / "mesh.ply"
         vertices, faces = read_echo_ply(mesh)
         score = evaluate_frames(vertices, faces, rec, selection["holdout_indices"],
@@ -288,7 +293,7 @@ def run(args: argparse.Namespace, report: dict) -> None:
             "same_sensor_holdout_diagnostic_only": {k: score[k] for k in (
                 "heldout_frames", "observed_depth_coverage", "rmse_m", "mae_m", "p95_abs_m")}}
     report["visual"] = render_five(dataset, imported, target, selection["holdout_indices"])
-    report["status"] = "two_real_room_96_vs_120_meshes_rendered_visual_review_pending"
+    report["status"] = "real_room_known_pose_vs_bounded_icp_meshes_rendered_visual_review_pending"
 
 
 def main() -> int:
@@ -299,7 +304,7 @@ def main() -> int:
     args = parser.parse_args()
     args.report_dir.mkdir(parents=True, exist_ok=True)
     report = {
-        "experiment": "TUM-fr1_room-nested-96-vs-120-measured-depth-4m-v1",
+        "experiment": "TUM-fr1_room-known-pose-vs-bounded-training-ICP-v1",
         "started_utc": datetime.now(timezone.utc).isoformat(),
         "checkout_sha": os.environ.get("GITHUB_SHA"),
         "official_source": URL, "archive_checksum_status": "observed at run; not vendor-signed",
@@ -308,7 +313,7 @@ def main() -> int:
         "depth": "TUM sensor measurement (not predicted)",
         "geometry": {"voxel_m": VOXEL_M, "truncation_m": TRUNC_M,
                      "pixel_stride": 2, "depth_limit_m": MAX_DEPTH_M,
-                     "training_view_variants": [EXPANDED_FRAMES, DENSE_FRAMES],
+                     "training_view_variants": [EXPANDED_FRAMES, EXPANDED_FRAMES],
                      "frozen_holdout_max_depth_m": MAX_DEPTH_M},
         "independent_surface_truth": "not_available",
         "human_visual_review": "not_performed",
@@ -329,12 +334,12 @@ def main() -> int:
         (args.report_dir / "room-sparse-quality-report.json").write_text(
             json.dumps(report, indent=2, allow_nan=False) + "\n", encoding="utf8")
         (args.report_dir / "SUMMARY.md").write_text("\n".join([
-            "# Real fr1_room 96 vs 120 views at fixed 4m measured depth",
+            "# Real fr1_room 96 known-pose vs bounded training-only ICP at 4m",
             f"- Status: {report['status']}",
-            "- Original RGB 640x480; nested 96 vs 120 known-pose measured-depth views, both 4m.",
+            "- Original RGB 640x480; 96 known-pose measured-depth views per variant, both 4m.",
             f"- Mesh results: {list(report.get('results', {}))}",
             f"- 3 real camera + 2 free camera images: {len(report.get('visual', []))}",
-            "- Sensor holdout is not independent surface truth; #74 FAIL.",
+            "- ICP reference is training-only and not independent surface truth; #74 FAIL.",
             f"- Failure: {report.get('failure', {}).get('message', 'none')}"]) + "\n",
             encoding="utf8")
     return code
