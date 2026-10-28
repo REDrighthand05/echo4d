@@ -83,7 +83,9 @@
     "description": "Both actual Mesh PLYs rasterized at same old baseline 3 heldout + 2 free camera matrices, original observed PLY vertex colors; no AI completion",
     "comparison_png_sha256": "53c7282eea7d12eda16fc578efe0f37912ba11d2b8b5d97c16e01e4625df284a",
     "new_rotatable_glb_sha256": "27e06797c7629a7f49d8af8dcb6f24351ceb9474e94935b499f8a5fd700ae3ab",
-    "limitation": "Local PNG/GLB were generated and SHA-pinned but not committed to GitHub; official 640x480 photos are not redistributed"
+    "limitation": "Local PNG/GLB were generated and SHA-pinned but not committed to GitHub; official 640x480 photos are not redistributed",
+    "three_row_montage_sha256": "d64b6478cf738fc042dcf4a6ae4bce55765fd6aa62072ec023065c8e18400acd",
+    "three_row_description": "Same actual TUM fr1_xyz measured RGB-D dense-320 Mesh + old RGB MVS + new RGB MVS, rendered at identical old five camera matrices"
   },
   "high_information_same_scene": {
     "method": "measured RGB-D + measured poses, no prior Mesh",
@@ -94,7 +96,16 @@
       "heldout-55": 70671,
       "free-a": 52323,
       "free-b": 33740
-    }
+    },
+    "dense320_frozen_same_poses_covered_pixels": {
+      "heldout-4": 75609,
+      "heldout-24": 75359,
+      "heldout-55": 65325,
+      "free-a": 44355,
+      "free-b": 28432
+    },
+    "dense320_mesh_artifact": "https://github.com/REDrighthand05/echo4d/actions/runs/40599164123/artifacts/12777154504",
+    "note": "The earlier baseline_covered_pixels field is from the cited experiment report; dense320_frozen_same_poses_covered_pixels is rerendered here from that artifact's dense-320/mesh.ply with exact MVS old five poses; do not mix camera or mesh variants."
   },
   "assessment": "FAIL: edge-connected components 774 to 702, largest fraction 38.55% to 42.27%; heldout coverage only +0.04% to +0.47%, two frozen free views lose 4.84% and 7.59%. Visually still discontinuous floating fragments; table/floor/walls not reliably recognizable. No life replay or #74 PASS.",
   "next": "Do not further tune cosmetic filtering. Replace local Z smoothing with cross-view surface consistency or learned depth source under measured pose, then compare to RGB-D baseline at frozen five views. First obtain clear original 640x480 RGB beside model views."
