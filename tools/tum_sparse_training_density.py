@@ -83,6 +83,81 @@ def select_extra_training(base: dict, expanded: dict, base_assoc: dict,
     }
 
 
+
+def select_pose_diverse_training(base: dict, dense: dict, base_assoc: dict,
+                                 dense_assoc: dict, *, budget: int,
+                                 guard_s: float = HOLDOUT_GUARD_SECONDS) -> tuple[dict, dict]:
+    """Use the SAME frame count as uniform interleaving, but choose novel camera poses.
+
+    Preserve all 48 frozen training frames. Extra source frames are chosen from
+    stride-3 (rather than stride-6) TUM RGB-D by farthest-point camera-center
+    and optical-axis distance. This is a measured-pose selection heuristic,
+    NOT new surface observations, depth completion or a visual quality claim.
+    """
+    original, pool = base.get("frames"), dense.get("frames")
+    a, b = base_assoc.get("frames"), dense_assoc.get("frames")
+    if not all(isinstance(v, list) for v in (original, pool, a, b)):
+        raise DataError("Missing TUM source frames or associations")
+    if tuple(map(len, (original, pool, a, b))) != (60, 240, 60, 240):
+        raise DataError("Expected matched 60/240 source selections")
+    if type(budget) is not int or not 48 < budget <= 120:
+        raise DataError("Invalid pose-diverse training frame budget")
+    if not 0 < guard_s <= .30:
+        raise DataError("Invalid temporal holdout guard")
+    for i, frame in enumerate(original):
+        other = pool[4 * i]
+        if abs(float(frame["t"]) - float(other["t"])) > 1e-8:
+            raise DataError("Stride-3 timestamps differ from frozen stride-12")
+        if not np.allclose(frame["cameraToWorld"], other["cameraToWorld"],
+                           rtol=0, atol=1e-9):
+            raise DataError("Stride-3 poses differ from frozen stride-12")
+        for key in ("rgb_path", "depth_path", "rgb_sha256", "depth_sha256"):
+            if a[i].get(key) is None or a[i][key] != b[4 * i].get(key):
+                raise DataError("Stride-3 source association mismatch: " + key)
+    held = [float(original[i]["t"]) for i in HOLDOUT]
+    allowed = [i for i, frame in enumerate(pool)
+               if min(abs(float(frame["t"]) - t) for t in held) > guard_s]
+    baseline = [4 * i for i in range(TOTAL) if i not in HOLDOUT]
+    if not set(baseline).issubset(allowed):
+        raise DataError("Temporal guard removed frozen baseline training")
+    extras = [i for i in allowed if i not in set(baseline)]
+    if len(extras) < budget - len(baseline):
+        raise DataError("Not enough real extra camera poses outside holdout guard")
+
+    matrices = np.stack([np.asarray(frame["cameraToWorld"], dtype=np.float64)
+                         .reshape(4, 4, order="F") for frame in pool])
+    if not np.isfinite(matrices).all():
+        raise DataError("Nonfinite real camera poses")
+    centers = matrices[:, :3, 3]
+    directions = matrices[:, :3, 2]
+    directions /= np.maximum(np.linalg.norm(directions, axis=1, keepdims=True), 1e-12)
+    # 0.35m per radian: optical-axis novelty and translation both matter.
+    # This only prioritizes actual camera viewpoints; it never creates surfaces.
+    distances = (np.linalg.norm(centers[:, None] - centers[None, :], axis=2)
+                 + .35 * np.arccos(np.clip(directions @ directions.T, -1., 1.)))
+    chosen = list(baseline)
+    nearest = distances[:, chosen].min(axis=1)
+    for _ in range(budget - len(baseline)):
+        winner = max(extras, key=lambda i: (float(nearest[i]), -i))
+        chosen.append(winner)
+        extras.remove(winner)
+        nearest = np.minimum(nearest, distances[:, winner])
+    chosen.sort()
+    result = dict(dense)
+    result["frames"] = [pool[i] for i in chosen]
+    result["notes"] = ("Real TUM known-pose RGB-D; 48 frozen baseline + "
+                       "pose-diverse extra frames; 12 holdouts +/-0.24s excluded")
+    return result, {
+        "method": "farthest camera center + optical axis; 0.35m/radian",
+        "original_frames": len(pool), "baseline_frames_preserved": len(baseline),
+        "training_frames": len(chosen), "added_frames": len(chosen) - len(baseline),
+        "source_stride": 3, "selected_source_indices": chosen,
+        "holdout_guard_seconds": guard_s,
+        "nearest_training_to_holdout_seconds": min(
+            abs(float(pool[i]["t"]) - t) for i in chosen for t in held),
+        "same_frozen_baseline_associations": True,
+    }
+
 def sheet(original: Image.Image | None, old: np.ndarray, new: np.ndarray,
           target: Path, title: str) -> None:
     if any(x.shape != (240, 320, 3) or x.dtype != np.uint8 for x in (old, new)):
@@ -98,8 +173,8 @@ def sheet(original: Image.Image | None, old: np.ndarray, new: np.ndarray,
             (640, 480), resample=Image.Resampling.NEAREST), (x, 34))
     for x, label in zip((0, 640, 1280), (
             title + (" | original 640x480" if original else " | free camera"),
-            "Sparse TSDF 640 | original 48 training frames",
-            "Sparse TSDF 640 | expanded training views")):
+            "Sparse TSDF 640 | uniform extra views",
+            "Sparse TSDF 640 | pose-diverse extra views")):
         draw.text((x + 7, 9), label, fill=(238, 238, 238))
     image.save(target)
 
@@ -108,7 +183,7 @@ def render_views(dataset: Path, original_import: Path, target: Path) -> list[dic
     rec = load_recording(original_import / "recording.json")
     assoc = json.loads((original_import / "association.json").read_text(encoding="utf8"))
     meshes = {}
-    for name in ("sparse-48", "sparse-expanded"):
+    for name in ("sparse-expanded", "sparse-pose-diverse"):
         path = target / name / "mesh.ply"
         v, f = read_echo_ply(path)
         meshes[name] = (v, f, read_vertex_rgb(path, len(v)))
@@ -126,20 +201,20 @@ def render_views(dataset: Path, original_import: Path, target: Path) -> list[dic
             original = image.convert("RGB").copy()
         renders = [rasterize_vertex_rgb(*meshes[key], camera, pose,
                    near=.15, far=MAX_DEPTH_M)[0]
-                   for key in ("sparse-48", "sparse-expanded")]
-        name = f"heldout-{i:02d}-48-vs-expanded.png"
+                   for key in ("sparse-expanded", "sparse-pose-diverse")]
+        name = f"heldout-{i:02d}-uniform-vs-pose.png"
         sheet(original, *renders, visual / name, f"TUM withheld camera {i}")
         result.append({"kind": "original_camera", "index": i, "image": name,
                        "sha256": file_sha256(visual / name)})
-    verts = meshes["sparse-expanded"][0]
+    verts = meshes["sparse-pose-diverse"][0]
     center = (verts.min(axis=0) + verts.max(axis=0)) / 2
     span = max(float(np.max(np.ptp(verts, axis=0))), .5)
     for j, offset in enumerate(((.45, -1.25, .3), (1.2, .35, .45)), 1):
         pose = look_at(center + span * np.asarray(offset), center)
         renders = [rasterize_vertex_rgb(*meshes[key], camera, pose,
                    near=.15, far=10.)[0]
-                   for key in ("sparse-48", "sparse-expanded")]
-        name = f"free-{j}-48-vs-expanded.png"
+                   for key in ("sparse-expanded", "sparse-pose-diverse")]
+        name = f"free-{j}-uniform-vs-pose.png"
         sheet(None, *renders, visual / name, f"Free camera {j}")
         result.append({"kind": "free_camera", "image": name,
                        "sha256": file_sha256(visual / name),
@@ -166,7 +241,8 @@ def run(args: argparse.Namespace, report: dict) -> None:
     report["extraction"] = extract(archive, work / "dataset")
     dataset = work / "dataset" / ROOT
     folders = {}
-    for name, stride, limit in (("original-60", 12, 60), ("expanded-120", 6, 120)):
+    for name, stride, limit in (("original-60", 12, 60), ("expanded-120", 6, 120),
+                                ("diverse-240", 3, 240)):
         dest = work / name
         invoke("import-" + name, [sys.executable, "-m", "echo4d", "import-tum",
                str(dataset), "--output", str(dest),
@@ -174,10 +250,11 @@ def run(args: argparse.Namespace, report: dict) -> None:
                "--stride", str(stride), "--limit", str(limit),
                "--downsample", "1", "--world-up", "z"], report, timeout=900)
         folders[name] = dest
-    old, expanded = folders["original-60"], folders["expanded-120"]
-    old_rec, expanded_rec = [load_recording(p / "recording.json") for p in (old, expanded)]
+    old, expanded, dense = (folders[k] for k in ("original-60", "expanded-120", "diverse-240"))
+    old_rec, expanded_rec, dense_rec = [load_recording(p / "recording.json")
+                                        for p in (old, expanded, dense)]
     if (old_rec.source != "recorded" or expanded_rec.source != "recorded"
-            or old_rec.camera != expanded_rec.camera
+            or old_rec.camera != expanded_rec.camera or old_rec.camera != dense_rec.camera
             or (old_rec.camera.width, old_rec.camera.height) != (640, 480)):
         raise DataError("Both imports must be 640x480 recorded RGB-D with identical calibration")
     baseline = split_training(json.loads((old / "recording.json").read_text(encoding="utf8")))
@@ -186,10 +263,16 @@ def run(args: argparse.Namespace, report: dict) -> None:
         json.loads((expanded / "recording.json").read_text(encoding="utf8")),
         json.loads((old / "association.json").read_text(encoding="utf8")),
         json.loads((expanded / "association.json").read_text(encoding="utf8")))
-    report["training_selection"] = selection
+    pose, diversity = select_pose_diverse_training(
+        json.loads((old / "recording.json").read_text(encoding="utf8")),
+        json.loads((dense / "recording.json").read_text(encoding="utf8")),
+        json.loads((old / "association.json").read_text(encoding="utf8")),
+        json.loads((dense / "association.json").read_text(encoding="utf8")),
+        budget=len(extra["frames"]))
+    report["training_selection"] = {"uniform": selection, "pose_diverse": diversity}
     manifests = {}
-    for name, folder, data in (("sparse-48", old, baseline),
-                               ("sparse-expanded", expanded, extra)):
+    for name, folder, data in (("sparse-expanded", expanded, extra),
+                               ("sparse-pose-diverse", dense, pose)):
         manifest = folder / ("train-" + name + ".json")
         manifest.write_text(json.dumps(data, allow_nan=False, sort_keys=True) + "\n", encoding="utf8")
         manifests[name] = manifest
@@ -221,7 +304,7 @@ def main() -> int:
     args = parser.parse_args()
     args.report_dir.mkdir(parents=True, exist_ok=True)
     report = {
-        "experiment": "TUM-fr1_xyz-Open3D-sparse-48-vs-expanded-training-v1",
+        "experiment": "TUM-fr1_xyz-Open3D-sparse-88-uniform-vs-pose-diverse-v1",
         "started_utc": datetime.now(timezone.utc).isoformat(),
         "checkout_sha": os.environ.get("GITHUB_SHA"),
         "dataset_url": URL, "dataset_sha256": PINNED_ARCHIVE_SHA256,
@@ -248,9 +331,9 @@ def main() -> int:
         (args.report_dir / "training-density-report.json").write_text(
             json.dumps(report, indent=2, allow_nan=False) + "\n", encoding="utf8")
         (args.report_dir / "SUMMARY.md").write_text("\n".join([
-            "# TUM real sparse RGB-D frame-density comparison",
+            "# TUM real sparse RGB-D camera-pose diversity comparison",
             f"- Status: {report['status']}",
-            "- Original 640x480 RGB-D; same 30mm sparse TSDF, extra source frames.",
+            "- Original 640x480 RGB-D; same 30mm sparse TSDF, matched-count uniform vs pose-diverse frames.",
             f"- Training: {report.get('training_selection', {})}",
             f"- Meshes: {list(report.get('results', {}))}",
             f"- Actual 3+2 visual images: {len(report.get('visual', []))}",
