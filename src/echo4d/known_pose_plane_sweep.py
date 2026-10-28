@@ -14,11 +14,13 @@ def infer_plane_sweep(reference: np.ndarray, sources: list[tuple[np.ndarray, np.
                       near: float = 0.4, far: float = 4.0,
                       planes: int = 64, pairing: str = 'top2',
                       source_depths: list[np.ndarray] | None = None,
-                      visibility_mode: str = 'hard') -> tuple[np.ndarray, dict]:
+                      visibility_mode: str = 'hard',
+                      window_mode: str = 'fixed') -> tuple[np.ndarray, dict]:
     """Return metric camera-Z using 2+ known-pose RGB views, not sensor depth.
 
     Inverse-depth planes are fronto-parallel in the reference camera. ZNCC
-    uses 5x5 windows, requires two agreeing source views and a nonadjacent
+    uses 5x5 windows (optional 11x11 in low-texture observed patches), requires
+    two agreeing source views and a nonadjacent
     second-best margin. Optional diverse pairing requires source matches with
     >=60-degree lateral parallax separation when available. Optional inferred
     source-view Z rejects stable foreground occlusion (not sensor Z or GT).
@@ -34,6 +36,8 @@ def infer_plane_sweep(reference: np.ndarray, sources: list[tuple[np.ndarray, np.
         raise DataError('Unknown plane-sweep source pairing')
     if visibility_mode not in ('hard', 'soft'):
         raise DataError('Unknown source visibility mode')
+    if window_mode not in ('fixed', 'adaptive'):
+        raise DataError('Unknown plane-sweep window mode')
     if not (np.isfinite(near) and np.isfinite(far) and 0.3 <= near < far <= 6.0):
         raise DataError('Invalid metric plane sweep depth range')
     a = rigid_matrix(np.asarray(pose_ref).flatten(order='F'))
@@ -89,7 +93,23 @@ def infer_plane_sweep(reference: np.ndarray, sources: list[tuple[np.ndarray, np.
         return cv2.boxFilter(x, cv2.CV_32F, win, normalize=True, borderType=cv2.BORDER_REFLECT)
     mref = smooth(gray)
     vref = np.maximum(smooth(gray * gray) - mref * mref, 0)
-    texture = vref >= 64.0
+    # In weakly textured regions, a larger observed RGB neighbourhood can
+    # supply real parallax evidence. Preserve 5x5 on textured pixels; never
+    # infer a plane where even the 11x11 reference patch is uninformative.
+    # The same selection is applied at every depth hypothesis (no GT leakage).
+    if window_mode == 'adaptive':
+        wide_win = (11, 11)
+        def wide_smooth(x):
+            return cv2.boxFilter(x, cv2.CV_32F, wide_win, normalize=True,
+                                 borderType=cv2.BORDER_REFLECT)
+        mref_wide = wide_smooth(gray)
+        vref_wide = np.maximum(wide_smooth(gray * gray) -
+                               mref_wide * mref_wide, 0)
+        adaptive = (vref < 64.0) & (vref_wide >= 48.0)
+        wide_kernel = np.ones(wide_win, np.uint8)
+    else:
+        adaptive = np.zeros(gray.shape, dtype=bool)
+    texture = (vref >= 64.0) | adaptive
     yy, xx = np.indices(gray.shape, dtype=np.float32)
     xy = np.stack((xx, yy), axis=-1)
     source_ray_z = [r[2, 0] * (xx - camera.cx) / camera.fx
@@ -114,6 +134,18 @@ def infer_plane_sweep(reference: np.ndarray, sources: list[tuple[np.ndarray, np.
             corr = cov / np.sqrt(np.maximum(vref * vs, 1e-8))
             cost = np.clip(1.0 - corr, 0, 2).astype(np.float32)
             valid = (cv2.erode(inside.astype(np.uint8), kernel) > 0) & (vs >= 64)
+            if window_mode == 'adaptive':
+                ms_wide = wide_smooth(warped)
+                vs_wide = np.maximum(wide_smooth(warped * warped) -
+                                     ms_wide * ms_wide, 0)
+                cov_wide = wide_smooth(gray * warped) - mref_wide * ms_wide
+                wide_cost = np.clip(1.0 - cov_wide /
+                                    np.sqrt(np.maximum(vref_wide * vs_wide, 1e-8)),
+                                    0, 2).astype(np.float32)
+                wide_valid = (cv2.erode(inside.astype(np.uint8), wide_kernel) > 0)
+                wide_valid &= vs_wide >= 48.0
+                cost = np.where(adaptive, wide_cost, cost)
+                valid = np.where(adaptive, wide_valid, valid)
             if source_depths is not None:
                 # Reject a plane behind a stable, nearer RGB-inferred surface
                 # in this source view. Unknown or discontinuous source Z is
@@ -165,6 +197,9 @@ def infer_plane_sweep(reference: np.ndarray, sources: list[tuple[np.ndarray, np.
         'measured_depth_used': False,
         'source_view_count': len(sources), 'planes': planes,
         'source_pairing': pairing,
+        'window_mode': window_mode,
+        'adaptive_reference_pixels': int(np.count_nonzero(adaptive)),
+        'adaptive_valid_depth_pixels': int(np.count_nonzero(valid & adaptive)),
         'source_visibility': source_depths is not None,
         'occluded_photo_samples': occluded_samples,
         'penalized_photo_samples': penalized_samples,
