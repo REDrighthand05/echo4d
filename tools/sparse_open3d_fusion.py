@@ -15,13 +15,15 @@ import numpy as np
 from echo4d.fusion import Mesh
 from echo4d.model import Camera, DataError, file_sha256, load_recording
 from echo4d.output import output_transaction, write_json, write_ply
+from temporal_depth_consensus import refine_observed_depth
 
 
 def validate_settings(voxel_m: float, truncation_m: float, max_depth_m: float,
                       pixel_stride: int, edge_guard_m: float = 0.0,
                       consistency_guard_m: float = 0.0, edge_halo_pixels: int = 1,
                       depth_smooth_sigma_m: float = 0.0,
-                      local_edge_truncation_m: float = 0.0) -> None:
+                      local_edge_truncation_m: float = 0.0,
+                      temporal_consensus_m: float = 0.0) -> None:
     if not all(isinstance(v, (float, int)) and not isinstance(v, bool)
                and math.isfinite(v) for v in (voxel_m, truncation_m, max_depth_m, edge_guard_m, consistency_guard_m, depth_smooth_sigma_m)):
         raise DataError("Sparse TSDF distances must be finite numbers")
@@ -45,6 +47,9 @@ def validate_settings(voxel_m: float, truncation_m: float, max_depth_m: float,
         raise DataError("Local edge truncation must be finite")
     if local_edge_truncation_m and not (2 * voxel_m <= local_edge_truncation_m < truncation_m):
         raise DataError("Local edge truncation must be at least two voxels and below wide truncation")
+    if (type(temporal_consensus_m) not in (int, float) or
+            not math.isfinite(temporal_consensus_m) or not 0 <= temporal_consensus_m <= .20):
+        raise DataError("Temporal consensus tolerance must be within [0,20cm]")
 
 
 def smooth_measured_depth_bilateral(depth: np.ndarray, sigma_m: float) -> tuple[np.ndarray, int]:
@@ -275,7 +280,8 @@ def fuse_sparse(recording_path: Path, destination: Path, *, voxel_m: float = 0.0
                 edge_halo_pixels: int = 1,
                 depth_smooth_sigma_m: float = 0.0,
                 local_edge_truncation_m: float = 0.0,
-                decimate_to_faces: int = 0) -> dict:
+                decimate_to_faces: int = 0,
+                temporal_consensus_m: float = 0.0) -> dict:
     """Integrate registered RGB and camera-Z metric depth; output strict ECHO color PLY.
 
     Open3D expects world-to-camera extrinsics, whereas ECHO stores camera-to-world.
@@ -284,7 +290,8 @@ def fuse_sparse(recording_path: Path, destination: Path, *, voxel_m: float = 0.0
     """
     validate_settings(voxel_m, truncation_m, max_depth_m, pixel_stride,
                       edge_guard_m, consistency_guard_m, edge_halo_pixels,
-                      depth_smooth_sigma_m, local_edge_truncation_m)
+                      depth_smooth_sigma_m, local_edge_truncation_m,
+                      temporal_consensus_m)
     if type(decimate_to_faces) is not int or (decimate_to_faces != 0 and
             not 10000 <= decimate_to_faces <= 450000):
         raise DataError("Optional bounded preview decimation must target 10k-450k faces")
@@ -310,6 +317,7 @@ def fuse_sparse(recording_path: Path, destination: Path, *, voxel_m: float = 0.0
     local_depth_pixels = 0
     count, valid_pixels, edge_removed_pixels, cross_removed_pixels = 0, 0, 0, 0
     smoothed_pixels = 0
+    temporal_corrected_pixels = 0
     start = time.perf_counter()
     prepared = []
     for _, frame, _ in recording.iter_frames():
@@ -327,9 +335,15 @@ def fuse_sparse(recording_path: Path, destination: Path, *, voxel_m: float = 0.0
         edge_removed_pixels += removed
         prepared.append((frame, depth))
     neighbors = (select_cross_frame_neighbors([f.camera_to_world for f, _ in prepared])
-                 if consistency_guard_m else [[] for _ in prepared])
+                 if consistency_guard_m or temporal_consensus_m else [[] for _ in prepared])
     with output_transaction(destination) as output:
         for index, (frame, depth) in enumerate(prepared):
+            if temporal_consensus_m:
+                witnesses = [(prepared[j][1], prepared[j][0].camera_to_world)
+                             for j in neighbors[index]]
+                depth, changed = refine_observed_depth(
+                    depth, frame.camera_to_world, witnesses, camera, temporal_consensus_m)
+                temporal_corrected_pixels += changed
             if consistency_guard_m:
                 witnesses = [(prepared[j][1], prepared[j][0].camera_to_world)
                              for j in neighbors[index]]
@@ -431,6 +445,9 @@ def fuse_sparse(recording_path: Path, destination: Path, *, voxel_m: float = 0.0
                                   "12cm wide away from jumps; 4px overlap, "
                                   "unstitched seam possible") if local_volume is not None else "disabled",
             "depth_smoothed_pixels": smoothed_pixels,
+            "temporal_consensus_m": temporal_consensus_m,
+            "temporal_corrected_pixels": temporal_corrected_pixels,
+            "temporal_policy": "median source measured Z + >=2 consistent TRAINING Z; no hole filling",
             "edge_guard_m": edge_guard_m,
             "edge_halo_pixels": edge_halo_pixels,
             "edge_removed_pixels": edge_removed_pixels,
