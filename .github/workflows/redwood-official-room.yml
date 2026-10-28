@@ -119,6 +119,8 @@ jobs:
           git add docs/real-room-review/redwood-bedroom/
           git diff --cached --quiet && exit 0
           git commit -m "results(real-room): publish actual bedroom GLB and five views"
+          git fetch origin research/redwood-official-room-baseline-20261029
+          git rebase origin/research/redwood-official-room-baseline-20261029
           git push origin HEAD:refs/heads/research/redwood-official-room-baseline-20261029
 
   dense-real-bedroom:
@@ -191,4 +193,6 @@ jobs:
           git add docs/real-room-review/redwood-bedroom-dense600/
           git diff --cached --quiet && exit 0
           git commit -m "results(real-room): 600-frame Bedroom geometry A/B with fixed cameras"
+          git fetch origin research/redwood-official-room-baseline-20261029
+          git rebase origin/research/redwood-official-room-baseline-20261029
           git push origin HEAD:refs/heads/research/redwood-official-room-baseline-20261029
