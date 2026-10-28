@@ -24,7 +24,7 @@ def correction_limits(initial: np.ndarray, candidate: np.ndarray, *,
             or not np.isfinite(initial).all() or not np.isfinite(candidate).all()):
         return False, float("inf"), float("inf")
     delta = candidate @ np.linalg.inv(initial)
-    translation = float(np.linalg.norm(delta[:3, 3]))
+    translation = float(np.linalg.norm(candidate[:3, 3] - initial[:3, 3]))
     cosine = float(np.clip((np.trace(delta[:3, :3]) - 1) / 2, -1, 1))
     rotation_deg = float(np.degrees(np.arccos(cosine)))
     valid = (np.allclose(candidate[3], [0, 0, 0, 1], atol=1e-6)
