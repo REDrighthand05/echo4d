@@ -7,8 +7,10 @@ on:
       - research/rgb-stereo-multiview-consensus-20261028
     paths:
       - 'src/echo4d/known_pose_stereo.py'
+      - 'src/echo4d/stereo_crossview.py'
       - 'tools/tum_rgb_stereo.py'
       - 'tests/python/test_known_pose_stereo.py'
+      - 'tests/python/test_stereo_crossview.py'
       - 'tests/python/test_stereo_archive.py'
       - '.github/workflows/tum-rgb-stereo-ablation.yml'
   workflow_dispatch:
@@ -37,7 +39,7 @@ jobs:
           python -m pip install --no-deps -e .
           python -m pip install --no-deps opencv-python-headless==4.12.0.88
       - name: Synthetic plane oracle and failure counterexamples
-        run: python -m pytest -q tests/python/test_known_pose_stereo.py tests/python/test_stereo_archive.py
+        run: python -m pytest -q tests/python/test_known_pose_stereo.py tests/python/test_stereo_archive.py tests/python/test_stereo_crossview.py
       - name: Run real TUM RGB stereo, retaining known poses but removing measured Z maps
         env:
           PYTHONPATH: tools
@@ -48,7 +50,8 @@ jobs:
             --stereo-width 320 \
             --fusion-width 320 \
             --max-anchors 48 \
-            --select-best-backup
+            --select-best-backup \
+            --cross-view-consistency
       - name: Summarize evidence without upgrading to geometry PASS
         if: always()
         run: |
@@ -64,6 +67,7 @@ jobs:
             'Eligible train anchors: '+str(r.get('eligible_anchor_count','not reached')),
             'Saved RGB-derived training frames: '+str(r.get('saved_frames','not reached')),
             'Best contiguous backup enabled: '+str(r.get('select_best_backup','not reached')),
+            'Cross-view train-only rejected pixels: '+str(r.get('cross_view_filter',{}).get('rejected_pixels','not reached')),
             'Per-anchor train-only selection: '+str(r.get('anchor_selection','not reached')),
             'Mesh SHA: '+str(r.get('mesh_sha256','none')),
             'Error: '+str(r.get('error','none')),
