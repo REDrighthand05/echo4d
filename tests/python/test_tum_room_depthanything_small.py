@@ -1,6 +1,7 @@
 """Synthetic-only calibration checks; model weights and real room run in Actions."""
 import numpy as np
 import pytest
+pytest.importorskip('cv2', reason='OpenCV installed by real-room workflow')
 
 from echo4d.model import DataError
 from tum_room_depthanything_small import calibrate_relative_depth
