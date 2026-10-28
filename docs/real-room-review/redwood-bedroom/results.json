@@ -21,6 +21,11 @@
   ],
   "mesh_triangles": 540222,
   "colored_glb": "recorded-rgbd-preview.glb",
+  "review_frame_indices": [
+    0,
+    10995,
+    21929
+  ],
   "prior_file_NOT_USED_IN_RECONSTRUCTION": "PREEXISTING-PRIOR-bedroom.ply",
   "visuals": [
     {
