@@ -141,11 +141,16 @@ def select_training(manifest: dict, *, baseline: int = BASE_FRAMES,
     }
 
 
-def render_five(dataset: Path, imported: Path, target: Path, *, local_truncation: bool = False) -> list[dict]:
+def render_five(dataset: Path, imported: Path, target: Path, *, local_truncation: bool = False,
+                single_truncation: bool = False) -> list[dict]:
     rec = load_recording(imported / "recording.json")
     assoc = json.loads((imported / "association.json").read_text(encoding="utf8"))
-    tag = "local-edge" if local_truncation else "bilateral"
-    keys = ("desk-96-wide", "desk-96-local-edge" if local_truncation else "desk-96-bilateral")
+    tag = "single-10cm" if single_truncation else ("local-edge" if local_truncation else "bilateral")
+    keys = ("desk-96-wide", "desk-96-single-10cm" if single_truncation else
+            ("desk-96-local-edge" if local_truncation else "desk-96-bilateral"))
+    candidate_label = ("10cm single-volume TSDF" if single_truncation else
+                       ("7.5cm local edge / 12cm interior" if local_truncation else
+                        "12cm TSDF / bilateral 3cm"))
     meshes = {}
     for key in keys:
         mesh_path = target / key / "mesh.ply"
@@ -167,7 +172,7 @@ def render_five(dataset: Path, imported: Path, target: Path, *, local_truncation
                  near=.15, far=MAX_DEPTH_M)[0] for key in keys]
         name = f"heldout-{i:03d}-desk-{tag}-ab.png"
         sheet(original, *views, visual / name, f"Real TUM fr1_desk camera {i}",
-              ("96 views / 12cm TSDF", "7.5cm local edge / 12cm interior" if local_truncation else "12cm TSDF / bilateral 3cm"))
+              ("96 views / 12cm TSDF", candidate_label))
         images.append({"kind": "heldout_camera", "index": i, "name": name,
                        "sha256": file_sha256(visual / name),
                        "source_rgb_sha256": source["rgb_sha256"]})
@@ -183,7 +188,7 @@ def render_five(dataset: Path, imported: Path, target: Path, *, local_truncation
         name = f"free-{i}-desk-{tag}-ab.png"
         sheet(None, *[render[0] for render in renders], visual / name,
               f"Real TUM desk shifted free camera {i}",
-              ("96 views / 12cm TSDF", "7.5cm local edge / 12cm interior" if local_truncation else "12cm TSDF / bilateral 3cm"))
+              ("96 views / 12cm TSDF", candidate_label))
         images.append({"kind": "free_camera", "name": name,
                        "sha256": file_sha256(visual / name),
                        "anchor_holdout_index": index,
@@ -219,14 +224,18 @@ def run(args: argparse.Namespace, report: dict) -> None:
         json.dumps(extra, allow_nan=False, sort_keys=True) + "\n", encoding="utf8")
     # Same measured RGB-D frames, poses, 12cm truncation and voxel grid.
     # Candidate alone applies a local edge-preserving filter to observed depth.
-    variants = (("desk-96-wide", 0.0, 0.0),
-                ("desk-96-local-edge", 0.0, 0.075)) if args.local_truncation else (
-                ("desk-96-wide", 0.0, 0.0),
-                ("desk-96-bilateral", 0.03, 0.0))
-    for name, smooth_m, narrow_m in variants:
+    # A/B with one TSDF volume each: no disconnected narrow/wide seam.
+    # Same observed RGB-D and 96 poses; only the truncation radius changes.
+    variants = (("desk-96-wide", 0.0, 0.0, 0.12),
+                ("desk-96-single-10cm", 0.0, 0.0, 0.10)) if args.single_truncation else (
+                (("desk-96-wide", 0.0, 0.0, 0.12),
+                 ("desk-96-local-edge", 0.0, 0.075, 0.12)) if args.local_truncation else (
+                 ("desk-96-wide", 0.0, 0.0, 0.12),
+                 ("desk-96-bilateral", 0.03, 0.0, 0.12)))
+    for name, smooth_m, narrow_m, trunc_m in variants:
         report.setdefault("fusion", {})[name] = fuse_sparse(
             training_path, target / name, voxel_m=0.025,
-            truncation_m=0.12, max_depth_m=MAX_DEPTH_M, pixel_stride=1,
+            truncation_m=trunc_m, max_depth_m=MAX_DEPTH_M, pixel_stride=1,
             depth_smooth_sigma_m=smooth_m,
             local_edge_truncation_m=narrow_m)
         mesh = target / name / "mesh.ply"
@@ -239,8 +248,14 @@ def run(args: argparse.Namespace, report: dict) -> None:
             "connectivity": face_components(len(vertices), faces),
             "same_sensor_holdout_diagnostic_only": {k: score[k] for k in (
                 "heldout_frames", "observed_depth_coverage", "rmse_m", "mae_m", "p95_abs_m")}}
-    report["visual"] = render_five(dataset, imported, target, local_truncation=args.local_truncation)
-    report["status"] = "real_desk_local_edge_ab_meshes_rendered_visual_review_pending" if args.local_truncation else "real_desk_bilateral_ab_meshes_rendered_visual_review_pending"
+    report["visual"] = render_five(dataset, imported, target,
+                                   local_truncation=args.local_truncation,
+                                   single_truncation=args.single_truncation)
+    report["status"] = ("real_desk_single_10cm_ab_meshes_rendered_visual_review_pending"
+                        if args.single_truncation else
+                        ("real_desk_local_edge_ab_meshes_rendered_visual_review_pending"
+                         if args.local_truncation else
+                         "real_desk_bilateral_ab_meshes_rendered_visual_review_pending"))
 
 
 def main() -> int:
@@ -249,10 +264,18 @@ def main() -> int:
     parser.add_argument("--report-dir", type=Path, required=True)
     parser.add_argument("--archive", type=Path)
     parser.add_argument("--local-truncation", action="store_true", help="Compare 12cm wide TSDF against 7.5cm near measured depth jumps")
+    parser.add_argument("--single-truncation", action="store_true",
+                        help="Compare 12cm vs 10cm single-volume TSDF without dual-volume seams")
     args = parser.parse_args()
+    if args.local_truncation and args.single_truncation:
+        parser.error("Select only one geometry comparison")
     args.report_dir.mkdir(parents=True, exist_ok=True)
     report = {
-        "experiment": "TUM-fr1_desk-96view-local-edge-tsdf-ab-v1" if args.local_truncation else "TUM-fr1_desk-96view-wide-tsdf-bilateral-3cm-ab-v1",
+        "experiment": ("TUM-fr1_desk-96view-single-10cm-tsdf-ab-v1"
+                       if args.single_truncation else
+                       ("TUM-fr1_desk-96view-local-edge-tsdf-ab-v1"
+                        if args.local_truncation else
+                        "TUM-fr1_desk-96view-wide-tsdf-bilateral-3cm-ab-v1")),
         "started_utc": datetime.now(timezone.utc).isoformat(),
         "checkout_sha": os.environ.get("GITHUB_SHA"),
         "official_source": URL, "pinned_source_sha256": PINNED_SHA256,
@@ -265,6 +288,9 @@ def main() -> int:
                      "variants": {"desk-96-wide": {"truncation_m": 0.12, "depth_smooth_sigma_m": 0.0},
                                   "desk-96-bilateral": {"truncation_m": 0.12,
                                       "depth_smooth_sigma_m": 0.03},
+                                  "desk-96-single-10cm": {"truncation_m": 0.10,
+                                      "local_edge_truncation_m": 0.0,
+                                      "depth_smooth_sigma_m": 0.0},
                                   "desk-96-local-edge": {"truncation_m": 0.12,
                                       "local_edge_truncation_m": 0.075,
                                       "depth_smooth_sigma_m": 0.0}}},
@@ -287,7 +313,11 @@ def main() -> int:
         (args.report_dir / "desk-sparse-quality-report.json").write_text(
             json.dumps(report, indent=2, allow_nan=False) + "\n", encoding="utf8")
         (args.report_dir / "SUMMARY.md").write_text("\n".join([
-            "# Real fr1_desk 96-view 12cm wide TSDF vs 7.5cm local-edge TSDF" if args.local_truncation else "# Real fr1_desk 96-view 12cm TSDF: raw depth vs 3cm bilateral denoising",
+            ("# Real fr1_desk 96-view single-volume TSDF: 12cm vs 10cm (no dual-volume seam)"
+             if args.single_truncation else
+             ("# Real fr1_desk 96-view 12cm wide TSDF vs 7.5cm local-edge TSDF"
+              if args.local_truncation else
+              "# Real fr1_desk 96-view 12cm TSDF: raw depth vs 3cm bilateral denoising")),
             f"- Status: {report['status']}",
             "- Original RGB 640x480; same 96 known-pose measured-depth views per variant.",
             f"- Mesh results: {list(report.get('results', {}))}",
