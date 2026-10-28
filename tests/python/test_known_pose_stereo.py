@@ -170,3 +170,41 @@ def test_all_training_anchor_budget_preserves_frozen_holdouts():
     assert len(pairs) <= 48 * 3
     assert pairs
     assert all(a not in HOLDOUT and b not in HOLDOUT for a, b in pairs)
+
+
+def test_multibaseline_consensus_keeps_complementary_pixels_and_rejects_outliers():
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'tools'))
+    from tum_rgb_stereo import fuse_stereo_candidate_depths
+    a = np.array([[2., 0., 1., 0.], [2., 1., 0., 0.]], np.float32)
+    b = np.array([[2.02, 3., 2., 0.], [0., 1.02, 0., 0.]], np.float32)
+    c = np.array([[3.5, 3.01, 2.01, 0.], [0., 4., 0., 0.]], np.float32)
+    fused, stats = fuse_stereo_candidate_depths([a, b, c])
+    assert fused[0, 0] == pytest.approx(2.01)
+    assert fused[0, 1] == pytest.approx(3.005)
+    assert fused[0, 2] == pytest.approx(2.005)
+    assert fused[1, 0] == pytest.approx(2.)
+    assert fused[1, 1] == pytest.approx(1.01)
+    assert fused[0, 3] == 0
+    assert stats['candidate_count'] == 3
+    assert stats['single_candidate_pixels'] == 1
+    assert stats['fused_valid_pixels'] == 5
+
+
+def test_multibaseline_conflicting_and_unobserved_depth_remain_unknown():
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'tools'))
+    from tum_rgb_stereo import fuse_stereo_candidate_depths
+    a = np.array([[1., 0., 1.], [0., 0., 0.]], np.float32)
+    b = np.array([[2., 0., 2.], [0., 0., 0.]], np.float32)
+    c = np.array([[3., 0., 0.], [0., 0., 0.]], np.float32)
+    fused, stats = fuse_stereo_candidate_depths([a, b, c])
+    assert np.count_nonzero(fused) == 0
+    assert stats['conflict_rejected_pixels'] == 2
+    assert stats['fused_valid_pixels'] == 0
+    for bad in ([], [a, b, c, a], [a, b[:, :2]],
+                [a, np.full_like(a, np.nan)], [a, -np.ones_like(a)]):
+        with pytest.raises(DataError):
+            fuse_stereo_candidate_depths(bad)
