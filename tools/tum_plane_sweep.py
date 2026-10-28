@@ -18,6 +18,7 @@ import numpy as np
 from PIL import Image
 from echo4d.model import DataError, file_sha256
 from echo4d.known_pose_plane_sweep import infer_plane_sweep
+from echo4d.known_pose_depth_consensus import regularize_observed_depth
 from echo4d.known_pose_mvs_sources import select_plane_sweep_views
 from tum_rgb_stereo import (HOLDOUT, TOTAL, rgb_pose_frames,
                             stereo_resolution, load_stereo_rgb,
@@ -32,7 +33,8 @@ def build_plane_sweep_recording(frames: list[dict], target: Path, report: dict,
                                 pairing: str = 'top2',
                                 source_visibility: bool = False,
                                 visibility_mode: str = 'hard',
-                                window_mode: str = 'fixed') -> Path:
+                                window_mode: str = 'fixed',
+                                depth_regularization: str = 'none') -> Path:
     camera, _, _ = stereo_resolution(320)
     training = [i for i in range(TOTAL) if i not in HOLDOUT]
     selected, selection_stats = select_plane_sweep_views(
@@ -86,6 +88,12 @@ def build_plane_sweep_recording(frames: list[dict], target: Path, report: dict,
                                         source_depths=source_z,
                                         visibility_mode=visibility_mode,
                                         window_mode=window_mode)
+        if depth_regularization == 'rgb-consensus':
+            depth, consensus = regularize_observed_depth(depth, rgb(left))
+            stats['rgb_depth_consensus'] = consensus
+            stats['valid_depth_pixels'] = consensus['remaining_valid_pixels']
+        elif depth_regularization != 'none':
+            raise DataError('Unknown depth regularization mode')
         diagnostics.append({'left_index': left, 'source_indices': partners, **stats})
         if stats['valid_depth_pixels'] < 100:
             continue
@@ -100,6 +108,9 @@ def build_plane_sweep_recording(frames: list[dict], target: Path, report: dict,
                              'saved_training_frames': len(entries),
                              'planes': planes, 'max_sources': max_sources, 'pairing': pairing,
                              'window_mode': window_mode,
+                             'depth_regularization': depth_regularization,
+                             'consensus_removed_pixels': sum(x.get('rgb_depth_consensus', {}).get('removed_isolated_pixels', 0) for x in diagnostics),
+                             'consensus_adjusted_pixels': sum(x.get('rgb_depth_consensus', {}).get('adjusted_pixels', 0) for x in diagnostics),
                              'adaptive_reference_pixels': sum(x['adaptive_reference_pixels'] for x in diagnostics),
                              'adaptive_valid_depth_pixels': sum(x['adaptive_valid_depth_pixels'] for x in diagnostics),
                              'source_visibility': source_visibility,
@@ -151,7 +162,8 @@ def execute(args: argparse.Namespace, report: dict) -> None:
                                            max_sources=args.max_sources, pairing=args.pairing,
                                            source_visibility=args.source_visibility,
                                            visibility_mode=args.visibility_mode,
-                                           window_mode=args.window_mode)
+                                           window_mode=args.window_mode,
+                                           depth_regularization=args.depth_regularization)
     report['archived_inputs'] = archive_stereo_inputs(
         manifest, frames, root, args.report_dir / 'inputs')
     target = args.report_dir / 'reconstruction'
@@ -188,6 +200,8 @@ def main(argv=None):
                    help='Hard veto or bounded soft penalty for RGB-inferred occluders')
     p.add_argument('--window-mode', choices=('fixed', 'adaptive'), default='fixed',
                    help='Use observed 11x11 RGB patches only where 5x5 has weak texture')
+    p.add_argument('--depth-regularization', choices=('none', 'rgb-consensus'), default='none',
+                   help='Only regularize observed inferred Z; no hole filling or measured depth')
     args = p.parse_args(argv)
     args.report_dir.mkdir(parents=True, exist_ok=True)
     report = {'experiment': 'tum-xyz-known-pose-cpu-plane-sweep-no-measured-Z',
@@ -199,6 +213,7 @@ def main(argv=None):
               'source_visibility_enabled': args.source_visibility,
               'visibility_mode': args.visibility_mode if args.source_visibility else 'disabled',
               'window_mode': args.window_mode,
+              'depth_regularization': args.depth_regularization,
               'evidence_level': 'real data experiment; no independent surface truth or #74 acceptance'}
     start = time.perf_counter()
     try:
