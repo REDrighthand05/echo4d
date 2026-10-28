@@ -1,0 +1,60 @@
+{
+  "experiment": "tum-fr1-xyz-rgb-stereo-bounded-backup-extension-20261028",
+  "status": "real_mesh_generated_visual_fail",
+  "code_sha": "aa8d5621721981c2fef4beb153b08b02f2f3c6c2",
+  "run": "https://github.com/REDrighthand05/echo4d/actions/runs/40635179109",
+  "verify": "https://github.com/REDrighthand05/echo4d/actions/runs/40635179153",
+  "inputs_retained": [
+    "TUM fr1_xyz original 640x480 RGB, 320x240 algorithm",
+    "known metric camera-to-world poses",
+    "calibration",
+    "depth.txt timestamp index only for frozen frame selection"
+  ],
+  "inputs_removed": [
+    "measured depth PNG pixels",
+    "prior mesh"
+  ],
+  "train_frames": 48,
+  "holdout_frames": 12,
+  "mesh_training_frames": 24,
+  "method": "largest-contiguous stereo baseline plus RGB/depth-constrained observed backup pixels within 3px; cross-view train-only rejection; no inpainting",
+  "command": "python tools/tum_rgb_stereo.py --work \"$RUNNER_TEMP/tum-rgb-stereo\" --report-dir \"$GITHUB_WORKSPACE/artifacts/tum-rgb-stereo\" --stereo-width 320 --fusion-width 320 --max-anchors 48 --extend-best-backup --cross-view-consistency",
+  "tests": "27 targeted tests passed; Linux/Windows verify success on code SHA",
+  "old": {
+    "run": "https://github.com/REDrighthand05/echo4d/actions/runs/40629973649",
+    "mesh_sha256": "4e6c4761b5e3449eea916f4c1fdc546ed7ddb6973ae398338a3746c96ee3422a",
+    "artifact_zip_sha256": "b40a87f9d444a254973ca7823530a6097c5d53c6adc4c7ce818dd54b3e9cbac8",
+    "vertices": 3336,
+    "faces": 4367,
+    "components": 212,
+    "largest_face_fraction": 0.6434623311,
+    "covered_pixels": {
+      "heldout-4": 55104,
+      "heldout-24": 49040,
+      "heldout-55": 39391,
+      "free-a": 18815,
+      "free-b": 14964
+    }
+  },
+  "new": {
+    "mesh_sha256": "c66dabe499ab35636ecf39e2944619b91b5932ef86c1bcba13fb5e4a60d45aae",
+    "artifact_zip_sha256": "bd27514c58730021094befb4fb6f23da19625f506fc6d76d0d949068684353a3",
+    "vertices": 3374,
+    "faces": 4395,
+    "components": 219,
+    "largest_face_fraction": 0.6384527873,
+    "added_backup_depth_pixels": 8014,
+    "conflict_backup_pixels": 57,
+    "crossview_rejected_pixels": 34393,
+    "covered_pixels": {
+      "heldout-4": 55756,
+      "heldout-24": 49989,
+      "heldout-55": 39722,
+      "free-a": 19030,
+      "free-b": 15316
+    }
+  },
+  "interpretation": "All five fixed-view pixel counts increase slightly, but mesh components worsen 212 to 219 and largest connected fraction drops. Five depth renders still do not establish recognizable room structure; #74 FAIL. Sensor holdout is not independent surface ground truth. This is diagnostic research, not a frozen generalization win.",
+  "historical_fail": "Original desk V2 12-frame RMSE 16.7779 cm > 15 cm, FAIL unchanged.",
+  "next": "Try a genuinely different known-pose multi-view depth algorithm (plane sweep or mature MVS), not further threshold tuning on the 12 holdout views."
+}
