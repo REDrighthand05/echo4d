@@ -1,4 +1,4 @@
-name: TUM real room full-loop sparse RGB-D geometry
+name: TUM room real 25mm vs 18mm voxel Mesh A/B
 
 on:
   push:
@@ -16,11 +16,11 @@ permissions:
   contents: read
 
 concurrency:
-  group: tum-room-wider-trajectory-${{ github.ref }}
+  group: tum-room-fine-voxel-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
-  real-room-geometry:
+  real-room-fine-voxel-ab:
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
@@ -41,26 +41,27 @@ jobs:
           OPENBLAS_NUM_THREADS: '1'
           OMP_NUM_THREADS: '1'
         run: python -m pytest -q tests/python/test_tum_room_sparse_quality.py tests/python/test_sparse_open3d.py tests/python/test_room_pose_icp.py
-      - name: Reconstruct matched real fr1_room meshes with known vs ICP-corrected training poses
+      - name: Reconstruct real fr1_room matched 25mm vs 18mm voxel Meshes
         env:
           PYTHONPATH: tools
           OPENBLAS_NUM_THREADS: '1'
           OMP_NUM_THREADS: '1'
         run: |
           python tools/tum_room_sparse_quality.py \
-            --work "$RUNNER_TEMP/tum-room-wide" \
-            --report-dir "$GITHUB_WORKSPACE/artifacts/tum-room-wide"
+            --fine-voxel \
+            --work "$RUNNER_TEMP/tum-room-fine-voxel" \
+            --report-dir "$GITHUB_WORKSPACE/artifacts/tum-room-fine-voxel"
       - name: Show actual quality result or reproducible failure
         if: always()
         run: |
-          if [ -f artifacts/tum-room-wide/SUMMARY.md ]; then
-            cat artifacts/tum-room-wide/SUMMARY.md >> "$GITHUB_STEP_SUMMARY"
+          if [ -f artifacts/tum-room-fine-voxel/SUMMARY.md ]; then
+            cat artifacts/tum-room-fine-voxel/SUMMARY.md >> "$GITHUB_STEP_SUMMARY"
           fi
       - name: Retain actual colored meshes, 3+2 images, metrics or failure receipt
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: tum-room-wide-${{ github.run_id }}
-          path: artifacts/tum-room-wide/
+          name: tum-room-fine-voxel-${{ github.run_id }}
+          path: artifacts/tum-room-fine-voxel/
           if-no-files-found: warn
           retention-days: 14
