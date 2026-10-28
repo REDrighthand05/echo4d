@@ -1,0 +1,87 @@
+{
+  "experiment": "TUM fr1_xyz known-metric-pose RGB stereo ablation",
+  "date_utc": "2026-10-28",
+  "source_url": "https://cvg.cit.tum.de/rgbd/dataset/freiburg1/rgbd_dataset_freiburg1_xyz.tgz",
+  "source_archive_sha256": "a0236d97b8c30cd93b653656d2b6c293ff7c982a4130ef2a1a8beecdb124ef98",
+  "inputs_retained": [
+    "original 640x480 RGB",
+    "calibration",
+    "known metric camera poses",
+    "depth.txt timestamps solely to freeze frame selection"
+  ],
+  "inputs_removed": [
+    "measured depth pixels",
+    "preexisting Mesh"
+  ],
+  "split": "48 train / 12 frozen holdout; no holdout used in matching",
+  "variants": [
+    {
+      "name": "320x240 stereo, 20 anchors",
+      "commit": "95a21669fe6ea6d5a340eeeea0c2d8949a7bf540",
+      "run": "https://github.com/REDrighthand05/echo4d/actions/runs/40605393425",
+      "saved_frames": 14,
+      "mesh_sha256": "aba24dc4de5da5da20b76169083d1e3cd1e5f6d23b10328060841ed5f9845d83",
+      "faces": 2334,
+      "largest_component_face_fraction": 0.532,
+      "rendered_heldout_pixels": [
+        42948,
+        36686,
+        26887
+      ]
+    },
+    {
+      "name": "native 640x480 stereo, native TSDF",
+      "commit": "913ce5a9d2c5adb602b8b68312f9cfb9432c800e",
+      "run": "https://github.com/REDrighthand05/echo4d/actions/runs/40612324915",
+      "saved_frames": 14,
+      "mesh_sha256": "2c5a857cecb8dfdb27776d55334edba568bf64b0a0e16424fd26492920207a1e",
+      "faces": 1173,
+      "largest_component_face_fraction": 0.6,
+      "note": "Higher image resolution did not fix fragmentation; pixel coverage is at a different raster size."
+    },
+    {
+      "name": "native 640x480 stereo, conservative 320x240 fusion",
+      "commit": "24439040ecb0755a3b59dbb795f26549c01013cd",
+      "run": "https://github.com/REDrighthand05/echo4d/actions/runs/40612571691",
+      "saved_frames": 14,
+      "mesh_sha256": "72d7bcca62281b4b6c9b7d5ab4add7905869fab468c3b8ccfe2c3f70eaa514bb",
+      "faces": 1410,
+      "largest_component_face_fraction": 0.639,
+      "note": "Better than native direct TSDF, still worse than 320 control in overall visible continuity."
+    },
+    {
+      "name": "320x240 stereo, 48 anchor budget",
+      "commit": "8d324f778a0b9caf3431f0fd20a0c428cba73274",
+      "replay_commit": "65f5c4f0e2b90f74463d60bffb0e82cab0fdb072",
+      "run": "https://github.com/REDrighthand05/echo4d/actions/runs/40613015971",
+      "saved_frames": 24,
+      "eligible_anchors": 31,
+      "mesh_sha256": "fb96a00306704d777b30c6515b783b819ac6d1a167719cf87889ea1aac952b00",
+      "faces": 3985,
+      "largest_component_face_fraction": 0.667,
+      "rendered_heldout_pixels": [
+        53070,
+        47396,
+        34599
+      ],
+      "note": "Same raster as 20-anchor control; more scene coverage, but visible gaps and disconnected patches remain."
+    }
+  ],
+  "fixed_visual_camera_indices": [
+    4,
+    24,
+    55
+  ],
+  "extra_views": [
+    "free-a",
+    "free-b"
+  ],
+  "mesh_connectivity_check": "Downloaded real PLY; trimesh 4.11.1 split(only_watertight=False). Component fraction is diagnostic, not accuracy.",
+  "result": "GEOMETRY_VISUAL_FAIL",
+  "independent_surface_truth": false,
+  "human_74_acceptance": false,
+  "historical_desk_v2_fail": "16.7779 cm > frozen 15 cm threshold, unchanged",
+  "archive_replay": "Actions 40613015971 includes actual inferred depth arrays, original source indexes, known poses, manifest and Mesh; artifact expires, reproduce from official pinned archive.",
+  "replay_command": "python tools/tum_rgb_stereo.py --work /tmp/tum-rgb-stereo-new --report-dir artifacts/tum-rgb-stereo --stereo-width 320 --fusion-width 320 --max-anchors 48",
+  "next": "Improve RGB correspondence and multi-view support; evaluate continuous tabletop/walls/room rather than face count or CI."
+}
