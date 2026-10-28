@@ -1,0 +1,101 @@
+{
+  "experiment": "tum-fr1_xyz-known-pose-rgb-local-depth-consensus-20261028",
+  "evidence_level": "E3 actual TUM RGB MVS to Mesh; no independent surface truth, no #74 acceptance",
+  "inputs": {
+    "dataset": "TUM fr1_xyz",
+    "official_archive": "https://cvg.cit.tum.de/rgbd/dataset/freiburg1/rgbd_dataset_freiburg1_xyz.tgz",
+    "source_archive_sha256": "a0236d97b8c30cd93b653656d2b6c293ff7c982a4130ef2a1a8beecdb124ef98",
+    "source_rgb_resolution": [
+      640,
+      480
+    ],
+    "algorithm_rgb_resolution": [
+      320,
+      240
+    ],
+    "retained": [
+      "observed RGB",
+      "measured metric camera poses",
+      "camera calibration",
+      "depth.txt timestamps for frozen selection"
+    ],
+    "removed": [
+      "sensor depth pixel values",
+      "prior Mesh"
+    ],
+    "sensor_depth_png_files_opened": 0,
+    "train": 48,
+    "holdout": 12,
+    "source_views_per_anchor": 4,
+    "inverse_depth_planes": 64
+  },
+  "method": {
+    "name": "observed RGB-guided local depth consensus after adaptive ZNCC MVS",
+    "change": "For existing positive RGB-inferred Z, 2 iterations of 3x3 RGB and depth agreeing neighbour averaging (minimum 3 agreeing neighbours, bounded 0.045m step); remove isolated unsupported Z, do not fill unknown",
+    "pairing": "top2",
+    "window_mode": "adaptive",
+    "visibility_mode": "soft",
+    "depth_regularization": "rgb-consensus",
+    "newly_filled_pixels": 0,
+    "removed_isolated_training_pixels": 83261,
+    "adjusted_training_pixels": 822730,
+    "depth_source": "RGB-inferred, metric scale from measured poses"
+  },
+  "implementation_head": "3ac7bee256c65eff2a5b7df86072aa5f62f2c2ea",
+  "real_run": "https://github.com/REDrighthand05/echo4d/actions/runs/40683619547",
+  "verify": "https://github.com/REDrighthand05/echo4d/actions/runs/40683619329",
+  "tests": "24 synthetic/source tests passed in actual GitHub Actions",
+  "artifact": "https://github.com/REDrighthand05/echo4d/actions/runs/40683619547/artifacts/12813368579",
+  "artifact_zip_sha256": "86b560dfc8e426dfe79ce433c8bbbc1e24b1203b15d87fb3737cce1340d019dc",
+  "command": "python tools/tum_plane_sweep.py --work <empty-work> --report-dir <empty-report> --max-anchors 48 --max-sources 4 --planes 64 --pairing top2 --source-visibility --visibility-mode soft --window-mode adaptive --depth-regularization rgb-consensus",
+  "baseline": {
+    "method": "adaptive observed 5x5/11x11 RGB ZNCC without local depth consensus",
+    "run": "https://github.com/REDrighthand05/echo4d/actions/runs/40676850283",
+    "mesh_sha256": "4254965ba5a6267ae87d7dea7a7ec6eadcd9c3917f17082847a5ddc382393bb4",
+    "vertices": 8359,
+    "triangles": 9367,
+    "edge_connected_face_components": 774,
+    "largest_edge_connected_face_fraction": 0.3855022952919825,
+    "coverage_fixed_five_poses": {
+      "heldout-4": 44369,
+      "heldout-24": 39170,
+      "heldout-55": 29764,
+      "free-a": 33667,
+      "free-b": 27561
+    }
+  },
+  "result": {
+    "status": "mesh_generated_unreviewed",
+    "mesh_sha256": "3cc08e890c1fed00f55d6fde1d4251eb3c997f51f5d6a7f370fb0a8d7a2cb258",
+    "vertices": 7540,
+    "triangles": 8419,
+    "edge_connected_face_components": 702,
+    "largest_edge_connected_face_fraction": 0.42273429148354913,
+    "coverage_fixed_five_poses": {
+      "heldout-4": 44579,
+      "heldout-24": 39302,
+      "heldout-55": 29776,
+      "free-a": 32038,
+      "free-b": 25469
+    }
+  },
+  "local_frozen_render": {
+    "description": "Both actual Mesh PLYs rasterized at same old baseline 3 heldout + 2 free camera matrices, original observed PLY vertex colors; no AI completion",
+    "comparison_png_sha256": "53c7282eea7d12eda16fc578efe0f37912ba11d2b8b5d97c16e01e4625df284a",
+    "new_rotatable_glb_sha256": "27e06797c7629a7f49d8af8dcb6f24351ceb9474e94935b499f8a5fd700ae3ab",
+    "limitation": "Local PNG/GLB were generated and SHA-pinned but not committed to GitHub; official 640x480 photos are not redistributed"
+  },
+  "high_information_same_scene": {
+    "method": "measured RGB-D + measured poses, no prior Mesh",
+    "run": "https://github.com/REDrighthand05/echo4d/actions/runs/40599164123",
+    "baseline_covered_pixels": {
+      "heldout-4": 76211,
+      "heldout-24": 76024,
+      "heldout-55": 70671,
+      "free-a": 52323,
+      "free-b": 33740
+    }
+  },
+  "assessment": "FAIL: edge-connected components 774 to 702, largest fraction 38.55% to 42.27%; heldout coverage only +0.04% to +0.47%, two frozen free views lose 4.84% and 7.59%. Visually still discontinuous floating fragments; table/floor/walls not reliably recognizable. No life replay or #74 PASS.",
+  "next": "Do not further tune cosmetic filtering. Replace local Z smoothing with cross-view surface consistency or learned depth source under measured pose, then compare to RGB-D baseline at frozen five views. First obtain clear original 640x480 RGB beside model views."
+}
