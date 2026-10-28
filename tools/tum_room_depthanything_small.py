@@ -153,7 +153,7 @@ def build_manifest_da2(imported, target, report):
     data["notes"] = (
         "DA2 Small relative-depth prediction; metric scale from independent "
         "known-pose RGB ZNCC anchors, never measured sensor depth")
-    manifest.write_text(json.dumps(data, indent=2, allow_nan=False) + "\\n")
+    manifest.write_text(json.dumps(data, indent=2, allow_nan=False) + "\n")
     return manifest
 
 
@@ -182,7 +182,7 @@ def run_with_model(args, report):
     fusion["geometry_source"] = (
         "Depth Anything V2 Small relative depth with RGB-known-pose metric fit; no sensor Z")
     fusion["mesh_sha256"] = file_sha256(ply)
-    fusion_path.write_text(json.dumps(fusion, indent=2, allow_nan=False) + "\\n")
+    fusion_path.write_text(json.dumps(fusion, indent=2, allow_nan=False) + "\n")
     report["fusion"] = fusion
     report["new_mesh"]["sha256"] = file_sha256(ply)
     previous_dir = os.environ.get("ECHO_PREVIOUS_ZNCC")
