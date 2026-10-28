@@ -6,6 +6,8 @@ on:
       - research/highres-rgbd-tsdf-quality-20261028
     paths:
       - 'tools/tum_room_sparse_quality.py'
+      - 'tools/room_pose_icp.py'
+      - 'tests/python/test_room_pose_icp.py'
       - 'tests/python/test_tum_room_sparse_quality.py'
       - '.github/workflows/tum-room-full-loop-sparse.yml'
   workflow_dispatch:
@@ -38,8 +40,8 @@ jobs:
           PYTHONPATH: tools
           OPENBLAS_NUM_THREADS: '1'
           OMP_NUM_THREADS: '1'
-        run: python -m pytest -q tests/python/test_tum_room_sparse_quality.py tests/python/test_sparse_open3d.py
-      - name: Reconstruct two real fr1_room meshes from full-resolution measured RGB-D
+        run: python -m pytest -q tests/python/test_tum_room_sparse_quality.py tests/python/test_sparse_open3d.py tests/python/test_room_pose_icp.py
+      - name: Reconstruct matched real fr1_room meshes with known vs ICP-corrected training poses
         env:
           PYTHONPATH: tools
           OPENBLAS_NUM_THREADS: '1'
