@@ -1,0 +1,104 @@
+{
+  "experiment": "tum-fr1_xyz-fixed48-rgb-inferred-short-bridge-20261029",
+  "status": "FAIL_visual_and_added_surface_accuracy",
+  "branch": "research/mvs-short-bridge-support-20261029",
+  "tested_head": "0454776c77d9578696a56e49e691af18cd823bf9",
+  "real_run_url": "https://github.com/REDrighthand05/echo4d/actions/runs/40740223955",
+  "real_artifact_url": "https://github.com/REDrighthand05/echo4d/actions/runs/40740223955/artifacts/12839676185",
+  "source": {
+    "dataset": "TUM RGB-D fr1_xyz, CC BY 4.0",
+    "archive_sha256": "a0236d97b8c30cd93b653656d2b6c293ff7c982a4130ef2a1a8beecdb124ef98",
+    "original_rgb": [
+      640,
+      480
+    ],
+    "fusion_rgb": [
+      320,
+      240
+    ],
+    "frames": 48,
+    "poses": "measured metric",
+    "depth_maps": "48 frozen RGB-inferred Plane-Sweep from run 40692184301",
+    "removed": [
+      "sensor depth during reconstruction",
+      "external prior Mesh"
+    ],
+    "posthoc_sensor_only": true
+  },
+  "algorithm": "2-view independent inferred-Z agreement at triangle centroid OR at 2/3 edge midpoints; additionally allow 1-2 face paths with independent midpoint evidence that join separate strong components. Preserve 8419 original same-volume TSDF faces.",
+  "control": {
+    "mesh_sha256": "b3b9c430869d68091159fbcf2427f6c5e90824a316f511875e1d32fe2d428aae",
+    "faces": 9273,
+    "edge_connected_components": 649,
+    "largest_edge_component_faces": 3906
+  },
+  "new": {
+    "mesh_sha256": "e868d829e27584e88ded280ad813e1400702798814c427c3dcbac13fe03765b6",
+    "faces": 9462,
+    "edge_connected_components": 619,
+    "largest_edge_component_faces": 3985,
+    "original_faces_preserved": 8419,
+    "bridge_faces_retained": 42
+  },
+  "frozen_five": [
+    {
+      "view": "heldout-4",
+      "old": 46620,
+      "new": 46781
+    },
+    {
+      "view": "heldout-24",
+      "old": 41278,
+      "new": 41388
+    },
+    {
+      "view": "heldout-55",
+      "old": 31207,
+      "new": 31305
+    },
+    {
+      "view": "free-a",
+      "old": 32748,
+      "new": 32898
+    },
+    {
+      "view": "free-b",
+      "old": 26949,
+      "new": 27322
+    }
+  ],
+  "sensor_depth_posthoc_only": {
+    "new_only_sensor_valid_pixels": 156,
+    "new_only_over_30cm_pixels": 94,
+    "new_only_over_30cm_fraction": 0.6025641025641025,
+    "per_heldout": [
+      {
+        "view": 4,
+        "pixels": 31,
+        "over30": 10
+      },
+      {
+        "view": 24,
+        "pixels": 41,
+        "over30": 33
+      },
+      {
+        "view": 55,
+        "pixels": 84,
+        "over30": 51
+      }
+    ],
+    "note": "Measured sensor Z was not opened until both Meshes were generated. This is not independent laser scan GT; sensor-invalid areas remain unknown."
+  },
+  "tests": {
+    "python_tests_passed": 19,
+    "workflow_conclusion": "success"
+  },
+  "visual_verdict": "FAIL: source desk/monitor recognizable, both actual Mesh free views severely fragmented; new coverage is mostly geometrically wrong where sensor-valid. Topological gain is NOT correct room recovery.",
+  "historical_fail": [
+    "PR88 unfiltered observed-edge adds 14.60% >30cm wrong new-only sensor-valid pixels",
+    "PR90 centroid filter breaks topology and loses coverage",
+    "This PR91 restores some bridges but 60.26% of its new-only sensor-valid pixels are >30cm wrong"
+  ],
+  "next_shortest_unblock": "Reject unsupported bridge additions using cross-view edge consistency and local surface orientation before accepting topology; hold frozen 48 RGB inferred depth maps and five poses. Do not tune to heldout sensor Z or optimize triangle count."
+}
