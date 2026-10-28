@@ -84,7 +84,7 @@ def save_comparison(path, photo, pixels, title):
     combined.save(path)
 
 
-def render_views(dataset, indices, transforms, intrinsic, mesh, destination):
+def render_views(dataset, review_indices, transforms, intrinsic, mesh, destination):
     from echo4d.model import Camera
     from tum_graph_visual import rasterize_vertex_rgb,look_at
     visual=destination/"visual"
@@ -100,7 +100,7 @@ def render_views(dataset, indices, transforms, intrinsic, mesh, destination):
     w,h,fx,fy,cx,cy=intrinsic
     camera=Camera(w,h,fx,fy,cx,cy).scaled(2)
     result=[]
-    for frame in (indices[0],indices[len(indices)//2],indices[-1]):
+    for frame in (review_indices[0],review_indices[len(review_indices)//2],review_indices[-1]):
         world_pose=np.linalg.inv(transforms[frame])
         image,occupied=rasterize_vertex_rgb(xyz,faces,rgb,camera,world_pose,near=.15,far=6.)
         with Image.open(dataset.color_paths[frame]) as file:
@@ -108,8 +108,8 @@ def render_views(dataset, indices, transforms, intrinsic, mesh, destination):
         name=f"photo-vs-mesh-{frame:05d}.png"
         save_comparison(visual/name,photo,image,"REAL RGB (left) / OBSERVED MESH (right)")
         result.append({"view":"real camera","file":"visual/"+name,"covered_pixels":occupied})
-    for i,(frame,dx) in enumerate(((indices[len(indices)//3],.35),
-                                  (indices[2*len(indices)//3],-.35)),1):
+    for i,(frame,dx) in enumerate(((review_indices[len(review_indices)//3],.35),
+                                  (review_indices[2*len(review_indices)//3],-.35)),1):
         anchor=np.linalg.inv(transforms[frame])
         eye=anchor[:3,3]+dx*anchor[:3,0]
         pose=look_at(eye,anchor[:3,3]+1.8*anchor[:3,2])
@@ -175,7 +175,9 @@ def run(kind, out, cache, budget, voxel):
         import shutil
         prior="PREEXISTING-PRIOR-"+supplied.name
         shutil.copy2(supplied,out/prior)
-    five=render_views(dataset,selected,extrinsics,intrinsic,result,out)
+    # Keep 360-frame baseline review cameras fixed when comparing denser fusion.
+    fixed_review=spaced_real_frames(source_frame_count,min(360,source_frame_count))
+    five=render_views(dataset,fixed_review,extrinsics,intrinsic,result,out)
     report={"scene":("Redwood real bedroom" if kind=="bedroom" else "Redwood 5-frame partial smoke"),
             "source":"Open3D public real RGB-D","geometry_engine":"stock Open3D 0.19 ScalableTSDFVolume",
             "rgbd_frame_count":source_frame_count,"frames_used":len(selected),
@@ -184,6 +186,7 @@ def run(kind, out, cache, budget, voxel):
             "trajectory_poses":len(traj.parameters),
             "raw_resolution":list(intrinsic[:2]),"logged_calibration":intrinsic,
             "mesh_triangles":len(result.triangles),"colored_glb":"recorded-rgbd-preview.glb",
+            "review_frame_indices":[fixed_review[0],fixed_review[len(fixed_review)//2],fixed_review[-1]],
             "prior_file_NOT_USED_IN_RECONSTRUCTION":prior,"visuals":five,
             "independent_geometry_accuracy":"not tested","issue_74":"FAIL unchanged"}
     (out/"results.json").write_text(json.dumps(report,indent=2)+"\n")
