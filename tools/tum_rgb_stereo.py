@@ -23,6 +23,7 @@ from echo4d.model import Camera, DataError, file_sha256, safe_path
 from echo4d.tum import read_rows, interpolate_pose, nearest_timestamp
 from echo4d.holdout import read_echo_ply, rasterize_mesh_depth
 from echo4d.known_pose_stereo import infer_stereo, rectify_geometry
+from echo4d.stereo_crossview import reject_crossview_foreground
 from echo4d.output import output_transaction, write_json
 from tum_public_roundtrip import URL, ROOT, PINNED_ARCHIVE_SHA256, PINNED_ARCHIVE_BYTES, BOUNDS, download, extract
 
@@ -279,7 +280,8 @@ def choose_contiguous_stereo_depth(depths: list[np.ndarray]) -> tuple[np.ndarray
 def build_stereo_recording(frames: list[dict], target: Path, report: dict,
                            *, stereo_width: int = 640, fusion_width: int = 320,
                            max_anchors: int = 48, merge_backups: bool = False,
-                           select_best_backup: bool = False) -> Path:
+                           select_best_backup: bool = False,
+                           cross_view_consistency: bool = False) -> Path:
     if merge_backups and select_best_backup:
         raise DataError('Choose consensus or best-backup selection, not both')
     camera, _stride, num_disparities = stereo_resolution(stereo_width)
@@ -291,6 +293,7 @@ def build_stereo_recording(frames: list[dict], target: Path, report: dict,
     report['stereo_num_disparities'] = num_disparities
     report['merge_backups'] = merge_backups
     report['select_best_backup'] = select_best_backup
+    report['cross_view_consistency'] = cross_view_consistency
     pairs = select_pairs(frames, camera, max_pairs=max_anchors)
     report['anchor_budget'] = max_anchors
     report['eligible_anchor_count'] = len({left for left, _ in pairs})
@@ -304,6 +307,7 @@ def build_stereo_recording(frames: list[dict], target: Path, report: dict,
     entries, pair_evidence = [], []
     accepted_left: set[int] = set()
     pending_depths: dict[int, list[np.ndarray]] = {}
+    saved_left_indices: list[int] = []
     for left_idx, right_idx in pairs:
         if left_idx in accepted_left and not (merge_backups or select_best_backup):
             continue  # Legacy control: first usable pair wins.
@@ -351,6 +355,7 @@ def build_stereo_recording(frames: list[dict], target: Path, report: dict,
         entries.append({'t':float(left['t_s']-frames[0]['t_s']),
                         'cameraToWorld':left['pose'].flatten(order='F').tolist(),
                         'color':f'color/{n:05d}.png','depth':f'depth/{n:05d}.npy'})
+        saved_left_indices.append(left_idx)
         item['saved_depth_sha256']=file_sha256(target / 'depth' / f'{n:05d}.npy')
         item['reprojected_valid_pixels']=int(np.count_nonzero(projected))
         accepted_left.add(left_idx)
@@ -371,10 +376,37 @@ def build_stereo_recording(frames: list[dict], target: Path, report: dict,
             entries.append({'t': float(left['t_s'] - frames[0]['t_s']),
                             'cameraToWorld': left['pose'].flatten(order='F').tolist(),
                             'color': f'color/{n:05d}.png', 'depth': f'depth/{n:05d}.npy'})
+            saved_left_indices.append(left_idx)
             accepted_left.add(left_idx)
     report['pairs']=pair_evidence
     if len(entries)<6:
         raise DataError(f'Only {len(entries)} RGB-derived depth frames have >=100 valid pixels')
+    if cross_view_consistency:
+        # Only selected training anchors; no holdout RGB/depth or sensor Z.
+        # Sort by actual frame index so adjacent observations are compared.
+        order = sorted(range(len(entries)), key=lambda k: saved_left_indices[k])
+        ordered_depths = [np.load(target / entries[k]['depth'], allow_pickle=False)
+                          for k in order]
+        ordered_poses = [frames[saved_left_indices[k]]['pose'] for k in order]
+        filtered, diagnostics = reject_crossview_foreground(
+            ordered_depths, ordered_poses, fusion_camera)
+        receipts = []
+        for pos, k in enumerate(order):
+            depth_path = target / entries[k]['depth']
+            old_sha = file_sha256(depth_path)
+            np.save(depth_path, filtered[pos], allow_pickle=False)
+            receipts.append({'left_index': saved_left_indices[k],
+                             'before_sha256': old_sha,
+                             'after_sha256': file_sha256(depth_path),
+                             **diagnostics[pos]})
+        report['cross_view_filter'] = {
+            'rule': 'reject uncorroborated nearer-than-neighbor RGB-inferred Z; preserve occluded and unknown',
+            'neighbor_radius': 2, 'tolerance_m': 0.12,
+            'rejected_pixels': sum(x['rejected_pixels'] for x in receipts),
+            'frames_with_100_pixels': sum(np.count_nonzero(d) >= 100 for d in filtered),
+            'per_training_frame': receipts}
+        if report['cross_view_filter']['frames_with_100_pixels'] < 6:
+            raise DataError('Cross-view filtering left fewer than six usable training frames')
     entries.sort(key=lambda x:x['t'])
     data={'version':'echo-dataset-1','source':'recorded','units':'meters',
           'name':'TUM RGB stereo, known GT poses, inferred depths',
@@ -443,7 +475,8 @@ def execute(args: argparse.Namespace, report: dict) -> None:
                                     fusion_width=args.fusion_width,
                                     max_anchors=args.max_anchors,
                                     merge_backups=args.merge_backups,
-                                    select_best_backup=args.select_best_backup)
+                                    select_best_backup=args.select_best_backup,
+                                    cross_view_consistency=args.cross_view_consistency)
     report['archived_inputs'] = archive_stereo_inputs(
         manifest, frames, work/'dataset'/ROOT, args.report_dir/'inputs')
     target=args.report_dir/'reconstruction'
@@ -477,12 +510,15 @@ def main(argv=None):
                    help='Use all valid train-only stereo backup baselines per anchor; reject conflicting overlap')
     p.add_argument('--select-best-backup', action='store_true',
                    help='Choose the most spatially contiguous train-only RGB match per anchor')
+    p.add_argument('--cross-view-consistency', action='store_true',
+                   help='Reject inferred foreground contradicted by nearby train-only views')
     args=p.parse_args(argv)
     args.report_dir.mkdir(parents=True,exist_ok=True)
     report={'experiment':'tum-xyz-known-pose-RGB-stereo-no-measured-depth-v1',
             'status':'running','started_utc':datetime.now(timezone.utc).isoformat(),
             'checkout_sha':os.environ.get('GITHUB_SHA'), 'source_url':URL,
             'input_removed':'measured depth maps from reconstruction',
+            'cross_view_consistency_enabled':args.cross_view_consistency,
             'stereo_candidate_fusion':('train-only multi-baseline agreement' if args.merge_backups
                                        else 'train-only largest-contiguous-backup' if args.select_best_backup
                                        else 'first-valid control'),
