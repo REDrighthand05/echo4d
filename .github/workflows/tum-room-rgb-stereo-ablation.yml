@@ -1,0 +1,84 @@
+name: TUM real room RGB stereo known-pose depth ablation
+
+on:
+  push:
+    branches:
+      - research/room-rgb-stereo-known-pose-20261029
+    paths:
+      - 'tools/tum_room_rgb_stereo_ablation.py'
+      - 'tests/python/test_tum_room_rgb_stereo_ablation.py'
+      - '.github/workflows/tum-room-rgb-stereo-ablation.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: room-rgb-stereo-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  real-room-mesh-ablation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: requirements.lock
+      - name: Install pinned CPU geometry and image stereo libraries
+        run: |
+          python -m pip install -r requirements.lock
+          python -m pip install --no-deps -e .
+          python -m pip install 'open3d==0.19.0' 'opencv-python-headless==4.12.0.88' 'trimesh==4.11.1'
+      - name: Unit-test calibrated RGB stereo geometry
+        env:
+          PYTHONPATH: tools
+          OPENBLAS_NUM_THREADS: '1'
+          OMP_NUM_THREADS: '1'
+        run: |
+          python -m py_compile tools/tum_room_rgb_stereo_ablation.py
+          python -m pytest -q tests/python/test_tum_room_rgb_stereo_ablation.py tests/python/test_tum_room_sparse_quality.py
+      - name: Recover same-room measured-depth Mesh as frozen comparison only
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/room-highinfo"
+          gh run download 40750777392 --repo "$GITHUB_REPOSITORY" \
+            --name tum-room-dense-120-40750777392 \
+            --dir "$RUNNER_TEMP/room-highinfo"
+          test -s "$RUNNER_TEMP/room-highinfo/room-96-fine-wide/mesh.ply"
+          test -s "$RUNNER_TEMP/room-highinfo/room-sparse-quality-report.json"
+      - name: Real room RGB stereo inferred depth and Open3D Mesh
+        env:
+          PYTHONPATH: tools
+          OPENBLAS_NUM_THREADS: '1'
+          OMP_NUM_THREADS: '1'
+        run: |
+          python tools/tum_room_rgb_stereo_ablation.py \
+            --work "$RUNNER_TEMP/tum-room-rgb-stereo" \
+            --baseline "$RUNNER_TEMP/room-highinfo" \
+            --report-dir "$GITHUB_WORKSPACE/artifacts/room-rgb-stereo"
+      - name: Report actual Mesh or failure, never visual PASS
+        if: always()
+        run: |
+          if [ -f artifacts/room-rgb-stereo/report.json ]; then
+            python - <<'PY'
+          import json
+          r=json.load(open('artifacts/room-rgb-stereo/report.json'))
+          print('STATUS',r['status'],'NEW_MESH',r.get('new_mesh'),'ERROR',r.get('error'))
+          print('REMOVED',r['removed_from_reconstruction'])
+          print('FIVE_VIEWS',len(r.get('visual',[])),'ISSUE_74',r['issue_74'])
+          PY
+          fi
+      - name: Preserve real meshes, GLBs, five views, report or failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tum-room-rgb-stereo-ablation-${{ github.run_id }}
+          path: artifacts/room-rgb-stereo/
+          if-no-files-found: warn
+          retention-days: 14
