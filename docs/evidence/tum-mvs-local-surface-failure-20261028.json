@@ -93,5 +93,31 @@
     "local_lost_pixels": 1611
   },
   "conclusion": "Local source support reduces training depth errors but fails to improve heldout false-surface fraction or Mesh continuity. Do not promote based on train-only improvement; visual #74 FAIL.",
-  "next": "Change the depth-to-TSDF integration and free-view continuity rather than adding more local crossview pixel filters; preserve old and new real Mesh and 3+2 frozen views."
+  "next": "Prioritize real depth-to-TSDF integration or an alternative geometry fusion mechanism; no more local source-Z threshold tuning until coherent surfaces are visible.",
+  "latest_occlusion_revision": {
+    "code_head": "8252e320c77dbea741766f652c1f3b78a1cdf891",
+    "run": "https://github.com/REDrighthand05/echo4d/actions/runs/40702275036",
+    "artifact": "https://github.com/REDrighthand05/echo4d/actions/runs/40702275036/artifacts/12821658337",
+    "mesh_sha256": "8bfa9d848a39b0c13fc3ce306ab69da1849850cdb5bdd71f06c21402ebe541aa",
+    "glb_sha256": "ae70178e13497543fc08b0adcf24a2f875b014b2bae7170cc578bc54c48fe416",
+    "triangles": 8425,
+    "components": 700,
+    "largest_component_fraction": 0.3861127596439169,
+    "covered_pixels": [
+      45477,
+      40000,
+      30490,
+      31975,
+      26800
+    ],
+    "train_new_only_measured_pixels": 285792,
+    "train_new_only_mae_m": 0.09455053182761995,
+    "train_new_only_over_30cm_fraction": 0.055452916806628595,
+    "heldout_new_only_measured_pixels": 3359,
+    "heldout_new_only_mae_m": 0.12022037062839441,
+    "heldout_new_only_over_30cm_fraction": 0.08306043465317059,
+    "heldout_gained_pixels": 3359,
+    "heldout_lost_pixels": 1621,
+    "conclusion": "Fewer large depth errors among newly covered heldout pixels than prior naive crossview (8.31% vs 9.70% >30cm), but no coherent Mesh gain: largest component 38.61% vs no-crossview 42.27%. Visual FAIL."
+  }
 }
