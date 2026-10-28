@@ -144,6 +144,7 @@ def select_training(manifest: dict, *, baseline: int = BASE_FRAMES,
 def render_five(dataset: Path, imported: Path, target: Path, *, local_truncation: bool = False) -> list[dict]:
     rec = load_recording(imported / "recording.json")
     assoc = json.loads((imported / "association.json").read_text(encoding="utf8"))
+    tag = "local-edge" if local_truncation else "bilateral"
     keys = ("desk-96-wide", "desk-96-local-edge" if local_truncation else "desk-96-bilateral")
     meshes = {}
     for key in keys:
@@ -164,7 +165,7 @@ def render_five(dataset: Path, imported: Path, target: Path, *, local_truncation
             original = raw.convert("RGB").copy()
         views = [rasterize_vertex_rgb(*meshes[key], camera, pose,
                  near=.15, far=MAX_DEPTH_M)[0] for key in keys]
-        name = f"heldout-{i:03d}-desk-{"local-edge" if local_truncation else "bilateral"}-ab.png"
+        name = f"heldout-{i:03d}-desk-{tag}-ab.png"
         sheet(original, *views, visual / name, f"Real TUM fr1_desk camera {i}",
               ("96 views / 12cm TSDF", "7.5cm local edge / 12cm interior" if local_truncation else "12cm TSDF / bilateral 3cm"))
         images.append({"kind": "heldout_camera", "index": i, "name": name,
@@ -179,7 +180,7 @@ def render_five(dataset: Path, imported: Path, target: Path, *, local_truncation
         pose = look_at(eye, target_point)
         renders = [rasterize_vertex_rgb(*meshes[key], camera, pose,
                    near=.15, far=10.) for key in keys]
-        name = f"free-{i}-desk-{"local-edge" if local_truncation else "bilateral"}-ab.png"
+        name = f"free-{i}-desk-{tag}-ab.png"
         sheet(None, *[render[0] for render in renders], visual / name,
               f"Real TUM desk shifted free camera {i}",
               ("96 views / 12cm TSDF", "7.5cm local edge / 12cm interior" if local_truncation else "12cm TSDF / bilateral 3cm"))
@@ -263,7 +264,10 @@ def main() -> int:
                      "max_depth_m": MAX_DEPTH_M,
                      "variants": {"desk-96-wide": {"truncation_m": 0.12, "depth_smooth_sigma_m": 0.0},
                                   "desk-96-bilateral": {"truncation_m": 0.12,
-                                      "depth_smooth_sigma_m": 0.03}}},
+                                      "depth_smooth_sigma_m": 0.03},
+                                  "desk-96-local-edge": {"truncation_m": 0.12,
+                                      "local_edge_truncation_m": 0.075,
+                                      "depth_smooth_sigma_m": 0.0}}},
         "independent_surface_truth": "not_available",
         "human_visual_review": "not_performed",
         "issue_74": "FAIL / NOT ACCEPTED",
