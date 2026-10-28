@@ -1,0 +1,70 @@
+{
+  "experiment": "tum-fr1-room-knownpose-rgb-zncc-uniqueness-v1",
+  "status": "VISUAL_FAIL",
+  "tested_checkout": "018f5e08e38d699fdf09bede680002e70196421b",
+  "run_url": "https://github.com/REDrighthand05/echo4d/actions/runs/40775863011",
+  "artifact_url": "https://github.com/REDrighthand05/echo4d/actions/runs/40775863011/artifacts/12854203354",
+  "workflow_conclusion": "success",
+  "synthetic_tests": "11 passed",
+  "source_archive_sha256": "5ace47a1d2e53696bc939a84999293a04a7226958e848a609666691fd3cc38da",
+  "retained": [
+    "TUM fr1_room 640x480 original RGB (320x240 inference)",
+    "96 fixed known metric training poses",
+    "calibrated camera intrinsics"
+  ],
+  "removed_from_candidate": [
+    "measured sensor depth pixel values",
+    "prior existing Mesh"
+  ],
+  "caveats": [
+    "Importer still uses sensor depth timestamps for association",
+    "Metric scale is inherited from known TUM camera translation, not estimated from RGB",
+    "Measured and old RGB Mesh are read only for posthoc A/B; high-info fusion uses 96 frames and finer voxels",
+    "No GPU or pretrained weights; not a single RGB video solution"
+  ],
+  "depth_producer": "two distinct camera 7x7 grayscale patch ZNCC costs, best two source votes, >0.16 log-depth separated competitor, uniqueness margin >0.08",
+  "inferred_depth_frames": 32,
+  "inferred_valid_depth_pixels": 688732,
+  "ambiguous_matched_pixels": 397551,
+  "new_mesh": {
+    "sha256": "04e976298abc375652a307e30cf46b393e11452426837ccd4270bd9b842bcaeb",
+    "vertices": 15638,
+    "faces": 16236,
+    "components": 1569,
+    "largest_component_faces": 4498,
+    "largest_component_face_fraction": 0.2770386794777039
+  },
+  "previous_rgb_coherence": {
+    "sha256": "9fb01d54dedd9247c49d4511510fc7702aada3113f6375cff0c4e785e122886c",
+    "faces": 46463,
+    "components": 6707,
+    "largest_component_faces": 2546,
+    "largest_component_face_fraction": 0.05479628952069389
+  },
+  "measured_highinfo_mesh_sha256": "65b8b25e5f8d46f494acbd1e4ab905fd7b5415e885705c104c00cee75704c741",
+  "five_view_coverage": {
+    "view": [
+      "heldout-7",
+      "heldout-92",
+      "heldout-162",
+      "free-3",
+      "free-4"
+    ],
+    "old": [
+      19493,
+      16060,
+      47774,
+      33873,
+      33706
+    ],
+    "new": [
+      9730,
+      8355,
+      44651,
+      29639,
+      32513
+    ]
+  },
+  "visual_review": "Inspected actual heldout-7, heldout-92, heldout-162, free-3 and free-4 PNG. ZNCC removes substantial noisy fragments and grows the largest connected piece, but many true surfaces disappear; desk and monitor are not reliably identifiable in the candidate from independent views. Measured-depth room remains recognizable. No #74 acceptance.",
+  "next_shortest_fix": "Stop tightening custom photometric filters. Prefer mature known-pose dense multiview or trained depth producer with executable weights/license, or keep measured-depth room as product baseline while RGB-only remains optional research."
+}
