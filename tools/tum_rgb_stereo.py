@@ -243,9 +243,45 @@ def fuse_stereo_candidate_depths(depths: list[np.ndarray]) -> tuple[np.ndarray, 
     }
 
 
+
+def choose_contiguous_stereo_depth(depths: list[np.ndarray]) -> tuple[np.ndarray, dict]:
+    """Choose one train-only RGB match with the largest contiguous observed patch.
+
+    A single baseline is selected, rather than unioning contradictory surfaces.
+    Largest 8-connected valid region wins; valid count breaks ties; earlier
+    candidate wins exact ties. No sensor depth, holdout, or geometry is filled.
+    """
+    from scipy.ndimage import label
+    if not 1 <= len(depths) <= 3:
+        raise DataError('Best-backup selection requires one to three candidates')
+    shape = depths[0].shape
+    if len(shape) != 2 or any(
+        not isinstance(d, np.ndarray) or d.shape != shape
+        or not np.issubdtype(d.dtype, np.number)
+        or not np.isfinite(d).all() or (d < 0).any() for d in depths
+    ):
+        raise DataError('Best-backup depths must be finite, nonnegative, same-size arrays')
+    scores = []
+    for depth in depths:
+        valid = depth > 0
+        components, count = label(valid, structure=np.ones((3, 3), dtype=bool))
+        sizes = np.bincount(components[valid], minlength=count + 1)
+        scores.append([int(sizes.max()) if count else 0, int(valid.sum())])
+    best = max(range(len(depths)), key=lambda i: (scores[i][0], scores[i][1], -i))
+    return depths[best], {
+        'candidate_count': len(depths),
+        'selected_candidate_index': best,
+        'candidate_support_scores_largest_component_then_pixels': scores,
+        'selected_valid_pixels': scores[best][1],
+    }
+
+
 def build_stereo_recording(frames: list[dict], target: Path, report: dict,
                            *, stereo_width: int = 640, fusion_width: int = 320,
-                           max_anchors: int = 48, merge_backups: bool = False) -> Path:
+                           max_anchors: int = 48, merge_backups: bool = False,
+                           select_best_backup: bool = False) -> Path:
+    if merge_backups and select_best_backup:
+        raise DataError('Choose consensus or best-backup selection, not both')
     camera, _stride, num_disparities = stereo_resolution(stereo_width)
     fusion_camera, _fusion_stride, _ = stereo_resolution(fusion_width)
     if fusion_width > stereo_width:
@@ -254,6 +290,7 @@ def build_stereo_recording(frames: list[dict], target: Path, report: dict,
     report['stereo_algorithm_resolution'] = [camera.width, camera.height]
     report['stereo_num_disparities'] = num_disparities
     report['merge_backups'] = merge_backups
+    report['select_best_backup'] = select_best_backup
     pairs = select_pairs(frames, camera, max_pairs=max_anchors)
     report['anchor_budget'] = max_anchors
     report['eligible_anchor_count'] = len({left for left, _ in pairs})
@@ -268,7 +305,7 @@ def build_stereo_recording(frames: list[dict], target: Path, report: dict,
     accepted_left: set[int] = set()
     pending_depths: dict[int, list[np.ndarray]] = {}
     for left_idx, right_idx in pairs:
-        if left_idx in accepted_left and not merge_backups:
+        if left_idx in accepted_left and not (merge_backups or select_best_backup):
             continue  # Legacy control: first usable pair wins.
         left, right = frames[left_idx], frames[right_idx]
         a = load_stereo_rgb(left['rgb'], stereo_width)
@@ -302,9 +339,10 @@ def build_stereo_recording(frames: list[dict], target: Path, report: dict,
             projected = reduce_native_depth_for_fusion(projected)
         if np.count_nonzero(projected) < 100:
             continue
-        if merge_backups:
+        if merge_backups or select_best_backup:
             pending_depths.setdefault(left_idx, []).append(projected)
-            item['candidate_for_consensus'] = True
+            item['candidate_for_consensus'] = merge_backups
+            item['candidate_for_selection'] = select_best_backup
             continue
         n=len(entries)
         Image.fromarray(load_stereo_rgb(left['rgb'], fusion_width)).save(
@@ -316,11 +354,13 @@ def build_stereo_recording(frames: list[dict], target: Path, report: dict,
         item['saved_depth_sha256']=file_sha256(target / 'depth' / f'{n:05d}.npy')
         item['reprojected_valid_pixels']=int(np.count_nonzero(projected))
         accepted_left.add(left_idx)
-    if merge_backups:
-        report['anchor_consensus'] = []
+    if merge_backups or select_best_backup:
+        report['anchor_consensus' if merge_backups else 'anchor_selection'] = []
         for left_idx, candidates in sorted(pending_depths.items()):
-            fused, stats = fuse_stereo_candidate_depths(candidates)
-            report['anchor_consensus'].append({'left_index': left_idx, **stats})
+            fused, stats = (fuse_stereo_candidate_depths(candidates) if merge_backups
+                            else choose_contiguous_stereo_depth(candidates))
+            report['anchor_consensus' if merge_backups else 'anchor_selection'].append(
+                {'left_index': left_idx, **stats})
             if np.count_nonzero(fused) < 100:
                 continue
             left = frames[left_idx]
@@ -402,7 +442,8 @@ def execute(args: argparse.Namespace, report: dict) -> None:
                                     stereo_width=args.stereo_width,
                                     fusion_width=args.fusion_width,
                                     max_anchors=args.max_anchors,
-                                    merge_backups=args.merge_backups)
+                                    merge_backups=args.merge_backups,
+                                    select_best_backup=args.select_best_backup)
     report['archived_inputs'] = archive_stereo_inputs(
         manifest, frames, work/'dataset'/ROOT, args.report_dir/'inputs')
     target=args.report_dir/'reconstruction'
@@ -434,13 +475,17 @@ def main(argv=None):
                    help='Max fixed training anchors, never includes 12 frozen holdouts')
     p.add_argument('--merge-backups',action='store_true',
                    help='Use all valid train-only stereo backup baselines per anchor; reject conflicting overlap')
+    p.add_argument('--select-best-backup', action='store_true',
+                   help='Choose the most spatially contiguous train-only RGB match per anchor')
     args=p.parse_args(argv)
     args.report_dir.mkdir(parents=True,exist_ok=True)
     report={'experiment':'tum-xyz-known-pose-RGB-stereo-no-measured-depth-v1',
             'status':'running','started_utc':datetime.now(timezone.utc).isoformat(),
             'checkout_sha':os.environ.get('GITHUB_SHA'), 'source_url':URL,
             'input_removed':'measured depth maps from reconstruction',
-            'stereo_candidate_fusion':'train-only multi-baseline agreement' if args.merge_backups else 'first-valid control',
+            'stereo_candidate_fusion':('train-only multi-baseline agreement' if args.merge_backups
+                                       else 'train-only largest-contiguous-backup' if args.select_best_backup
+                                       else 'first-valid control'),
             'inputs_retained':['640x480 source RGB','TUM known metric poses','camera calibration',
                                'depth.txt timestamps for matching the frozen prior frame selection'],
             'quality':'not independent surface accuracy; no #74 acceptance'}

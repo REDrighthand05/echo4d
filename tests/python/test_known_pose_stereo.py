@@ -208,3 +208,36 @@ def test_multibaseline_conflicting_and_unobserved_depth_remain_unknown():
                 [a, np.full_like(a, np.nan)], [a, -np.ones_like(a)]):
         with pytest.raises(DataError):
             fuse_stereo_candidate_depths(bad)
+
+
+def test_best_backup_prefers_connected_observed_surface_over_scattered_pixels():
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'tools'))
+    from tum_rgb_stereo import choose_contiguous_stereo_depth
+    scattered = np.zeros((30, 30), np.float32)
+    scattered[::3, ::3] = 2.0  # 100 isolated pixels, largest component=1
+    continuous = np.zeros_like(scattered)
+    continuous[2:11, 2:11] = 3.0  # 81 connected pixels
+    small = np.zeros_like(scattered)
+    small[15:19, 15:19] = 4.0
+    chosen, stats = choose_contiguous_stereo_depth([scattered, continuous, small])
+    assert np.array_equal(chosen, continuous)
+    assert stats['selected_candidate_index'] == 1
+    assert stats['candidate_support_scores_largest_component_then_pixels'] == [
+        [1, 100], [81, 81], [16, 16]]
+    assert choose_contiguous_stereo_depth([continuous, continuous.copy()])[1][
+        'selected_candidate_index'] == 0
+
+
+def test_best_backup_rejects_invalid_or_incompatible_depth():
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'tools'))
+    from tum_rgb_stereo import choose_contiguous_stereo_depth
+    a = np.zeros((4, 4), np.float32)
+    for candidates in ([], [a] * 4, [a, a[:, :2]],
+                       [a, np.full_like(a, np.nan)],
+                       [a, -np.ones_like(a)]):
+        with pytest.raises(DataError):
+            choose_contiguous_stereo_depth(candidates)
