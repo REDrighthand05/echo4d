@@ -1,0 +1,66 @@
+{
+  "experiment": "TUM fr1_xyz RGB-only-depth, known-metric-pose backup-selection A/B",
+  "date_utc": "2026-10-28",
+  "purpose": "Recover recognizable observed surfaces, not optimize face count",
+  "source": {
+    "url": "https://cvg.cit.tum.de/rgbd/dataset/freiburg1/rgbd_dataset_freiburg1_xyz.tgz",
+    "sha256": "a0236d97b8c30cd93b653656d2b6c293ff7c982a4130ef2a1a8beecdb124ef98",
+    "original_rgb": "640x480",
+    "stereo_rgb": "320x240",
+    "train_frames": 48,
+    "frozen_holdout_frames": 12,
+    "actual_mesh_training_frames": 24,
+    "known_metric_camera_poses": true,
+    "measured_depth_pixels_used": false,
+    "existing_mesh_prior_used": false,
+    "depth_txt_timestamps_only_for_frozen_selection": true
+  },
+  "command": "python tools/tum_rgb_stereo.py --work <new-work-dir> --report-dir <new-report-dir> --stereo-width 320 --fusion-width 320 --max-anchors 48 --select-best-backup",
+  "baseline": {
+    "method": "three-backup pixelwise depth consensus",
+    "code_sha": "173f80684c854631f8737bcfbce93cfac4aaa021",
+    "run_url": "https://github.com/REDrighthand05/echo4d/actions/runs/40618156896",
+    "artifact_id": 12785204686,
+    "mesh_sha256": "359d55247b5573366882737cf843846ba4975a35fabb30847c87fc1e96b3716d",
+    "faces": 5077,
+    "connected_face_components": 272,
+    "largest_component_face_fraction": 0.634,
+    "covered_pixels": {
+      "heldout_4": 55558,
+      "heldout_24": 49570,
+      "heldout_55": 33534,
+      "free_a": 21328,
+      "free_b": 18191
+    }
+  },
+  "candidate": {
+    "method": "choose train-only backup with largest 8-connected valid depth region",
+    "code_sha": "87f7f70e4c4c42e924cd61279996f4c420426880",
+    "run_url": "https://github.com/REDrighthand05/echo4d/actions/runs/40623998876",
+    "artifact_id": 12789010626,
+    "artifact_status": "completed/success",
+    "verify_url": "https://github.com/REDrighthand05/echo4d/actions/runs/40623998823",
+    "verify_status": "completed/success 4/4 Linux/Windows Python 3.12/3.13",
+    "mesh_sha256": "9b1f7159a9eaf65b00afaf69ba49662d70d09542cb43a2caf6681e4a92a7bc54",
+    "faces": 4671,
+    "connected_face_components": 225,
+    "largest_component_face_fraction": 0.6256,
+    "covered_pixels": {
+      "heldout_4": 55942,
+      "heldout_24": 50657,
+      "heldout_55": 39576,
+      "free_a": 19573,
+      "free_b": 15669
+    }
+  },
+  "same_manifest_sha256": "143311fe82de370ee77b29dc50bab72140c2efe2c066c570a42679899d6e7f1b",
+  "assessment": "FAIL: fewer islands but slightly smaller dominant face fraction, both free-view coverage values decreased, visually fragmented room; no robust recognizable wall/table/floor recovery.",
+  "evidence_limits": [
+    "3+2 images are depth-only mesh renders, not side-by-side original RGB",
+    "heldout used only for post-run comparison, not training or candidate choice",
+    "no independent surface ground truth",
+    "no independent human visual acceptance",
+    "historic desk V2 16.7779cm > 15cm FAIL unchanged"
+  ],
+  "next_smallest_action": "Use train-only cross-view geometric agreement/occlusion check to reject inconsistent RGB depths; compare same fixed 3+2 views and retain this failure."
+}
