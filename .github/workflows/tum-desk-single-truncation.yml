@@ -15,7 +15,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: tum-desk-single-truncation-${{ github.ref }}
+  group: tum-desk-fine-voxel-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
