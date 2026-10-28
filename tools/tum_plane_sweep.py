@@ -19,6 +19,7 @@ from PIL import Image
 from echo4d.model import DataError, file_sha256
 from echo4d.known_pose_plane_sweep import infer_plane_sweep
 from echo4d.known_pose_depth_consensus import regularize_observed_depth
+from echo4d.known_pose_depth_fusion import fuse_reprojected_depths
 from echo4d.known_pose_mvs_sources import select_plane_sweep_views
 from tum_rgb_stereo import (HOLDOUT, TOTAL, rgb_pose_frames,
                             stereo_resolution, load_stereo_rgb,
@@ -34,7 +35,8 @@ def build_plane_sweep_recording(frames: list[dict], target: Path, report: dict,
                                 source_visibility: bool = False,
                                 visibility_mode: str = 'hard',
                                 window_mode: str = 'fixed',
-                                depth_regularization: str = 'none') -> Path:
+                                depth_regularization: str = 'none',
+                                crossview_fusion: bool = False) -> Path:
     camera, _, _ = stereo_resolution(320)
     training = [i for i in range(TOTAL) if i not in HOLDOUT]
     selected, selection_stats = select_plane_sweep_views(
@@ -108,6 +110,27 @@ def build_plane_sweep_recording(frames: list[dict], target: Path, report: dict,
                         'cameraToWorld': frames[left]['pose'].flatten(order='F').tolist(),
                         'color': f'color/{n:05d}.png',
                         'depth': f'depth/{n:05d}.npy'})
+    if crossview_fusion:
+        # Only already saved TRAIN RGB-inferred depth and measured training poses.
+        # Never read TUM sensor depth PNGs, holdout RGB, or prior Mesh.
+        saved_depths = [np.load(target / e['depth'], allow_pickle=False) for e in entries]
+        saved_rgbs = [np.asarray(Image.open(target / e['color']).convert('RGB'))
+                      for e in entries]
+        saved_poses = [np.asarray(e['cameraToWorld'], dtype=np.float64).reshape(4, 4, order='F')
+                       for e in entries]
+        fused_depths, fusion_receipts = fuse_reprojected_depths(
+            saved_depths, saved_poses, saved_rgbs, camera)
+        for e, fused in zip(entries, fused_depths):
+            np.save(target / e['depth'], fused, allow_pickle=False)
+        report['crossview_fusion'] = {
+            'method': 'two independent RGB-consistent training depth projections',
+            'input_depth_source': 'RGB-inferred, not measured',
+            'train_only': True, 'source_views_per_anchor_max': 6,
+            'tolerance_m': 0.12, 'rgb_mae_threshold': 45.0,
+            'newly_supported_depth_pixels': sum(x['added_pixels'] for x in fusion_receipts),
+            'adjusted_depth_pixels': sum(x['adjusted_pixels'] for x in fusion_receipts),
+            'per_anchor': fusion_receipts,
+            'note': 'Newly filled pixels are reprojected inferred observations, not inpainted unknown geometry.'}
     report['plane_sweep'] = {'candidate_anchors': len(selected),
                              'saved_training_frames': len(entries),
                              'planes': planes, 'max_sources': max_sources, 'pairing': pairing,
@@ -168,7 +191,8 @@ def execute(args: argparse.Namespace, report: dict) -> None:
                                            source_visibility=args.source_visibility,
                                            visibility_mode=args.visibility_mode,
                                            window_mode=args.window_mode,
-                                           depth_regularization=args.depth_regularization)
+                                           depth_regularization=args.depth_regularization,
+                                           crossview_fusion=args.crossview_fusion)
     report['archived_inputs'] = archive_stereo_inputs(
         manifest, frames, root, args.report_dir / 'inputs')
     target = args.report_dir / 'reconstruction'
@@ -207,6 +231,8 @@ def main(argv=None):
                    help='Use observed 11x11 RGB patches only where 5x5 has weak texture')
     p.add_argument('--depth-regularization', choices=('none', 'rgb-consensus'), default='none',
                    help='Only regularize observed inferred Z; no hole filling or measured depth')
+    p.add_argument('--crossview-fusion', action='store_true',
+                   help='Reproject matching RGB-inferred training surfaces into holes; require two views')
     args = p.parse_args(argv)
     args.report_dir.mkdir(parents=True, exist_ok=True)
     report = {'experiment': 'tum-xyz-known-pose-cpu-plane-sweep-no-measured-Z',
@@ -219,6 +245,7 @@ def main(argv=None):
               'visibility_mode': args.visibility_mode if args.source_visibility else 'disabled',
               'window_mode': args.window_mode,
               'depth_regularization': args.depth_regularization,
+              'crossview_fusion_enabled': args.crossview_fusion,
               'evidence_level': 'real data experiment; no independent surface truth or #74 acceptance'}
     start = time.perf_counter()
     try:
