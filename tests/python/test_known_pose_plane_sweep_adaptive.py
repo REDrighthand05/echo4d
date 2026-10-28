@@ -59,3 +59,20 @@ def test_invalid_window_mode_rejected():
     with pytest.raises(DataError, match="window mode"):
         infer_plane_sweep(reference, sources, camera, np.eye(4),
                           window_mode="hallucinate")
+
+
+@pytest.mark.parametrize("window_mode", ["fixed", "adaptive"])
+@pytest.mark.parametrize("rotated", [False, True])
+def test_duplicate_source_center_cannot_vote_twice(window_mode, rotated):
+    camera, reference, sources = _weak_texture_plane()
+    image, pose = sources[0]
+    duplicate_pose = pose.copy()
+    if rotated:
+        theta = .1
+        duplicate_pose[:3, :3] = [[np.cos(theta), -np.sin(theta), 0],
+                                  [np.sin(theta), np.cos(theta), 0], [0, 0, 1]]
+    # An otherwise valid opposite-side source must not hide the duplicate.
+    repeated = [sources[0], sources[1], (image.copy(), duplicate_pose)]
+    with pytest.raises(DataError, match="distinct source camera centers"):
+        infer_plane_sweep(reference, repeated, camera, np.eye(4),
+                          window_mode=window_mode)

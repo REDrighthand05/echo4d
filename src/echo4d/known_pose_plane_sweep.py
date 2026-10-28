@@ -53,11 +53,18 @@ def infer_plane_sweep(reference: np.ndarray, sources: list[tuple[np.ndarray, np.
             raise DataError('Source visibility requires aligned finite inferred Z')
     relative = []
     directions = []
+    source_centers = []
     for image, pose in sources:
         if (not isinstance(image, np.ndarray) or image.shape != reference.shape
                 or image.dtype != np.uint8):
             raise DataError('Plane sweep source RGB mismatch')
         b = rigid_matrix(np.asarray(pose).flatten(order='F'))
+        # Repeating a view (even via copied arrays or a rotated camera at the
+        # same center) cannot supply a second translational depth constraint.
+        if any(np.linalg.norm(b[:3, 3] - center) <= 1e-6
+               for center in source_centers):
+            raise DataError('Plane sweep requires distinct source camera centers')
+        source_centers.append(b[:3, 3].copy())
         r = b[:3, :3].T @ a[:3, :3]
         t = b[:3, :3].T @ (a[:3, 3] - b[:3, 3])
         baseline = float(np.linalg.norm(t))
