@@ -1,0 +1,105 @@
+name: TUM room DA2 Small RGB cross-view consensus versus frozen DA2
+
+on:
+  push:
+    branches:
+      - research/room-da2-crossview-consensus-20261029
+    paths:
+      - 'tools/da2_depth_consensus.py'
+      - 'tools/tum_room_da2_consensus.py'
+      - 'tools/tum_room_da2_compare.py'
+      - 'tests/python/test_da2_depth_consensus.py'
+      - '.github/workflows/tum-room-da2-consensus.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: room-da2-consensus-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  real-room-da2-consensus:
+    runs-on: ubuntu-latest
+    timeout-minutes: 110
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: requirements.lock
+      - name: Install CPU reconstruction and pinned model dependencies
+        run: |
+          python -m pip install -r requirements.lock
+          python -m pip install --no-deps -e .
+          python -m pip install 'open3d==0.19.0' 'opencv-python-headless==4.12.0.88' 'trimesh==4.11.1'
+          python -m pip install 'torch==2.5.1+cpu' 'torchvision==0.20.1+cpu' --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install 'transformers==4.48.3' 'huggingface_hub==0.29.3' 'safetensors==0.5.3'
+      - name: Run synthetic calibration and existing ZNCC regressions
+        env:
+          PYTHONPATH: tools
+          OPENBLAS_NUM_THREADS: '1'
+          OMP_NUM_THREADS: '2'
+        run: |
+          python -m py_compile tools/da2_depth_consensus.py tools/tum_room_da2_consensus.py tools/tum_room_da2_compare.py
+          python -m pytest -q tests/python/test_da2_depth_consensus.py tests/python/test_tum_room_depthanything_small.py tests/python/test_tum_room_multiview_zncc.py
+      - name: Recover exact same-room measured, stereo and ZNCC controls
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/room-highinfo" "$RUNNER_TEMP/room-stereo" "$RUNNER_TEMP/room-old-zncc" "$RUNNER_TEMP/room-old-da2"
+          gh run download 40750777392 --repo "$GITHUB_REPOSITORY" --name tum-room-dense-120-40750777392 --dir "$RUNNER_TEMP/room-highinfo"
+          gh run download 40759191600 --repo "$GITHUB_REPOSITORY" --name tum-room-rgb-stereo-ablation-40759191600 --dir "$RUNNER_TEMP/room-stereo"
+          gh run download 40775863011 --repo "$GITHUB_REPOSITORY" --name tum-room-multiview-zncc-40775863011 --dir "$RUNNER_TEMP/room-old-zncc"
+          gh run download 40784038116 --repo "$GITHUB_REPOSITORY" --name tum-room-da2small-40784038116 --dir "$RUNNER_TEMP/room-old-da2"
+          test -s "$RUNNER_TEMP/room-highinfo/room-96-fine-wide/mesh.ply"
+          test -s "$RUNNER_TEMP/room-stereo/rgb-stereo-mesh/mesh.ply"
+          test -s "$RUNNER_TEMP/room-old-zncc/multiview-mesh/mesh.ply"
+          test -s "$RUNNER_TEMP/room-old-da2/multiview-mesh/mesh.ply"
+      - name: Run real TUM room DA2 Small CPU with RGB cross-view consensus
+        env:
+          PYTHONPATH: tools
+          OPENBLAS_NUM_THREADS: '1'
+          OMP_NUM_THREADS: '2'
+          HF_HUB_DOWNLOAD_TIMEOUT: '120'
+          ECHO_PREVIOUS_ZNCC: ${{ runner.temp }}/room-old-zncc
+        run: |
+          python tools/tum_room_depthanything_small.py \
+            --work "$RUNNER_TEMP/tum-room-da2-consensus" \
+            --baseline "$RUNNER_TEMP/room-highinfo" \
+            --stereo "$RUNNER_TEMP/room-stereo" \
+            --report-dir "$GITHUB_WORKSPACE/artifacts/room-da2-consensus"
+      - name: Compare frozen DA2 old/new Mesh in same real 3+2 cameras
+        env:
+          PYTHONPATH: tools
+          OPENBLAS_NUM_THREADS: '1'
+        run: |
+          python tools/tum_room_da2_compare.py \
+            --previous "$RUNNER_TEMP/room-old-da2" \
+            --current "$GITHUB_WORKSPACE/artifacts/room-da2-consensus" \
+            --work "$RUNNER_TEMP/tum-room-da2-consensus" \
+            --baseline "$RUNNER_TEMP/room-highinfo"
+      - name: Report real status without promoting visual PASS
+        if: always()
+        run: |
+          if [ -f artifacts/room-da2-consensus/report.json ]; then
+            python - <<'PY'
+          import json
+          r=json.load(open('artifacts/room-da2-consensus/report.json'))
+          print('STATUS',r.get('status'),'ERROR',r.get('error'))
+          print('MESH',r.get('new_mesh'),'ISSUE74',r.get('issue_74'))
+          print('ZNCC_VS_DA2',r.get('visual_zncc_vs_da2'))
+          print('MODEL',r.get('model_checkpoint_sha256'))
+          PY
+          fi
+      - name: Retain real Mesh, old/new GLB, original RGB, 3+2 images, raw failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tum-room-da2-consensus-${{ github.run_id }}
+          path: artifacts/room-da2-consensus/
+          if-no-files-found: warn
+          retention-days: 14
