@@ -142,6 +142,21 @@ def learned_sweep(reference, sources, K, reference_pose, source_poses,
                     "valid_pixels": int(np.count_nonzero(metric))}
 
 
+_original_build_manifest = base.build_manifest
+
+
+def build_manifest_da2(imported, target, report):
+    import json
+    manifest = _original_build_manifest(imported, target, report)
+    data = json.loads(manifest.read_text())
+    data["name"] = "TUM room known-pose RGB Depth Anything V2 Small inferred Z"
+    data["notes"] = (
+        "DA2 Small relative-depth prediction; metric scale from independent "
+        "known-pose RGB ZNCC anchors, never measured sensor depth")
+    manifest.write_text(json.dumps(data, indent=2, allow_nan=False) + "\\n")
+    return manifest
+
+
 _original_run = base.run
 
 
@@ -152,6 +167,24 @@ def run_with_model(args, report):
     report["model_revision"] = MODEL_REVISION
     report["no_gpu_claim"] = True
     _original_run(args, report)
+    import json
+    # The inherited TSDF provider emits a plane-sweep-only provenance label.
+    # Correct that label and its SHA without changing vertices or triangles.
+    ply = args.report_dir / "multiview-mesh" / "mesh.ply"
+    old = b"RGB multi-view plane-sweep inferred Z; known metric poses; no sensor Z"
+    new = b"DA2 Small relative Z plus known-pose RGB metric anchors; no sensor Z"
+    content = ply.read_bytes()
+    if content.count(old) != 1:
+        raise DataError("Expected exactly one inherited PLY provenance label")
+    ply.write_bytes(content.replace(old, new, 1))
+    fusion_path = args.report_dir / "multiview-mesh" / "report.json"
+    fusion = json.loads(fusion_path.read_text())
+    fusion["geometry_source"] = (
+        "Depth Anything V2 Small relative depth with RGB-known-pose metric fit; no sensor Z")
+    fusion["mesh_sha256"] = file_sha256(ply)
+    fusion_path.write_text(json.dumps(fusion, indent=2, allow_nan=False) + "\\n")
+    report["fusion"] = fusion
+    report["new_mesh"]["sha256"] = file_sha256(ply)
     previous_dir = os.environ.get("ECHO_PREVIOUS_ZNCC")
     if previous_dir:
         import json
@@ -187,6 +220,7 @@ def run_with_model(args, report):
 
 def main():
     base.sweep_depth = learned_sweep
+    base.build_manifest = build_manifest_da2
     base.run = run_with_model
     return base.main()
 
