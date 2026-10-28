@@ -1,0 +1,132 @@
+{
+  "experiment": "tum-fr1_xyz-frozen-48-rgb-mvs-observed-edge-extraction-20261028",
+  "status": "FAIL_visual_recognition_not_accepted",
+  "branch": "research/mvs-observed-edge-extraction-20261028",
+  "tested_head": "f2b9a222cc5052df54c61f323cd92701005ffd52",
+  "real_run_url": "https://github.com/REDrighthand05/echo4d/actions/runs/40721597081",
+  "real_artifact_url": "https://github.com/REDrighthand05/echo4d/actions/runs/40721597081/artifacts/12830921321",
+  "source": {
+    "dataset": "TUM RGB-D fr1_xyz; J. Sturm et al., CC BY 4.0",
+    "archive_sha256": "a0236d97b8c30cd93b653656d2b6c293ff7c982a4130ef2a1a8beecdb124ef98",
+    "original_rgb_resolution": [
+      640,
+      480
+    ],
+    "fusion_rgb_resolution": [
+      320,
+      240
+    ],
+    "training_frames": 48,
+    "heldout_indices": [
+      4,
+      24,
+      55
+    ],
+    "metric_camera_poses": "supplied measured TUM",
+    "camera_intrinsics": "supplied calibrated",
+    "depth": "frozen RGB-inferred Plane-Sweep maps from Actions 40692184301",
+    "removed": [
+      "sensor depth pixels during reconstruction",
+      "existing Mesh prior during reconstruction"
+    ],
+    "posthoc_sensor_depth_only": true
+  },
+  "fixed_tsdf": {
+    "voxel_m": 0.05,
+    "truncation_m": 0.15,
+    "max_depth_m": 4,
+    "min_observations": 1
+  },
+  "algorithm": "Same TSDF integration; keep fully observed cells and add triangles only with three observed sign-changing edge vertices, attached to an old edge-connected component; unknown corners never count as observed",
+  "control": {
+    "mesh_sha256": "3cc08e890c1fed00f55d6fde1d4251eb3c997f51f5d6a7f370fb0a8d7a2cb258",
+    "replayed_control_byte_identical": true,
+    "triangles": 8419,
+    "edge_connected_components": 702,
+    "largest_component_faces": 3585,
+    "largest_component_fraction": 0.42582254424515975
+  },
+  "candidate": {
+    "mesh_sha256": "cd38fb6bb15485a7121fb46e8d018c443976a7b985693f928843723ff2752587",
+    "triangles": 10744,
+    "edge_connected_components": 568,
+    "largest_component_faces": 4516,
+    "largest_component_fraction": 0.4203276247207744,
+    "added_observed_edge_faces": 2325,
+    "rejected_detached_added_faces": 515
+  },
+  "frozen_five_views": [
+    {
+      "name": "heldout-4",
+      "old_covered_pixels": 44579,
+      "new_covered_pixels": 47309
+    },
+    {
+      "name": "heldout-24",
+      "old_covered_pixels": 39302,
+      "new_covered_pixels": 42095
+    },
+    {
+      "name": "heldout-55",
+      "old_covered_pixels": 29776,
+      "new_covered_pixels": 31666
+    },
+    {
+      "name": "free-a",
+      "old_covered_pixels": 31534,
+      "new_covered_pixels": 34622
+    },
+    {
+      "name": "free-b",
+      "old_covered_pixels": 25945,
+      "new_covered_pixels": 29054
+    }
+  ],
+  "visual_artifact": {
+    "montage_sha256": "30db16921a2faab6efed6f0dc2cf4e493dd97a138659eab4e0ea71b9fcbfe360",
+    "new_colored_glb_sha256": "a0aa13917721b4fe527726bb258c61adebf34f3060b4013900025b91efcfaa9e",
+    "original_rgb_photos": 3,
+    "free_views": 2,
+    "mesh_not_ai_inpainted": true
+  },
+  "posthoc_sensor_diagnostic": {
+    "gained_sensor_valid_pixels": 5471,
+    "lost_sensor_valid_pixels": 0,
+    "new_only_over_30cm_fraction": 0.14604277097422774,
+    "per_heldout": [
+      {
+        "index": 4,
+        "gained": 2093,
+        "new_only_mae_m": 0.10437579050738448,
+        "new_only_over_30cm_fraction": 0.11657907310081222
+      },
+      {
+        "index": 24,
+        "gained": 1852,
+        "new_only_mae_m": 0.163026690611829,
+        "new_only_over_30cm_fraction": 0.15928725701943844
+      },
+      {
+        "index": 55,
+        "gained": 1526,
+        "new_only_mae_m": 0.2050716936353931,
+        "new_only_over_30cm_fraction": 0.17038007863695936
+      }
+    ],
+    "sensor_depth_not_used_in_reconstruction": true,
+    "not_independent_laser_ground_truth": true
+  },
+  "tests": {
+    "observed_edge_tests_passed": 5,
+    "real_workflow_conclusion": "success"
+  },
+  "interpretation": "Visible coverage +6.1%-12.0%, edge-connected groups -19.1%, absolute largest group +26.0%, but fraction of largest group slightly lower. 14.6% of newly covered sensor-valid heldout pixels differ by more than 30 cm; extra surfaces are not all correct. Desk/monitor partly visible; free camera views fragmented. #74 FAIL. Not a complete room or life replay.",
+  "historical_failures": [
+    "PR #83 adaptive texture: more pixels but more shards",
+    "PR #84 local RGB consensus: free views regressed",
+    "PR #85 crossview fusion: little TSDF surface gain",
+    "PR #86 occlusion filter: connectedness regressed",
+    "PR #87 subpixel TSDF: no recognizable room"
+  ],
+  "next_shortest_unblock": "Localize the new-only >30cm heldout errors to desk/monitor geometry; restrict observed-edge extensions using true TSDF support sign agreement and multiview consistency, then repeat identical frozen five views. Keep sensor Z posthoc only."
+}
