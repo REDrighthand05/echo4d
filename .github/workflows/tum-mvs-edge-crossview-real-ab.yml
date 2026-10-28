@@ -72,7 +72,7 @@ jobs:
             --target artifacts/new
           mkdir -p artifacts/comparison-old/reconstruction
           cp artifacts/new/unfiltered/reconstruction/mesh.ply artifacts/comparison-old/reconstruction/mesh.ply
-          cp artifacts/old/report.json artifacts/comparison-old/report.json
+          cp artifacts/new/unfiltered-comparison.json artifacts/comparison-old/report.json
       - name: Compare 3 original RGB same-camera poses plus 2 frozen free views
         env:
           PYTHONPATH: tools
@@ -109,7 +109,11 @@ jobs:
         with:
           name: tum-mvs-edge-crossview-ab-${{ github.run_id }}
           path: |
+            artifacts/old/inputs/
+            artifacts/old/reconstruction/mesh.ply
             artifacts/old/report.json
+            artifacts/new/unfiltered/control-replayed.ply
+            artifacts/comparison-old/report.json
             artifacts/new/unfiltered/report.json
             artifacts/new/unfiltered/reconstruction/mesh.ply
             artifacts/new/report.json

@@ -70,7 +70,7 @@ def filter_crossview_faces(
     agreements = np.zeros(len(extension), dtype=np.int16)
     if len(extension):
         centers = new_v[new_f[extension]].mean(axis=1)
-        first_center = np.full(len(extension), -1, dtype=np.int16)
+        support_by_view = []
         for j, (depth, pose) in enumerate(zip(inferred_depths, camera_to_world)):
             xyz = (centers - pose[:3, 3]) @ pose[:3, :3]
             z = xyz[:, 2]
@@ -84,15 +84,12 @@ def filter_crossview_faces(
             consistent = (inside & (sampled > 0) &
                           (np.abs(sampled - z) <= np.maximum(tolerance_m, .04 * z)))
             agreements += consistent.astype(np.int16)
-            first = consistent & (first_center < 0)
-            first_center[first] = j
-            other = consistent & (first_center >= 0) & (first_center != j)
-            if np.any(other):
-                ids = np.flatnonzero(other)
-                ref = np.array([camera_to_world[int(first_center[i])][:3, 3]
-                                for i in ids])
-                separated = np.linalg.norm(ref - pose[:3, 3], axis=1) >= distinct_baseline_m
-                independent[ids[separated]] = 2
+            # Any agreeing pair may supply the baseline; the first vote can
+            # lie between two valid cameras and must not make ordering matter.
+            for earlier, previous in enumerate(support_by_view):
+                if np.linalg.norm(camera_to_world[earlier][:3, 3] - pose[:3, 3]) >= distinct_baseline_m:
+                    independent[consistent & previous] = 2
+            support_by_view.append(consistent)
         supported = independent >= 2
         keep[extension[supported]] = True
     # New geometry can only extend an original edge-connected surface.

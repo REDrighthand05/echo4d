@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from pathlib import Path
 
 import numpy as np
@@ -57,7 +58,12 @@ def run(old: Path, source_root: Path, target: Path) -> dict:
     reconstruction = target / "reconstruction"
     reconstruction.mkdir(exist_ok=True)
     write_ply(reconstruction / "mesh.ply", result_mesh)
+    summary = mesh_summary(result_mesh)
+    summary['min_nearest_voxel_observations'] = None
+    summary['max_nearest_voxel_observations'] = None
+    summary['note'] = 'Source PLY does not carry TSDF counts; observation counts unavailable.'
     report = {
+        "checkout_sha": os.environ.get("GITHUB_SHA"),
         "experiment": "TUM 48-view frozen RGB-inferred-Z independent face support",
         "source": "TUM fr1_xyz original RGB 640x480, fusion 320x240",
         "retained": ["48 training RGB", "measured metric camera poses",
@@ -70,12 +76,21 @@ def run(old: Path, source_root: Path, target: Path) -> dict:
         "unfiltered_mesh_sha256": file_sha256(base / "reconstruction/mesh.ply"),
         "control_replay": json.loads((base / "report.json").read_text())["control_replay"],
         "new_mesh_sha256": file_sha256(reconstruction / "mesh.ply"),
-        "new_mesh_summary": mesh_summary(result_mesh),
+        "new_mesh_summary": summary,
         "face_support": stats,
         "mesh_observation_counts": "unavailable in source PLY; 1 is export placeholder, not real count",
         "visual_acceptance": "FAIL until direct five-view scene recognition",
         "historical_fail": "Observed-edge predecessor 14.60% >30cm wrong new-only sensor-valid pixels",
     }
+    # Only the frozen camera poses are inherited, never an unrelated Mesh/run identity.
+    frozen = json.loads((old / "report.json").read_text())
+    reference = {
+        "checkout_sha": os.environ.get("GITHUB_SHA"),
+        "mesh_sha256": report["unfiltered_mesh_sha256"],
+        "views": [{"name": v["name"], "pose": v["pose"]} for v in frozen["views"]],
+        "view_pose_source": "frozen original control cameras; not copied render hashes",
+    }
+    (target / "unfiltered-comparison.json").write_text(json.dumps(reference, indent=2) + "\n")
     (target / "report.json").write_text(json.dumps(report, indent=2) + "\n")
     return {"mesh_sha256": report["new_mesh_sha256"],
             "faces": len(result_mesh.faces), "face_support": stats}
