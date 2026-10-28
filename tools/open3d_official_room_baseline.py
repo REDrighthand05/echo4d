@@ -21,22 +21,55 @@ def spaced_real_frames(total, count):
     return result
 
 
-def read_poses(trajectory, n):
-    if len(trajectory.parameters) != n:
-        raise ValueError("Pose/frame count mismatch; refuse fabricated alignment")
-    entry = trajectory.parameters[0].intrinsic
+def trajectory_frame_ids(log_path, expected_count):
+    """Match Redwood LOG first-column frame IDs, not list positions.
+
+    Open3D's official BedroomRGBDImages enumerates image/000001.jpg onward
+    while its trajectory.log can include camera 000000. Ignoring this shifts
+    every RGB-D measurement onto the wrong camera or rejects the dataset.
+    """
+    rows = [line.strip() for line in Path(log_path).read_text().splitlines()
+            if line.strip() and not line.lstrip().startswith("#")]
+    if len(rows) != expected_count * 5:
+        raise ValueError(f"Redwood LOG rows {len(rows)} != 5 * poses {expected_count}")
+    ids = []
+    for index in range(expected_count):
+        tokens = rows[index * 5].split()
+        if len(tokens) != 3 or not all(token.lstrip("-").isdigit() for token in tokens):
+            raise ValueError(f"Bad Redwood trajectory header {index}")
+        ids.append(int(tokens[0]))
+    if len(set(ids)) != len(ids):
+        raise ValueError("Duplicate logged Redwood camera frame ID")
+    return ids
+
+
+def read_poses(trajectory, image_paths, trajectory_path):
+    """Return world-to-camera matrices aligned to *actual* image filename IDs."""
+    params = trajectory.parameters
+    if not params:
+        raise ValueError("Empty recorded camera trajectory")
+    pose_ids = trajectory_frame_ids(trajectory_path, len(params))
+    ids = [int(Path(path).stem) for path in image_paths]
+    if len(set(ids)) != len(ids):
+        raise ValueError("Duplicate source image frame ID")
+    positions = {frame_id: index for index,frame_id in enumerate(pose_ids)}
+    missing = sorted(set(ids) - positions.keys())
+    if missing:
+        raise ValueError(f"Recorded camera trajectory missing RGB-D frame IDs: {missing[:8]}")
+    entry = params[0].intrinsic
     w, h = int(entry.width), int(entry.height)
     k = np.asarray(entry.intrinsic_matrix, dtype=float)
     if k.shape != (3, 3) or not np.isfinite(k).all() or min(k[0,0], k[1,1]) <= 0:
         raise ValueError("Bad recorded intrinsics")
     ext = []
-    for p in trajectory.parameters:
+    for image_id in ids:
+        p = params[positions[image_id]]
         x = np.asarray(p.extrinsic, dtype=float)
         if (x.shape != (4,4) or not np.isfinite(x).all() or
                 not np.allclose(x[3], [0,0,0,1], atol=1e-5) or
                 not np.allclose(x[:3,:3].T @ x[:3,:3],np.eye(3),atol=2e-3) or
                 abs(np.linalg.det(x[:3,:3])-1.) > 2e-3):
-            raise ValueError("Bad measured world-to-camera extrinsic")
+            raise ValueError(f"Bad recorded world-to-camera extrinsic for image {image_id}")
         ext.append(x)
     return (w,h,float(k[0,0]),float(k[1,1]),float(k[0,2]),float(k[1,2])), ext
 
@@ -99,7 +132,10 @@ def run(kind, out, cache, budget, voxel):
     if len(colors)!=len(depths):
         raise ValueError("Unregistered color/depth sequence lengths")
     traj=o3d.io.read_pinhole_camera_trajectory(dataset.trajectory_log_path)
-    intrinsic,extrinsics=read_poses(traj,len(colors))
+    intrinsic,extrinsics=read_poses(traj,colors,dataset.trajectory_log_path)
+    if any(Path(c).stem != Path(d).stem for c,d in zip(colors,depths)):
+        raise ValueError("Color/depth frame IDs disagree")
+    source_frame_count=len(colors)
     selected=spaced_real_frames(len(colors),min(budget,len(colors)))
     out.mkdir(parents=True,exist_ok=False)
     engine=o3d.pipelines.integration.ScalableTSDFVolume(
@@ -125,11 +161,11 @@ def run(kind, out, cache, budget, voxel):
         raise RuntimeError("Native PLY export failed")
     preview=(result.simplify_quadric_decimation(85000)
              if len(result.triangles)>85000 else result)
-    colors=np.asarray(preview.vertex_colors)
-    if colors.shape != np.asarray(preview.vertices).shape:
+    vertex_colors=np.asarray(preview.vertex_colors)
+    if vertex_colors.shape != np.asarray(preview.vertices).shape:
         raise RuntimeError("GLB preview cannot be claimed colorized")
-    rgba=np.column_stack((np.rint(np.clip(colors,0,1)*255).astype(np.uint8),
-                          np.full(len(colors),255,dtype=np.uint8)))
+    rgba=np.column_stack((np.rint(np.clip(vertex_colors,0,1)*255).astype(np.uint8),
+                          np.full(len(vertex_colors),255,dtype=np.uint8)))
     trimesh.Trimesh(vertices=np.asarray(preview.vertices),
                     faces=np.asarray(preview.triangles),
                     vertex_colors=rgba,process=False).export(str(out/"recorded-rgbd-preview.glb"))
@@ -142,7 +178,10 @@ def run(kind, out, cache, budget, voxel):
     five=render_views(dataset,selected,extrinsics,intrinsic,result,out)
     report={"scene":("Redwood real bedroom" if kind=="bedroom" else "Redwood 5-frame partial smoke"),
             "source":"Open3D public real RGB-D","geometry_engine":"stock Open3D 0.19 ScalableTSDFVolume",
-            "rgbd_frame_count":len(colors),"frames_used":len(selected),
+            "rgbd_frame_count":source_frame_count,"frames_used":len(selected),
+            "first_frame_id":int(Path(colors[0]).stem),
+            "last_frame_id":int(Path(colors[-1]).stem),
+            "trajectory_poses":len(traj.parameters),
             "raw_resolution":list(intrinsic[:2]),"logged_calibration":intrinsic,
             "mesh_triangles":len(result.triangles),"colored_glb":"recorded-rgbd-preview.glb",
             "prior_file_NOT_USED_IN_RECONSTRUCTION":prior,"visuals":five,
