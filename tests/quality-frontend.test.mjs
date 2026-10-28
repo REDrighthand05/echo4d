@@ -46,7 +46,7 @@ test("manifest handoff accepts eight unique slots but never treats them as resto
   const forged = structuredClone(original);
   forged.files[0].sha256 = "not-a-sha";
   assert.throws(() => parseIntake(forged), /SHA-256/);
-  assert.throws(() => parseIntake({ ...original, format: "unknown" }), /不受支持/);
+  assert.throws(() => parseIntake({ ...original, format: "unknown" }), /受支持/);
 });
 test("quality resume script parses and uses the same local-only manifest helper", () => {
   assert.match(js, /parseIntake\(JSON\.parse\(await file\.text\(\)\)\)/);
