@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 import json
 import math
 import os
+import shutil
 from pathlib import Path
 import sys
 import time
@@ -49,7 +50,15 @@ def choose_neighbors(poses: list[np.ndarray], anchor: int, limit: int = NEIGHBOR
         score = abs(baseline - .14) + .35 * (1 - facing) + .0002 * abs(j-anchor)
         candidates.append((score, j))
     candidates.sort()
-    return [j for _, j in candidates[:limit]]
+    chosen = []
+    for _, j in candidates:
+        if any(np.linalg.norm(poses[j][:3, 3] - poses[k][:3, 3]) <= 1e-6
+               for k in chosen):
+            continue
+        chosen.append(j)
+        if len(chosen) == limit:
+            break
+    return chosen
 
 
 def sweep_depth(reference: np.ndarray, sources: list[np.ndarray],
@@ -69,6 +78,24 @@ def sweep_depth(reference: np.ndarray, sources: list[np.ndarray],
             or K.shape != (3, 3) or not np.isfinite(K).all()
             or np.any(np.asarray(depths) <= 0)):
         raise DataError("Plane sweep requires calibrated RGB, >=2 sources and positive depths")
+    # Repeated frame IDs or rotated copies at one center are one witness.
+    # This is camera-position identity, not a calibrated independence probability.
+    poses = [np.asarray(p, dtype=np.float64) for p in [reference_pose, *source_poses]]
+    if any(p.shape != (4, 4) or not np.isfinite(p).all() for p in poses):
+        raise DataError("Plane sweep requires finite 4x4 camera poses")
+    reference_pose = poses[0]
+    unique = []
+    for i, pose in enumerate(poses[1:]):
+        if np.linalg.norm(pose[:3, 3] - reference_pose[:3, 3]) <= 1e-6:
+            continue
+        if any(np.linalg.norm(pose[:3, 3] - source_poses[j][:3, 3]) <= 1e-6
+               for j in unique):
+            continue
+        unique.append(i)
+    if len(unique) < 2:
+        raise DataError("Plane sweep requires >=2 sources at distinct camera positions")
+    sources = [sources[i] for i in unique]
+    source_poses = [poses[i+1] for i in unique]
     ref = cv2.GaussianBlur(cv2.cvtColor(reference, cv2.COLOR_RGB2GRAY), (3, 3), 0)
     texture = cv2.boxFilter(
         np.abs(cv2.Sobel(ref, cv2.CV_32F, 1, 0, ksize=3)) +
@@ -226,12 +253,12 @@ def run(args, report):
     if data.count(old) != 1:
         raise DataError("Expected exact inherited PLY source label")
     ply.write_bytes(data.replace(old, new, 1))
-    report["fusion"]["mesh_sha256"] = file_sha256(ply)
     fusion_report = args.report_dir/"multiview-mesh"/"report.json"
     fusion_receipt = json.loads(fusion_report.read_text())
     fusion_receipt["geometry_source"] = "known-pose multi-view RGB plane sweep, no sensor Z"
     fusion_receipt["mesh_sha256"] = file_sha256(ply)
     fusion_report.write_text(json.dumps(fusion_receipt, indent=2)+"\n")
+    report["fusion"] = fusion_receipt
     v, f = read_echo_ply(ply)
     report["new_mesh"] = {"sha256": file_sha256(ply), "vertices": len(v),
                           "faces": len(f), "connectivity": face_components(len(v), f)}
@@ -240,8 +267,22 @@ def run(args, report):
         imported, high_mesh, ply, high, args.report_dir/"visual-highinfo-vs-multiview")
     if args.stereo is not None:
         stereo_mesh = args.stereo/"rgb-stereo-mesh"/"mesh.ply"
-        if not stereo_mesh.is_file():
-            raise DataError("Previous real stereo control Mesh missing")
+        stereo_report = args.stereo/"report.json"
+        previous = json.loads(stereo_report.read_text())
+        if (not stereo_mesh.is_file()
+                or file_sha256(stereo_mesh) != previous["new_mesh"]["sha256"]
+                or previous["source_archive_sha256"] != report["source_archive_sha256"]
+                or previous["selection"]["expanded_indices"] != report["selection"]["expanded_indices"]):
+            raise DataError("Previous stereo control source/Mesh/training identity mismatch")
+        retained = args.report_dir/"previous-stereo-control"
+        retained.mkdir(exist_ok=False)
+        shutil.copyfile(stereo_mesh, retained/"mesh.ply")
+        shutil.copyfile(stereo_report, retained/"report.json")
+        report["stereo_control_receipt"] = {
+            "mesh_sha256": file_sha256(retained/"mesh.ply"),
+            "report_sha256": file_sha256(retained/"report.json"),
+            "tested_checkout": previous.get("checkout_sha")}
+
         report["stereo_mesh"] = {"sha256": file_sha256(stereo_mesh),
                                  "role": "posthoc same-room previous RGB-only algorithm"}
         report["visual_stereo_vs_multiview"] = compare_five(
