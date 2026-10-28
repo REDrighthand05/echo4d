@@ -152,3 +152,21 @@ def test_native_depth_consolidation_rejects_conflicting_surfaces():
     native[0, 0] = np.nan
     with pytest.raises(DataError, match='finite'):
         reduce_native_depth_for_fusion(native)
+
+
+def test_all_training_anchor_budget_preserves_frozen_holdouts():
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'tools'))
+    from tum_rgb_stereo import select_pairs, HOLDOUT, TOTAL
+    camera, _, _ = setup()
+    frames = []
+    for i in range(TOTAL):
+        pose = np.eye(4)
+        pose[0, 3] = i * .01
+        frames.append({'pose': pose})
+    pairs = select_pairs(frames, camera, max_pairs=48, backups_per_left=3)
+    assert len({left for left, _ in pairs}) <= 48
+    assert len(pairs) <= 48 * 3
+    assert pairs
+    assert all(a not in HOLDOUT and b not in HOLDOUT for a, b in pairs)

@@ -132,7 +132,8 @@ def reduce_native_depth_for_fusion(depth: np.ndarray) -> np.ndarray:
 
 
 def build_stereo_recording(frames: list[dict], target: Path, report: dict,
-                           *, stereo_width: int = 640, fusion_width: int = 320) -> Path:
+                           *, stereo_width: int = 640, fusion_width: int = 320,
+                           max_anchors: int = 48) -> Path:
     camera, _stride, num_disparities = stereo_resolution(stereo_width)
     fusion_camera, _fusion_stride, _ = stereo_resolution(fusion_width)
     if fusion_width > stereo_width:
@@ -140,7 +141,9 @@ def build_stereo_recording(frames: list[dict], target: Path, report: dict,
     report['tsdf_fusion_resolution'] = [fusion_camera.width, fusion_camera.height]
     report['stereo_algorithm_resolution'] = [camera.width, camera.height]
     report['stereo_num_disparities'] = num_disparities
-    pairs = select_pairs(frames, camera)
+    pairs = select_pairs(frames, camera, max_pairs=max_anchors)
+    report['anchor_budget'] = max_anchors
+    report['eligible_anchor_count'] = len({left for left, _ in pairs})
     report['selected_pairs'] = pairs
     report['candidate_pairs_attemptable'] = len(pairs)
     if len({left for left, _ in pairs}) < 6:
@@ -263,7 +266,8 @@ def execute(args: argparse.Namespace, report: dict) -> None:
                          'metric_pose_source':'TUM supplied groundtruth.txt; not RGB-only pose estimation'}
     manifest=build_stereo_recording(frames,work/'stereo',report,
                                     stereo_width=args.stereo_width,
-                                    fusion_width=args.fusion_width)
+                                    fusion_width=args.fusion_width,
+                                    max_anchors=args.max_anchors)
     target=args.report_dir/'reconstruction'
     cmd=[sys.executable,'-m','echo4d','reconstruct',str(manifest),'--output',str(target),
          '--bounds',*BOUNDS,'--voxel','0.05','--max-depth','4',
@@ -289,6 +293,8 @@ def main(argv=None):
                    help='Algorithm RGB width: native 640 (default), or 320 control')
     p.add_argument('--fusion-width',type=int,choices=(320,640),default=320,
                    help='TSDF depth width: conservative 320 (default), or native 640')
+    p.add_argument('--max-anchors',type=int,default=48,
+                   help='Max fixed training anchors, never includes 12 frozen holdouts')
     args=p.parse_args(argv)
     args.report_dir.mkdir(parents=True,exist_ok=True)
     report={'experiment':'tum-xyz-known-pose-RGB-stereo-no-measured-depth-v1',
