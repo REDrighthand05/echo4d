@@ -97,3 +97,38 @@ def test_train_only_pair_backups_are_bounded_and_deterministic():
         select_pairs(frames, camera, max_pairs=0)
     with pytest.raises(DataError, match='budget'):
         select_pairs(frames, camera, backups_per_left=5)
+
+
+def test_native_640_rgb_preserves_original_pixels_and_intrinsics(tmp_path):
+    from PIL import Image
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'tools'))
+    from tum_rgb_stereo import stereo_resolution, load_stereo_rgb
+    yy, xx = np.indices((480, 640))
+    pixels = np.stack((xx % 256, yy % 256, (xx + 2 * yy) % 256), axis=-1).astype(np.uint8)
+    path = tmp_path / 'original.png'
+    Image.fromarray(pixels).save(path)
+    full, stride, disparities = stereo_resolution(640)
+    assert (full.width, full.height, full.fx, full.cx, full.cy) == (640, 480, 525., 319.5, 239.5)
+    assert stride == 1 and disparities == 128
+    assert np.array_equal(load_stereo_rgb(path, 640), pixels)
+    small, stride, disparities = stereo_resolution(320)
+    assert (small.width, small.height, small.fx, small.cx, small.cy) == (320, 240, 262.5, 159.75, 119.75)
+    assert stride == 2 and disparities == 64
+    assert np.array_equal(load_stereo_rgb(path, 320), pixels[::2, ::2])
+    for width in (0, 321, 800, True):
+        with pytest.raises(DataError, match='width'):
+            stereo_resolution(width)
+
+
+def test_native_rgb_rejects_wrong_original_resolution(tmp_path):
+    from PIL import Image
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'tools'))
+    from tum_rgb_stereo import load_stereo_rgb
+    bad = tmp_path / 'wrong.png'
+    Image.fromarray(np.zeros((240, 320, 3), np.uint8)).save(bad)
+    with pytest.raises(DataError, match='640x480'):
+        load_stereo_rgb(bad, 640)

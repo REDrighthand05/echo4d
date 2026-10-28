@@ -91,8 +91,35 @@ def select_pairs(frames: list[dict], camera: Camera, max_pairs: int = 20,
             for _score, right in sorted(candidates[left])[:backups_per_left]]
 
 
-def build_stereo_recording(frames: list[dict], target: Path, report: dict) -> Path:
-    camera = Camera(320, 240, 262.5, 262.5, 159.75, 119.75)
+def stereo_resolution(width: int) -> tuple[Camera, int, int]:
+    """TUM fr1 calibration at native 640 or exact 2x decimation.
+
+    Width is fixed before any holdout inspection. The metric baseline is
+    supplied by the known camera poses, not by stereo alone.
+    """
+    if type(width) is not int or width not in (320, 640):
+        raise DataError('Stereo width must be 320 or native 640 pixels')
+    scale = width / 640
+    camera = Camera(width, int(480 * scale), 525.0 * scale, 525.0 * scale,
+                    319.5 * scale, 239.5 * scale)
+    return camera, 640 // width, (128 if width == 640 else 64)
+
+
+def load_stereo_rgb(path: Path, width: int) -> np.ndarray:
+    """Read original source pixels; decimate only for the 320 control."""
+    _camera, stride, _disparities = stereo_resolution(width)
+    with Image.open(path) as im:
+        if im.size != (640, 480):
+            raise DataError('Expected original TUM 640x480 RGB')
+        pixels = np.asarray(im.convert('RGB')).copy()
+    return pixels[::stride, ::stride].copy()
+
+
+def build_stereo_recording(frames: list[dict], target: Path, report: dict,
+                           *, stereo_width: int = 640) -> Path:
+    camera, _stride, num_disparities = stereo_resolution(stereo_width)
+    report['stereo_algorithm_resolution'] = [camera.width, camera.height]
+    report['stereo_num_disparities'] = num_disparities
     pairs = select_pairs(frames, camera)
     report['selected_pairs'] = pairs
     report['candidate_pairs_attemptable'] = len(pairs)
@@ -107,12 +134,11 @@ def build_stereo_recording(frames: list[dict], target: Path, report: dict) -> Pa
         if left_idx in accepted_left:
             continue  # The first usable candidate wins; do not double-count a view.
         left, right = frames[left_idx], frames[right_idx]
-        with Image.open(left['rgb']) as im:
-            a = np.asarray(im.convert('RGB'))[::2, ::2].copy()
-        with Image.open(right['rgb']) as im:
-            b = np.asarray(im.convert('RGB'))[::2, ::2].copy()
+        a = load_stereo_rgb(left['rgb'], stereo_width)
+        b = load_stereo_rgb(right['rgb'], stereo_width)
         rgb, depth, rect_camera, rect_pose, diagnostics = infer_stereo(
-            a, b, camera, left['pose'], right['pose'])
+            a, b, camera, left['pose'], right['pose'],
+            num_disparities=num_disparities)
         item = {'left_index': left_idx, 'right_index': right_idx,
                 'left_rgb_sha256': left['rgb_sha256'], 'right_rgb_sha256': right['rgb_sha256'],
                 **diagnostics}
@@ -162,10 +188,10 @@ def build_stereo_recording(frames: list[dict], target: Path, report: dict) -> Pa
     return manifest
 
 
-def render_mesh(mesh: Path, frames: list[dict], folder: Path, report: dict) -> None:
+def render_mesh(mesh: Path, frames: list[dict], folder: Path, report: dict,
+                camera: Camera) -> None:
     from echo4d.model import rigid_matrix
     verts, faces = read_echo_ply(mesh)
-    camera=Camera(320,240,262.5,262.5,159.75,119.75)
     folder.mkdir(exist_ok=True)
     views=[]
     poses=[(f'heldout-{i}',frames[i]['pose']) for i in (4,24,55)]
@@ -204,12 +230,15 @@ def execute(args: argparse.Namespace, report: dict) -> None:
         raise DataError('Pinned official TUM source mismatch')
     report['extraction']=extract(archive,work/'dataset')
     frames=rgb_pose_frames(work/'dataset'/ROOT)
-    report['rgb_input']={'original_resolution':[640,480],'algorithm_resolution':[320,240],
+    camera, _stride, _num_disparities = stereo_resolution(args.stereo_width)
+    report['rgb_input']={'original_resolution':[640,480],
+                         'algorithm_resolution':[camera.width,camera.height],
                          'frame_count':len(frames),'train_count':48,'holdout_indices':list(HOLDOUT),
                          'rgb_source_sha256':[f['rgb_sha256'] for f in frames],
                          'depth_png_files_opened':0,'depth_index_used_for_frame_selection_only':True,
                          'metric_pose_source':'TUM supplied groundtruth.txt; not RGB-only pose estimation'}
-    manifest=build_stereo_recording(frames,work/'stereo',report)
+    manifest=build_stereo_recording(frames,work/'stereo',report,
+                                    stereo_width=args.stereo_width)
     target=args.report_dir/'reconstruction'
     cmd=[sys.executable,'-m','echo4d','reconstruct',str(manifest),'--output',str(target),
          '--bounds',*BOUNDS,'--voxel','0.05','--max-depth','4',
@@ -223,7 +252,7 @@ def execute(args: argparse.Namespace, report: dict) -> None:
         raise DataError('RGB stereo TSDF failed; see reconstruct stderr and pair evidence')
     report['mesh_sha256']=file_sha256(target/'mesh.ply')
     report['mesh_output']=json.loads(run.stdout.strip().splitlines()[-1])
-    render_mesh(target/'mesh.ply',frames,args.report_dir/'visual',report)
+    render_mesh(target/'mesh.ply',frames,args.report_dir/'visual',report,camera)
 
 
 def main(argv=None):
@@ -231,6 +260,8 @@ def main(argv=None):
     p.add_argument('--work',type=Path,required=True)
     p.add_argument('--report-dir',type=Path,required=True)
     p.add_argument('--archive',type=Path)
+    p.add_argument('--stereo-width',type=int,choices=(320,640),default=640,
+                   help='Algorithm RGB width: native 640 (default), or 320 control')
     args=p.parse_args(argv)
     args.report_dir.mkdir(parents=True,exist_ok=True)
     report={'experiment':'tum-xyz-known-pose-RGB-stereo-no-measured-depth-v1',
