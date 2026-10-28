@@ -9,7 +9,8 @@ import pytest
 from echo4d.holdout import read_echo_ply
 from echo4d.model import Camera, DataError
 from sparse_open3d_fusion import (fuse_sparse, validate_settings, reject_far_side_of_depth_edges,
-                                  reject_cross_frame_foreground, select_cross_frame_neighbors)
+                                  reject_cross_frame_foreground, select_cross_frame_neighbors,
+                                  smooth_measured_depth_bilateral)
 from tum_sparse_open3d import comparison_sheet, verify_inputs
 
 
@@ -179,3 +180,22 @@ def test_two_pixel_far_side_halo_preserves_foreground_and_far_interior():
         validate_settings(.025, .12, 4., 1, 0., 0., edge_halo_pixels=3)
     with pytest.raises(DataError, match="Edge halo"):
         reject_far_side_of_depth_edges(depth, .08, halo_px=True)
+
+
+def test_bilateral_depth_smooths_noise_without_crossing_occlusion_or_filling_holes():
+    depth = np.array([[1., 1.02, 1., 2., 2., 2.],
+                      [1., 0.98, 1., 2., 2., 2.],
+                      [1., 1.01, 0., 2., 2., 2.]], dtype=np.float32)
+    original = depth.copy()
+    smooth, changed = smooth_measured_depth_bilateral(depth, .03)
+    assert changed > 0
+    assert abs(float(smooth[1, 1]) - 1.) < abs(float(depth[1, 1]) - 1.)
+    assert smooth[2, 2] == 0.0  # no hole fill
+    assert np.all(smooth[:, 3:] > 1.99)  # do not bridge the 1m jump
+    assert np.array_equal(depth, original)  # original measured depth unchanged
+    same, count = smooth_measured_depth_bilateral(depth, 0.)
+    assert same is depth and count == 0
+    with pytest.raises(DataError, match="range sigma"):
+        validate_settings(.025, .12, 4., 1, depth_smooth_sigma_m=.12)
+    with pytest.raises(DataError, match="2D"):
+        smooth_measured_depth_bilateral(depth[0], .03)
