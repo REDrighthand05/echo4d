@@ -3,7 +3,7 @@ from pathlib import Path
 import subprocess
 import sys
 
-ASSETS = ("quality.html", "quality.css", "quality.mjs")
+ASSETS = ("quality.html", "quality.css", "quality.mjs", "quality-intake.mjs")
 SCRIPT = Path(__file__).resolve().parents[2] / "tools/install_frontend.py"
 
 
