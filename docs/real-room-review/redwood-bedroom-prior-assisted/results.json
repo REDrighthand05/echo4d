@@ -1,0 +1,67 @@
+{
+  "scene": "Redwood Bedroom, real RGB-D, original 640x480",
+  "observed_input": "docs/real-room-review/redwood-bedroom-dense600/recorded-rgbd-preview.glb",
+  "observed_input_role": "600 recorded RGB-D frames, Open3D fusion, NO PRIOR",
+  "prior_input": "Open3D BedroomRGBDImages.reconstruction_path (bedroom.ply)",
+  "prior_role": "PRE-EXISTING MODEL, not recovered by our video reconstruction",
+  "method": "Open3D ICP (FPFH fallback), missing-prior-face gap union",
+  "gap_threshold_m": 0.09,
+  "alignment": {
+    "fitness": 0.9994962216624685,
+    "rmse_m": 0.0373776598900112,
+    "candidate_count": 2,
+    "prior_to_measured": [
+      [
+        0.9999806615033198,
+        0.003449076438862154,
+        -0.005174987062943093,
+        -0.0045326404280481205
+      ],
+      [
+        -0.003431307085317552,
+        0.9999882008098918,
+        0.0034386585588914403,
+        -0.007626797403385167
+      ],
+      [
+        0.005186786198503051,
+        -0.003420835090629323,
+        0.9999806973818148,
+        -0.015004524983442142
+      ],
+      [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    ]
+  },
+  "geometry": {
+    "measured_faces": 85000,
+    "prior_gap_faces": 791,
+    "measured_vertices": 47501,
+    "prior_gap_vertices": 822
+  },
+  "prior_faces_considered": 170000,
+  "prior_faces_kept_ratio": 0.004652941176470588,
+  "prior_to_measured_vertex_distance_median": 0.03190150367847387,
+  "observed_only_glb": "docs/real-room-review/redwood-bedroom-dense600/recorded-rgbd-preview.glb",
+  "hybrid_glb": "prior-assisted-viewable.glb",
+  "source_mask_glb": "geometry-source-mask.glb",
+  "source_mask_colors": {
+    "cyan": "observed RGB-D",
+    "orange": "existing prior-only gap geometry"
+  },
+  "before_after_images": [
+    "free-view-1.png",
+    "free-view-2.png",
+    "photo-vs-mesh-00000.png",
+    "photo-vs-mesh-10995.png",
+    "photo-vs-mesh-21929.png"
+  ],
+  "human_visual_acceptance": "NOT YET JUDGED",
+  "independent_reconstruction_claim": false,
+  "issue_74": "FAIL unchanged",
+  "desk_v2_heldout": "16.7779 cm > 15 cm FAIL unchanged"
+}
