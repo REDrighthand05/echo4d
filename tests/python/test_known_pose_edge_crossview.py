@@ -74,6 +74,7 @@ def test_any_distinct_support_pair_counts_regardless_of_first_view(order):
 
 
 def test_replay_report_uses_current_identity_and_no_placeholder_observation_counts(tmp_path, monkeypatch):
+    pytest.importorskip('trimesh', reason='Dedicated real MVS workflow installs optional trimesh')
     import json
     from pathlib import Path
     from echo4d.fusion import Mesh
