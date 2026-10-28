@@ -193,13 +193,18 @@ def select_training(manifest: dict, *, baseline: int = BASE_FRAMES,
     }
 
 
-def render_five(dataset: Path, imported: Path, target: Path, holdout: list[int], *, fine_voxel: bool = False) -> list[dict]:
+def render_five(dataset: Path, imported: Path, target: Path, holdout: list[int], *, fine_voxel: bool = False, cross_frame: bool = False) -> list[dict]:
     rec = load_recording(imported / "recording.json")
     assoc = json.loads((imported / "association.json").read_text(encoding="utf8"))
-    keys = (("room-96-fine-wide", "room-96-fine-18mm") if fine_voxel else
+    if cross_frame and fine_voxel:
+        raise DataError("Cross-frame and fine-voxel comparisons are exclusive")
+    keys = (("room-96-fine-wide", "room-96-crossframe-6cm") if cross_frame else
+            ("room-96-fine-wide", "room-96-fine-18mm") if fine_voxel else
             ("room-96-fine-narrow", "room-96-fine-wide"))
-    tag = "fine-18mm" if fine_voxel else "fine-truncation"
-    labels = (("25mm / stride1 / 12cm trunc", "18mm / 12cm TSDF; bounded preview")
+    tag = "crossframe-6cm" if cross_frame else "fine-18mm" if fine_voxel else "fine-truncation"
+    labels = (("25mm / 12cm TSDF; unfiltered", "25mm / 12cm TSDF; 6cm cross-frame guard")
+              if cross_frame else
+              ("25mm / stride1 / 12cm trunc", "18mm / 12cm TSDF; bounded preview")
               if fine_voxel else
               ("25mm / stride1 / 7.5cm trunc", "25mm / stride1 / 12cm trunc"))
     meshes = {}
@@ -251,6 +256,21 @@ def render_five(dataset: Path, imported: Path, target: Path, holdout: list[int],
     return images
 
 
+def geometry_variants(*, fine_voxel: bool = False, cross_frame: bool = False
+                      ) -> tuple[tuple[str, float, float, float], ...]:
+    """Predeclared geometry A/B; no holdout-driven parameter selection."""
+    if fine_voxel and cross_frame:
+        raise DataError("Select only one real geometry experiment")
+    if cross_frame:
+        return (("room-96-fine-wide", .025, .12, 0.),
+                ("room-96-crossframe-6cm", .025, .12, .06))
+    if fine_voxel:
+        return (("room-96-fine-wide", .025, .12, 0.),
+                ("room-96-fine-18mm", .018, .12, 0.))
+    return (("room-96-fine-narrow", .025, .075, 0.),
+            ("room-96-fine-wide", .025, .12, 0.))
+
+
 def run(args: argparse.Namespace, report: dict) -> None:
     work = args.work.resolve()
     target = args.report_dir.resolve()
@@ -279,16 +299,15 @@ def run(args: argparse.Namespace, report: dict) -> None:
     # --fine-voxel changes voxel length only during TSDF fusion.
     # If the 18mm extraction exceeds the bounded renderer, its exported
     # topology is explicitly quadric-decimated; this confounds visual A/B.
-    variants = (("room-96-fine-wide", 0.025, 0.12),
-                ("room-96-fine-18mm", 0.018, 0.12)) if args.fine_voxel else (
-                ("room-96-fine-narrow", 0.025, 0.075),
-                ("room-96-fine-wide", 0.025, 0.12))
-    for name, voxel_m, truncation_m in variants:
+    variants = geometry_variants(fine_voxel=args.fine_voxel,
+                                 cross_frame=args.cross_frame)
+    for name, voxel_m, truncation_m, guard_m in variants:
         report.setdefault("fusion", {})[name] = fuse_sparse(
             baseline_manifest, target / name, voxel_m=voxel_m,
             truncation_m=truncation_m, max_depth_m=MAX_DEPTH_M, pixel_stride=1,
+            consistency_guard_m=guard_m,
             decimate_to_faces=450000 if args.fine_voxel and voxel_m < 0.02 else 0)
-    for name, _, _ in variants:
+    for name, _, _, _ in variants:
         mesh = target / name / "mesh.ply"
         vertices, faces = read_echo_ply(mesh)
         score = evaluate_frames(vertices, faces, rec, selection["holdout_indices"],
@@ -300,8 +319,11 @@ def run(args: argparse.Namespace, report: dict) -> None:
             "same_sensor_holdout_diagnostic_only": {k: score[k] for k in (
                 "heldout_frames", "observed_depth_coverage", "rmse_m", "mae_m", "p95_abs_m")}}
     report["visual"] = render_five(dataset, imported, target, selection["holdout_indices"],
-                                   fine_voxel=args.fine_voxel)
-    report["status"] = ("real_room_25mm_vs_18mm_meshes_rendered_visual_review_pending"
+                                   fine_voxel=args.fine_voxel,
+                                   cross_frame=args.cross_frame)
+    report["status"] = ("real_room_crossframe_6cm_vs_unfiltered_visual_review_pending"
+                        if args.cross_frame else
+                        "real_room_25mm_vs_18mm_meshes_rendered_visual_review_pending"
                         if args.fine_voxel else
                         "real_room_fine_voxel_truncation_7p5cm_vs_12cm_meshes_rendered_visual_review_pending")
 
@@ -311,12 +333,17 @@ def main() -> int:
     parser.add_argument("--work", type=Path, required=True)
     parser.add_argument("--report-dir", type=Path, required=True)
     parser.add_argument("--archive", type=Path)
-    parser.add_argument("--fine-voxel", action="store_true",
-                        help="Compare 25mm vs 18mm voxels with the same 12cm TSDF and measured views")
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument("--fine-voxel", action="store_true",
+                       help="Compare 25mm vs 18mm voxels with the same 12cm TSDF and measured views")
+    group.add_argument("--cross-frame", action="store_true",
+                       help="Compare unfiltered 25mm TSDF with 6cm training-only cross-frame foreground rejection")
     args = parser.parse_args()
     args.report_dir.mkdir(parents=True, exist_ok=True)
     report = {
-        "experiment": ("TUM-fr1_room-known-pose-25mm-vs-18mm-voxel-ab-v1"
+        "experiment": ("TUM-fr1_room-known-pose-crossframe-6cm-ab-v1"
+                       if args.cross_frame else
+                       "TUM-fr1_room-known-pose-25mm-vs-18mm-voxel-ab-v1"
                        if args.fine_voxel else
                        "TUM-fr1_room-known-pose-fine-voxel-truncation-ab-v1"),
         "started_utc": datetime.now(timezone.utc).isoformat(),
@@ -327,11 +354,11 @@ def main() -> int:
         "depth": "TUM sensor measurement (not predicted)",
         "geometry": {"pixel_stride": 1, "depth_limit_m": MAX_DEPTH_M,
                      "training_view_variants": [EXPANDED_FRAMES, EXPANDED_FRAMES],
-                     "variants": ({"room-96-fine-wide": {"voxel_m": 0.025, "truncation_m": 0.12},
-                                   "room-96-fine-18mm": {"voxel_m": 0.018, "truncation_m": 0.12}}
-                                  if args.fine_voxel else
-                                  {"room-96-fine-narrow": {"voxel_m": 0.025, "truncation_m": 0.075},
-                                   "room-96-fine-wide": {"voxel_m": 0.025, "truncation_m": 0.12}}),
+                     "variants": {name: {"voxel_m": voxel, "truncation_m": trunc,
+                                         "consistency_guard_m": guard}
+                                  for name, voxel, trunc, guard in geometry_variants(
+                                      fine_voxel=args.fine_voxel,
+                                      cross_frame=args.cross_frame)},
                      "frozen_holdout_max_depth_m": MAX_DEPTH_M},
         "independent_surface_truth": "not_available",
         "human_visual_review": "not_performed",
@@ -356,7 +383,9 @@ def main() -> int:
         (args.report_dir / "room-sparse-quality-report.json").write_text(
             json.dumps(report, indent=2, allow_nan=False) + "\n", encoding="utf8")
         (args.report_dir / "SUMMARY.md").write_text("\n".join([
-            ("# Real fr1_room 96 known-pose: 25mm vs 18mm voxels, 12cm TSDF"
+            ("# Real fr1_room 96 known-pose: cross-frame 6cm guard vs unfiltered 25mm TSDF"
+             if args.cross_frame else
+             "# Real fr1_room 96 known-pose: 25mm vs 18mm voxels, 12cm TSDF"
              if args.fine_voxel else
              "# Real fr1_room 96 known-pose: 25mm/stride1 TSDF 7.5cm vs 12cm truncation"),
             f"- Status: {report['status']}",

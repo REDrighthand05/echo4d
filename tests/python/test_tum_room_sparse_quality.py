@@ -5,7 +5,7 @@ import pytest
 
 from echo4d.model import DataError
 from tum_room_sparse_quality import (
-    BASE_FRAMES, EXPANDED_FRAMES, DENSE_FRAMES, HOLDOUT, IMPORT_FRAMES, select_training,
+    BASE_FRAMES, EXPANDED_FRAMES, DENSE_FRAMES, HOLDOUT, IMPORT_FRAMES, select_training, geometry_variants,
 )
 
 
@@ -79,3 +79,12 @@ def test_120_view_geometry_budget_nests_96_without_holdout_leakage():
     held = [manifest["frames"][i]["t"] for i in second["holdout_indices"]]
     assert all(min(abs(frame["t"] - h) for h in held) > .16 for frame in dense120["frames"])
     assert second["min_train_holdout_time_gap_s"] > .16
+
+
+def test_cross_frame_geometry_is_single_variable_and_train_only():
+    base, guarded = geometry_variants(cross_frame=True)
+    assert base == ("room-96-fine-wide", .025, .12, 0.)
+    assert guarded == ("room-96-crossframe-6cm", .025, .12, .06)
+    assert geometry_variants(fine_voxel=True)[1][1] == .018
+    with pytest.raises(DataError, match="one real geometry"):
+        geometry_variants(fine_voxel=True, cross_frame=True)

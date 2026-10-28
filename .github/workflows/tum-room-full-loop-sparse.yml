@@ -1,4 +1,4 @@
-name: TUM room real 25mm vs 18mm voxel Mesh A/B
+name: TUM room real cross-frame foreground Mesh A/B
 
 on:
   push:
@@ -16,11 +16,11 @@ permissions:
   contents: read
 
 concurrency:
-  group: tum-room-fine-voxel-${{ github.ref }}
+  group: tum-room-crossframe-6cm-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
-  real-room-fine-voxel-ab:
+  real-room-crossframe-ab:
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
@@ -41,27 +41,27 @@ jobs:
           OPENBLAS_NUM_THREADS: '1'
           OMP_NUM_THREADS: '1'
         run: python -m pytest -q tests/python/test_tum_room_sparse_quality.py tests/python/test_sparse_open3d.py tests/python/test_room_pose_icp.py
-      - name: Reconstruct real fr1_room matched 25mm vs 18mm voxel Meshes
+      - name: Reconstruct real fr1_room 25mm TSDF with and without 6cm cross-frame foreground guard
         env:
           PYTHONPATH: tools
           OPENBLAS_NUM_THREADS: '1'
           OMP_NUM_THREADS: '1'
         run: |
           python tools/tum_room_sparse_quality.py \
-            --fine-voxel \
-            --work "$RUNNER_TEMP/tum-room-fine-voxel" \
-            --report-dir "$GITHUB_WORKSPACE/artifacts/tum-room-fine-voxel"
+            --cross-frame \
+            --work "$RUNNER_TEMP/tum-room-crossframe-6cm" \
+            --report-dir "$GITHUB_WORKSPACE/artifacts/tum-room-crossframe-6cm"
       - name: Show actual quality result or reproducible failure
         if: always()
         run: |
-          if [ -f artifacts/tum-room-fine-voxel/SUMMARY.md ]; then
-            cat artifacts/tum-room-fine-voxel/SUMMARY.md >> "$GITHUB_STEP_SUMMARY"
+          if [ -f artifacts/tum-room-crossframe-6cm/SUMMARY.md ]; then
+            cat artifacts/tum-room-crossframe-6cm/SUMMARY.md >> "$GITHUB_STEP_SUMMARY"
           fi
       - name: Retain actual colored meshes, 3+2 images, metrics or failure receipt
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: tum-room-fine-voxel-${{ github.run_id }}
-          path: artifacts/tum-room-fine-voxel/
+          name: tum-room-crossframe-6cm-${{ github.run_id }}
+          path: artifacts/tum-room-crossframe-6cm/
           if-no-files-found: warn
           retention-days: 14
