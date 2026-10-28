@@ -30,12 +30,14 @@ jobs:
           fi
           python /tmp/echo-install-frontend.py --source "$source_ref" --force
           node --check dist/quality.mjs
+          node --check dist/quality-intake.mjs
       - name: Check static assets
         shell: bash
         run: |
           test -s dist/quality.html
           test -s dist/quality.css
           test -s dist/quality.mjs
+          test -s dist/quality-intake.mjs
           grep -q 'quality.mjs' dist/quality.html
           grep -q 'quality.css' dist/quality.html
       - uses: actions/upload-artifact@v4
@@ -45,4 +47,5 @@ jobs:
             dist/quality.html
             dist/quality.css
             dist/quality.mjs
+            dist/quality-intake.mjs
           retention-days: 14
