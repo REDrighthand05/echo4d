@@ -13,7 +13,8 @@ def infer_plane_sweep(reference: np.ndarray, sources: list[tuple[np.ndarray, np.
                       camera: Camera, pose_ref: np.ndarray, *,
                       near: float = 0.4, far: float = 4.0,
                       planes: int = 64, pairing: str = 'top2',
-                      source_depths: list[np.ndarray] | None = None) -> tuple[np.ndarray, dict]:
+                      source_depths: list[np.ndarray] | None = None,
+                      visibility_mode: str = 'hard') -> tuple[np.ndarray, dict]:
     """Return metric camera-Z using 2+ known-pose RGB views, not sensor depth.
 
     Inverse-depth planes are fronto-parallel in the reference camera. ZNCC
@@ -31,6 +32,8 @@ def infer_plane_sweep(reference: np.ndarray, sources: list[tuple[np.ndarray, np.
         raise DataError('Plane sweep requires 2-4 sources and 16-128 planes')
     if pairing not in ('top2', 'diverse'):
         raise DataError('Unknown plane-sweep source pairing')
+    if visibility_mode not in ('hard', 'soft'):
+        raise DataError('Unknown source visibility mode')
     if not (np.isfinite(near) and np.isfinite(far) and 0.3 <= near < far <= 6.0):
         raise DataError('Invalid metric plane sweep depth range')
     a = rigid_matrix(np.asarray(pose_ref).flatten(order='F'))
@@ -79,6 +82,7 @@ def infer_plane_sweep(reference: np.ndarray, sources: list[tuple[np.ndarray, np.
             stable &= spread <= np.maximum(.12, .08 * d)
             stable_source_depth.append(stable.astype(np.uint8))
     occluded_samples = 0
+    penalized_samples = 0
     gray = cv2.cvtColor(reference, cv2.COLOR_RGB2GRAY).astype(np.float32)
     win = (5, 5)
     def smooth(x):
@@ -121,7 +125,18 @@ def infer_plane_sweep(reference: np.ndarray, sources: list[tuple[np.ndarray, np.
                 projected_z = z * source_ray_z[si] + t[2]
                 hidden = stable & (projected_z > sampled + np.maximum(.12, .08 * sampled))
                 occluded_samples += int(np.count_nonzero(valid & hidden))
-                valid &= ~hidden
+                if visibility_mode == 'hard':
+                    valid &= ~hidden
+                else:
+                    # Inferred source Z is fallible. A bounded photometric
+                    # penalty weakens its vote without deleting geometry.
+                    # Unknown / unstable source Z remains neutral.
+                    tolerance = np.maximum(.12, .08 * sampled)
+                    excess = np.maximum((projected_z - sampled) / tolerance - 1., 0.)
+                    penalty = np.minimum(.20, .08 + .06 * excess)
+                    affected = valid & hidden
+                    penalized_samples += int(np.count_nonzero(affected))
+                    cost += np.where(affected, penalty, 0).astype(np.float32)
             cost[~valid] = np.inf
             candidates.append(cost)
         stack = np.stack(candidates)
@@ -152,6 +167,8 @@ def infer_plane_sweep(reference: np.ndarray, sources: list[tuple[np.ndarray, np.
         'source_pairing': pairing,
         'source_visibility': source_depths is not None,
         'occluded_photo_samples': occluded_samples,
+        'penalized_photo_samples': penalized_samples,
+        'visibility_mode': visibility_mode if source_depths is not None else 'disabled',
         'diverse_pair_count': len(diverse_pairs),
         'candidate_pair_count': len(pairs),
         'used_diverse_pairs': bool(pairing == 'diverse' and diverse_pairs),
