@@ -19,7 +19,7 @@ from echo4d.output import output_transaction, write_json, write_ply
 
 def validate_settings(voxel_m: float, truncation_m: float, max_depth_m: float,
                       pixel_stride: int, edge_guard_m: float = 0.0,
-                      consistency_guard_m: float = 0.0) -> None:
+                      consistency_guard_m: float = 0.0, edge_halo_pixels: int = 1) -> None:
     if not all(isinstance(v, (float, int)) and not isinstance(v, bool)
                and math.isfinite(v) for v in (voxel_m, truncation_m, max_depth_m, edge_guard_m, consistency_guard_m)):
         raise DataError("Sparse TSDF distances must be finite numbers")
@@ -35,9 +35,12 @@ def validate_settings(voxel_m: float, truncation_m: float, max_depth_m: float,
         raise DataError("Sparse depth edge guard must be between 0 and 30cm")
     if not 0 <= consistency_guard_m <= 0.30:
         raise DataError("Cross-frame depth guard must be between 0 and 30cm")
+    if type(edge_halo_pixels) is not int or edge_halo_pixels not in (1, 2):
+        raise DataError("Edge halo must be one or two measured pixels")
 
 
-def reject_far_side_of_depth_edges(depth: np.ndarray, jump_m: float) -> tuple[np.ndarray, int]:
+def reject_far_side_of_depth_edges(depth: np.ndarray, jump_m: float,
+                                   halo_px: int = 1) -> tuple[np.ndarray, int]:
     """Suppress only the farther pixel at measured occlusion jumps, never fill holes.
 
     The far-side pixel next to a foreground occluder is prone to mixed-pixel
@@ -45,6 +48,8 @@ def reject_far_side_of_depth_edges(depth: np.ndarray, jump_m: float) -> tuple[np
     Zero/invalid depth does not trigger rejection of adjacent valid observations.
     This is an experimental geometry filter, not a confidence measurement.
     """
+    if type(halo_px) is not int or halo_px not in (1, 2):
+        raise DataError("Edge halo must be one or two measured pixels")
     if jump_m == 0:
         return depth, 0
     if depth.ndim != 2:
@@ -60,6 +65,18 @@ def reject_far_side_of_depth_edges(depth: np.ndarray, jump_m: float) -> tuple[np
         discontinuity = both & (np.abs(a - b) > threshold)
         reject[a_slice] |= discontinuity & (a > b)
         reject[b_slice] |= discontinuity & (b > a)
+    if halo_px == 2:
+        # Grow one pixel along the same measured far surface only; no hole fill.
+        grown = np.zeros_like(reject)
+        for a_slice, b_slice in ((np.s_[:-1, :], np.s_[1:, :]),
+                                 (np.s_[:, :-1], np.s_[:, 1:])):
+            a, b = depth[a_slice], depth[b_slice]
+            both = valid[a_slice] & valid[b_slice]
+            tolerance = np.maximum(jump_m, 0.04 * np.minimum(a, b))
+            same_surface = both & (np.abs(a - b) <= tolerance)
+            grown[a_slice] |= same_surface & reject[b_slice]
+            grown[b_slice] |= same_surface & reject[a_slice]
+        reject |= grown
     result = depth.copy()
     result[reject] = 0
     return result, int(np.count_nonzero(reject))
@@ -163,7 +180,8 @@ def reject_cross_frame_foreground(depth: np.ndarray, camera_to_world: np.ndarray
 def fuse_sparse(recording_path: Path, destination: Path, *, voxel_m: float = 0.03,
                 truncation_m: float = 0.09, max_depth_m: float = 4.0,
                 pixel_stride: int = 2, edge_guard_m: float = 0.0,
-                consistency_guard_m: float = 0.0) -> dict:
+                consistency_guard_m: float = 0.0,
+                edge_halo_pixels: int = 1) -> dict:
     """Integrate registered RGB and camera-Z metric depth; output strict ECHO color PLY.
 
     Open3D expects world-to-camera extrinsics, whereas ECHO stores camera-to-world.
@@ -171,7 +189,7 @@ def fuse_sparse(recording_path: Path, destination: Path, *, voxel_m: float = 0.0
     pretend to know per-vertex independent observation counts.
     """
     validate_settings(voxel_m, truncation_m, max_depth_m, pixel_stride,
-                      edge_guard_m, consistency_guard_m)
+                      edge_guard_m, consistency_guard_m, edge_halo_pixels)
     recording = load_recording(recording_path)
     if len(recording) > 120:
         raise DataError("Sparse quality experiment is bounded to 120 input frames")
@@ -198,7 +216,8 @@ def fuse_sparse(recording_path: Path, destination: Path, *, voxel_m: float = 0.0
         if frame.excluded is not None:
             invalid |= frame.excluded
         depth[invalid] = 0
-        depth, removed = reject_far_side_of_depth_edges(depth, edge_guard_m)
+        depth, removed = reject_far_side_of_depth_edges(depth, edge_guard_m,
+                                                       edge_halo_pixels)
         edge_removed_pixels += removed
         prepared.append((frame, depth))
     neighbors = (select_cross_frame_neighbors([f.camera_to_world for f, _ in prepared])
@@ -252,6 +271,7 @@ def fuse_sparse(recording_path: Path, destination: Path, *, voxel_m: float = 0.0
             "voxel_m": voxel_m, "truncation_m": truncation_m,
             "max_depth_m": max_depth_m, "pixel_stride": pixel_stride,
             "edge_guard_m": edge_guard_m,
+            "edge_halo_pixels": edge_halo_pixels,
             "edge_removed_pixels": edge_removed_pixels,
             "consistency_guard_m": consistency_guard_m,
             "consistency_removed_pixels": cross_removed_pixels,

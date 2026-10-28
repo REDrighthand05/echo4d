@@ -1,4 +1,4 @@
-name: TUM desk cross-scene fine TSDF truncation geometry
+name: TUM desk 12cm TSDF far-side depth-edge halo geometry
 
 on:
   push:
@@ -6,6 +6,8 @@ on:
       - research/highres-rgbd-tsdf-quality-20261028
     paths:
       - 'tools/tum_desk_sparse_quality.py'
+      - 'tools/sparse_open3d_fusion.py'
+      - 'tests/python/test_sparse_open3d.py'
       - 'tests/python/test_tum_desk_sparse_quality.py'
       - '.github/workflows/tum-desk-wide-trajectory-sparse.yml'
   workflow_dispatch:
@@ -39,7 +41,7 @@ jobs:
           OPENBLAS_NUM_THREADS: '1'
           OMP_NUM_THREADS: '1'
         run: python -m pytest -q tests/python/test_tum_desk_sparse_quality.py tests/python/test_sparse_open3d.py
-      - name: Reconstruct 96-view desk Mesh A/B at 7.5cm and 12cm TSDF truncation
+      - name: Reconstruct 96-view desk 12cm TSDF baseline vs 2px far-side edge halo
         env:
           PYTHONPATH: tools
           OPENBLAS_NUM_THREADS: '1'
@@ -58,7 +60,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: tum-desk-wide-${{ github.run_id }}
+          name: tum-desk-edge-halo-${{ github.run_id }}
           path: artifacts/tum-desk-wide/
           if-no-files-found: warn
           retention-days: 14

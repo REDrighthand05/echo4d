@@ -164,3 +164,18 @@ def test_cross_frame_neighbor_selection_requires_real_baseline_and_overlap():
     assert no_parallax == [[], [], []]
     with pytest.raises(DataError, match="Cross-frame depth guard"):
         validate_settings(.03, .09, 4., 2, 0., -.1)
+
+
+def test_two_pixel_far_side_halo_preserves_foreground_and_far_interior():
+    depth = np.tile(np.array([2., 2., 2., 1., 1., 1.], dtype=np.float32), (3, 1))
+    one, removed_one = reject_far_side_of_depth_edges(depth, .08, halo_px=1)
+    two, removed_two = reject_far_side_of_depth_edges(depth, .08, halo_px=2)
+    assert removed_one == 3 and removed_two == 6
+    assert np.all(one[:, 2] == 0) and np.all(one[:, 1] == 2.)
+    assert np.all(two[:, 1:3] == 0) and np.all(two[:, 0] == 2.)
+    assert np.array_equal(two[:, 3:], depth[:, 3:])
+    assert np.all(depth[:, 1:3] == 2.)
+    with pytest.raises(DataError, match="Edge halo"):
+        validate_settings(.025, .12, 4., 1, 0., 0., edge_halo_pixels=3)
+    with pytest.raises(DataError, match="Edge halo"):
+        reject_far_side_of_depth_edges(depth, .08, halo_px=True)
