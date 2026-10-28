@@ -12,7 +12,8 @@ def source():
         return {"t": t, "cameraToWorld": [1, 0, 0, 0, 0, 1, 0, 0,
                                           0, 0, 1, 0, 0, 0, 0, 1]}
     def association(i):
-        return {"rgb_path": f"rgb/{i}.png", "depth_path": f"depth/{i}.png",
+        return {"depth_timestamp": i * .1, "rgb_timestamp": i * .1,
+                "rgb_path": f"rgb/{i}.png", "depth_path": f"depth/{i}.png",
                 "rgb_sha256": f"rgb-{i}", "depth_sha256": f"depth-{i}"}
     old = {"version": "echo-dataset-1", "source": "recorded",
            "frames": [frame(i * .4) for i in range(60)]}
@@ -108,3 +109,18 @@ def test_pose_diverse_rejects_invalid_budget_and_guard():
         select_pose_diverse_training(old, dense, a, b, budget=48)
     with pytest.raises(DataError, match="holdout guard"):
         select_pose_diverse_training(old, dense, a, b, budget=88, guard_s=.35)
+
+
+def test_pose_diverse_joins_by_absolute_source_time_after_skipped_input():
+    old, dense, a, b = dense_source()
+    # A valid stride-3 import can skip an intermediate unregistered frame.
+    # Output index 4*i is then WRONG, but absolute TUM timestamps still match.
+    dense["frames"].pop(5)
+    b["frames"].pop(5)
+    dense["frames"].append({"t": 24.0, "cameraToWorld": dense["frames"][-1]["cameraToWorld"]})
+    b["frames"].append({"depth_timestamp": 24.0, "rgb_timestamp": 24.0,
+                        "rgb_path": "rgb/240.png", "depth_path": "depth/240.png",
+                        "rgb_sha256": "rgb-240", "depth_sha256": "depth-240"})
+    chosen, info = select_pose_diverse_training(old, dense, a, b, budget=88)
+    assert len(chosen["frames"]) == 88
+    assert info["baseline_frames_preserved"] == 48
