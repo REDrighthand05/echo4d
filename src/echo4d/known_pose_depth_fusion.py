@@ -69,7 +69,12 @@ def fuse_reprojected_depths(depths: list[np.ndarray], poses: list[np.ndarray],
             target_color = rgbs[i].reshape(-1, 3)[uv]
             color_gap = np.mean(np.abs(source_color.astype(np.int16) -
                                        target_color.astype(np.int16)), axis=1)
-            keep = color_gap <= color_threshold
+            # Visibility is geometric: a rejected foreground color must not
+            # expose a farther surface at the same projected anchor pixel.
+            nearest = np.full(h * w, np.inf, dtype=np.float32)
+            np.minimum.at(nearest, uv, zz.astype(np.float32))
+            visible = np.abs(zz - nearest[uv]) <= 1e-5
+            keep = (color_gap <= color_threshold) & visible
             zbuffer = np.full(h * w, np.inf, dtype=np.float32)
             np.minimum.at(zbuffer, uv[keep], zz[keep].astype(np.float32))
             zbuffer[~np.isfinite(zbuffer)] = 0

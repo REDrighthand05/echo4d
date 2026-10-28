@@ -62,3 +62,20 @@ def test_invalid_estimated_depth_rejected():
     d[0][0, 0] = np.nan
     with pytest.raises(ValueError):
         fuse_reprojected_depths(d, p, rgb, k)
+
+
+def test_color_mismatch_cannot_reveal_occluded_background():
+    k = Camera(40, 30, 50, 50, 19.5, 14.5)
+    depths = [np.zeros((30, 40), np.float32) for _ in range(3)]
+    poses = [np.eye(4) for _ in range(3)]
+    rgbs = [np.full((30, 40, 3), 100, np.uint8) for _ in range(3)]
+    # Each source has a foreground point and a matching-color background
+    # point projecting to the SAME anchor pixel. Rejecting foreground RGB
+    # must not make its occluded background geometrically visible.
+    for j, x, near_u, far_u in [(1, -.08, 24, 22), (2, .08, 16, 18)]:
+        poses[j][0, 3] = x
+        depths[j][15, near_u] = 1
+        depths[j][15, far_u] = 2
+        rgbs[j][15, near_u] = 200
+    fused, _ = fuse_reprojected_depths(depths, poses, rgbs, k)
+    assert fused[0][15, 20] == 0

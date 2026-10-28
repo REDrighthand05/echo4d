@@ -39,7 +39,8 @@ def test_invalid_depth_rejected():
         regularize_observed_depth(z, np.zeros((20, 20, 3), dtype='uint8'))
 
 
-def test_recording_receipt_matches_regularized_depth(monkeypatch, tmp_path):
+@pytest.mark.parametrize("crossview", [False, True])
+def test_recording_receipt_matches_regularized_depth(monkeypatch, tmp_path, crossview):
     import sys
     from pathlib import Path
     monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[2] / 'tools'))
@@ -56,14 +57,20 @@ def test_recording_receipt_matches_regularized_depth(monkeypatch, tmp_path):
     monkeypatch.setattr(runner, 'select_plane_sweep_views', lambda *a, **k: (selected, {}))
     monkeypatch.setattr(runner, 'load_stereo_rgb', lambda *a: np.zeros((240, 320, 3), np.uint8))
     monkeypatch.setattr(runner, 'infer_plane_sweep', lambda *a, **k: (depth.copy(), stats.copy()))
+    def transfer(depths, *args):
+        outputs = [d.copy() for d in depths]
+        for d in outputs:
+            d[100, 100] = 2
+        return outputs, [{'added_pixels': 1, 'adjusted_pixels': 0} for d in outputs]
+    monkeypatch.setattr(runner, 'fuse_reprojected_depths', transfer)
     frames = [{'rgb': Path('unused'), 'pose': np.eye(4), 't_s': float(i)} for i in range(60)]
     report = {}
     runner.build_plane_sweep_recording(frames, tmp_path / 'recording', report,
-                                      depth_regularization='rgb-consensus')
+                                      depth_regularization='rgb-consensus', crossview_fusion=crossview)
     actual = np.load(tmp_path / 'recording/depth/00000.npy', allow_pickle=False)
     valid = int(np.count_nonzero(actual))
     receipt = report['plane_sweep']['per_anchor'][0]
-    assert valid == 100
+    assert valid == (101 if crossview else 100)
     assert receipt['valid_depth_pixels'] == valid
     assert receipt['unknown_pixels'] == pixels - valid
     assert receipt['valid_fraction'] == valid / pixels

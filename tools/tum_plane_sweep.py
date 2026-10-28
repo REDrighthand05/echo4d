@@ -74,6 +74,7 @@ def build_plane_sweep_recording(frames: list[dict], target: Path, report: dict,
             'per_anchor': first_pass_stats}
     missing_source_z = 0
     entries = []
+    saved_diagnostics = []
     diagnostics = []
     for left, partners in selected:
         if left in HOLDOUT or any(j in HOLDOUT for j in partners):
@@ -100,9 +101,11 @@ def build_plane_sweep_recording(frames: list[dict], target: Path, report: dict,
             stats['adaptive_statistics_stage'] = 'before_regularization'
         elif depth_regularization != 'none':
             raise DataError('Unknown depth regularization mode')
-        diagnostics.append({'left_index': left, 'source_indices': partners, **stats})
+        stats = {'left_index': left, 'source_indices': partners, **stats}
+        diagnostics.append(stats)
         if stats['valid_depth_pixels'] < 100:
             continue
+        saved_diagnostics.append(stats)
         n = len(entries)
         Image.fromarray(rgb(left)).save(target / 'color' / f'{n:05d}.png')
         np.save(target / 'depth' / f'{n:05d}.npy', depth, allow_pickle=False)
@@ -120,8 +123,12 @@ def build_plane_sweep_recording(frames: list[dict], target: Path, report: dict,
                        for e in entries]
         fused_depths, fusion_receipts = fuse_reprojected_depths(
             saved_depths, saved_poses, saved_rgbs, camera)
-        for e, fused in zip(entries, fused_depths):
+        for e, fused, stats in zip(entries, fused_depths, saved_diagnostics):
             np.save(target / e['depth'], fused, allow_pickle=False)
+            stats['inference_before_crossview_fusion'] = stats.copy()
+            stats['valid_depth_pixels'] = int(np.count_nonzero(fused))
+            stats['unknown_pixels'] = int(fused.size - stats['valid_depth_pixels'])
+            stats['valid_fraction'] = stats['valid_depth_pixels'] / fused.size
         report['crossview_fusion'] = {
             'method': 'two independent RGB-consistent training depth projections',
             'input_depth_source': 'RGB-inferred, not measured',
