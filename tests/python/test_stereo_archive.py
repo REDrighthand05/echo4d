@@ -3,6 +3,9 @@ import json
 import numpy as np
 import pytest
 from PIL import Image
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'tools'))
 import tum_rgb_stereo as stereo
 from echo4d.model import DataError, file_sha256
 
