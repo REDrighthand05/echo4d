@@ -102,7 +102,8 @@ def load_measured(path, o3d):
     t=trimesh.load(str(path),force="mesh",process=False)
     vertices=np.asarray(t.vertices,dtype=np.float64)
     faces=np.asarray(t.faces,dtype=np.int32)
-    colors=np.asarray(t.visual.to_color().vertex_colors)
+    # Our exported GLB already has ColorVisuals; Trimesh 4 has no to_color().
+    colors=np.asarray(t.visual.vertex_colors)
     if (len(faces) < 1000 or colors.shape != (len(vertices),4) or
             not np.isfinite(vertices).all()):
         raise ValueError("Expected real, colored, measured-room GLB")
