@@ -50,8 +50,8 @@ def test_rejects_nonfinite_and_nonmonotonic_timestamps():
 def test_rejects_missing_real_frames_and_insufficient_budget():
     original = synthetic_manifest()
     changed = copy.deepcopy(original)
-    changed["frames"].pop()
-    with pytest.raises(DataError, match="180"):
+    del changed["frames"][135:]
+    with pytest.raises(DataError, match="140-180"):
         select_training(changed)
     with pytest.raises(DataError, match="budget"):
         select_training(original, baseline=48, expanded=121)
