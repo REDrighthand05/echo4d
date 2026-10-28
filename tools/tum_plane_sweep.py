@@ -31,7 +31,8 @@ def build_plane_sweep_recording(frames: list[dict], target: Path, report: dict,
                                 max_sources: int = 4,
                                 pairing: str = 'top2',
                                 source_visibility: bool = False,
-                                visibility_mode: str = 'hard') -> Path:
+                                visibility_mode: str = 'hard',
+                                window_mode: str = 'fixed') -> Path:
     camera, _, _ = stereo_resolution(320)
     training = [i for i in range(TOTAL) if i not in HOLDOUT]
     selected, selection_stats = select_plane_sweep_views(
@@ -58,7 +59,8 @@ def build_plane_sweep_recording(frames: list[dict], target: Path, report: dict,
         for left, partners in selected:
             z, stats = infer_plane_sweep(rgb(left),
                 [(rgb(j), frames[j]['pose']) for j in partners],
-                camera, frames[left]['pose'], planes=planes, pairing=pairing)
+                camera, frames[left]['pose'], planes=planes, pairing=pairing,
+                window_mode=window_mode)
             prepass[left] = z
             first_pass_stats.append({'left_index': left,
                                      'valid_depth_pixels': stats['valid_depth_pixels']})
@@ -82,7 +84,8 @@ def build_plane_sweep_recording(frames: list[dict], target: Path, report: dict,
         depth, stats = infer_plane_sweep(rgb(left), sources, camera,
                                         frames[left]['pose'], planes=planes, pairing=pairing,
                                         source_depths=source_z,
-                                        visibility_mode=visibility_mode)
+                                        visibility_mode=visibility_mode,
+                                        window_mode=window_mode)
         diagnostics.append({'left_index': left, 'source_indices': partners, **stats})
         if stats['valid_depth_pixels'] < 100:
             continue
@@ -96,6 +99,9 @@ def build_plane_sweep_recording(frames: list[dict], target: Path, report: dict,
     report['plane_sweep'] = {'candidate_anchors': len(selected),
                              'saved_training_frames': len(entries),
                              'planes': planes, 'max_sources': max_sources, 'pairing': pairing,
+                             'window_mode': window_mode,
+                             'adaptive_reference_pixels': sum(x['adaptive_reference_pixels'] for x in diagnostics),
+                             'adaptive_valid_depth_pixels': sum(x['adaptive_valid_depth_pixels'] for x in diagnostics),
                              'source_visibility': source_visibility,
                              'visibility_mode': visibility_mode if source_visibility else 'disabled',
                              'penalized_photo_samples': sum(x['penalized_photo_samples'] for x in diagnostics),
@@ -144,7 +150,8 @@ def execute(args: argparse.Namespace, report: dict) -> None:
                                            max_anchors=args.max_anchors, planes=args.planes,
                                            max_sources=args.max_sources, pairing=args.pairing,
                                            source_visibility=args.source_visibility,
-                                           visibility_mode=args.visibility_mode)
+                                           visibility_mode=args.visibility_mode,
+                                           window_mode=args.window_mode)
     report['archived_inputs'] = archive_stereo_inputs(
         manifest, frames, root, args.report_dir / 'inputs')
     target = args.report_dir / 'reconstruction'
@@ -179,6 +186,8 @@ def main(argv=None):
                    help='Two-pass TRAIN-only RGB depth occlusion test; no measured Z')
     p.add_argument('--visibility-mode', choices=('hard', 'soft'), default='hard',
                    help='Hard veto or bounded soft penalty for RGB-inferred occluders')
+    p.add_argument('--window-mode', choices=('fixed', 'adaptive'), default='fixed',
+                   help='Use observed 11x11 RGB patches only where 5x5 has weak texture')
     args = p.parse_args(argv)
     args.report_dir.mkdir(parents=True, exist_ok=True)
     report = {'experiment': 'tum-xyz-known-pose-cpu-plane-sweep-no-measured-Z',
@@ -189,6 +198,7 @@ def main(argv=None):
               'inputs_removed': ['sensor depth PNG pixels', 'prior Mesh'],
               'source_visibility_enabled': args.source_visibility,
               'visibility_mode': args.visibility_mode if args.source_visibility else 'disabled',
+              'window_mode': args.window_mode,
               'evidence_level': 'real data experiment; no independent surface truth or #74 acceptance'}
     start = time.perf_counter()
     try:
