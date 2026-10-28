@@ -10,7 +10,7 @@ import pathlib
 import subprocess
 import sys
 
-ASSETS = ("dist/quality.html", "dist/quality.css", "dist/quality.mjs")
+ASSETS = ("dist/quality.html", "dist/quality.css", "dist/quality.mjs", "dist/quality-intake.mjs")
 
 def git(*args):
     return subprocess.run(["git", *args], check=True, capture_output=True)
