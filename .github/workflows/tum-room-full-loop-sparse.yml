@@ -1,4 +1,4 @@
-name: TUM room 96 vs 120 real RGB-D views Mesh A/B
+name: TUM room 120 vs 158 real RGB-D views Mesh A/B
 
 on:
   push:
@@ -16,11 +16,11 @@ permissions:
   contents: read
 
 concurrency:
-  group: tum-room-dense-120-${{ github.ref }}
+  group: tum-room-all-158-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
-  real-room-dense-120-ab:
+  real-room-all-158-ab:
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
@@ -41,27 +41,27 @@ jobs:
           OPENBLAS_NUM_THREADS: '1'
           OMP_NUM_THREADS: '1'
         run: python -m pytest -q tests/python/test_tum_room_sparse_quality.py tests/python/test_sparse_open3d.py tests/python/test_room_pose_icp.py
-      - name: Reconstruct real fr1_room 96 vs 120 measured RGB-D views with identical 25mm TSDF
+      - name: Reconstruct real fr1_room 120 vs 158 measured RGB-D views with identical 25mm TSDF
         env:
           PYTHONPATH: tools
           OPENBLAS_NUM_THREADS: '1'
           OMP_NUM_THREADS: '1'
         run: |
           python tools/tum_room_sparse_quality.py \
-            --dense-views \
-            --work "$RUNNER_TEMP/tum-room-dense-120" \
-            --report-dir "$GITHUB_WORKSPACE/artifacts/tum-room-dense-120"
+            --all-views \
+            --work "$RUNNER_TEMP/tum-room-all-158" \
+            --report-dir "$GITHUB_WORKSPACE/artifacts/tum-room-all-158"
       - name: Show actual quality result or reproducible failure
         if: always()
         run: |
-          if [ -f artifacts/tum-room-dense-120/SUMMARY.md ]; then
-            cat artifacts/tum-room-dense-120/SUMMARY.md >> "$GITHUB_STEP_SUMMARY"
+          if [ -f artifacts/tum-room-all-158/SUMMARY.md ]; then
+            cat artifacts/tum-room-all-158/SUMMARY.md >> "$GITHUB_STEP_SUMMARY"
           fi
       - name: Retain actual colored meshes, 3+2 images, metrics or failure receipt
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: tum-room-dense-120-${{ github.run_id }}
-          path: artifacts/tum-room-dense-120/
+          name: tum-room-all-158-${{ github.run_id }}
+          path: artifacts/tum-room-all-158/
           if-no-files-found: warn
           retention-days: 14
