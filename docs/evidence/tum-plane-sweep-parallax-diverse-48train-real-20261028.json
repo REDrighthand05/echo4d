@@ -1,0 +1,136 @@
+{
+  "experiment": "tum-fr1-xyz-known-pose-plane-sweep-parallax-diverse-48train",
+  "date_utc": "2026-10-28",
+  "status": "real_mesh_generated_visual_fail",
+  "hypothesis": "Two same-side RGB source matches can reinforce a shared occlusion error; require >=60deg translational parallax separation where the TRAIN camera geometry permits, without using measured depth or holdout RGB.",
+  "implementation_commit": "8d241c5262b9e9a72ac73c5dc665feb3631172d1",
+  "implementation_files": [
+    "src/echo4d/known_pose_plane_sweep.py",
+    "tools/tum_plane_sweep.py",
+    "tests/python/test_known_pose_plane_sweep.py",
+    ".github/workflows/tum-plane-sweep-ablation.yml"
+  ],
+  "input": {
+    "official_source": "https://cvg.cit.tum.de/rgbd/dataset/freiburg1/rgbd_dataset_freiburg1_xyz.tgz",
+    "archive_sha256": "a0236d97b8c30cd93b653656d2b6c293ff7c982a4130ef2a1a8beecdb124ef98",
+    "source_frames_sha256": "b964616a4cf7cc516ec28ecae2045847837124ee71d3bd9f0938d7458de59da1",
+    "inferred_recording_manifest_sha256_same_both": "060f5b9c2945125f16355cf0d0999fbf3a10e21679895293973003fa2154f848",
+    "source_rgb": [
+      640,
+      480
+    ],
+    "algorithm_rgb": [
+      320,
+      240
+    ],
+    "retained": [
+      "original RGB",
+      "TUM supplied metric camera-to-world poses",
+      "intrinsics",
+      "depth.txt timestamps for frozen selection only"
+    ],
+    "removed": [
+      "measured sensor depth PNG pixels",
+      "prior Mesh"
+    ],
+    "measured_depth_png_opened": 0,
+    "train_count": 48,
+    "holdout_count": 12,
+    "holdout_indices": [
+      4,
+      5,
+      9,
+      10,
+      14,
+      19,
+      24,
+      25,
+      29,
+      34,
+      35,
+      55
+    ],
+    "note": "Known metric poses are supplied groundtruth, NOT estimated from RGB. Inferred Z is not sensor measurement. The manifest SHA is identical because filenames and pose metadata are identical; inferred Z arrays have different hashes."
+  },
+  "protocol": {
+    "max_anchors": 48,
+    "max_sources": 4,
+    "inverse_depth_planes": 64,
+    "voxel_m": 0.05,
+    "min_observations": 1,
+    "source_selector": "unchanged known-pose 2m grid overlap and diverse flow",
+    "old_pairing": "top2",
+    "new_pairing": "diverse",
+    "pair_direction_threshold_deg": 60,
+    "source_depth_visibility_test": false,
+    "identical_train_anchor_and_source_indices": true
+  },
+  "old": {
+    "code_sha": "412e5fa425af55d020ea388292d76d3aaf12d975",
+    "real_run": "https://github.com/REDrighthand05/echo4d/actions/runs/40646588976",
+    "artifact": "https://github.com/REDrighthand05/echo4d/actions/runs/40646588976/artifacts/12797877093",
+    "zip_sha256": "25ff1d90085a1ac7dd10698209b3284f03f64a3be36aad4cddee9072e5c0de1b",
+    "mesh_sha256": "c0d47205fd2b3e11434475d1a79cde46a6187ca3095f6115e747513ded19e2b0",
+    "vertices": 5159,
+    "triangles": 5444,
+    "face_components": 535,
+    "largest_component_fraction": 0.4671197648787656,
+    "inferred_depth_valid_pixels": 1013210,
+    "saved_training_frames": 48
+  },
+  "new": {
+    "real_run": "https://github.com/REDrighthand05/echo4d/actions/runs/40653574026",
+    "verify": "https://github.com/REDrighthand05/echo4d/actions/runs/40653573998",
+    "artifact": "https://github.com/REDrighthand05/echo4d/actions/runs/40653574026/artifacts/12800264474",
+    "zip_sha256": "376648f9cb66e204875c064437b9f4853acb9de18ed800dd5c7c6623ce081a38",
+    "mesh_sha256": "0a3517be659a92defbfc7d9ceb1bf0af6a4b6bd982ed0454e206628f1be42721",
+    "vertices": 3762,
+    "triangles": 3737,
+    "face_components": 437,
+    "largest_component_fraction": 0.4674872892694675,
+    "inferred_depth_valid_pixels": 829218,
+    "saved_training_frames": 48,
+    "anchors_with_diverse_pairs": 39,
+    "anchors_fallback_to_top2": 9,
+    "local_synthetic_tests": "10 passed",
+    "cross_platform_verify": "Linux/Windows x Python 3.12/3.13 all 4 jobs success",
+    "zip_crc": "verified_no_errors",
+    "mesh_sha_matches_report": true
+  },
+  "same_five_old_camera_poses_zbuffer_covered_pixels": {
+    "heldout-4": {
+      "old": 32177,
+      "new": 31040
+    },
+    "heldout-24": {
+      "old": 27802,
+      "new": 25646
+    },
+    "heldout-55": {
+      "old": 22628,
+      "new": 20669
+    },
+    "free-a": {
+      "old": 22425,
+      "new": 18729
+    },
+    "free-b": {
+      "old": 20521,
+      "new": 15914
+    }
+  },
+  "same_pose_method": "Both old and new binary PLY meshes independently rasterized with the existing ECHO perspective-correct triangle z-buffer formula, 320x240 intrinsics, 0.15-4m clipping, at the FIVE exact cameraToWorld matrices in the OLD 48-anchor run report. The new run's automatically recentered free cameras were NOT used for A/B.",
+  "local_comparison_montage_sha256": "74e7522f3a61c492c645196457b2adca4e58f9cd2c5b65ef73deac5f59cf745d",
+  "local_new_glb_sha256": "e188647f62cccffb72dddf94183a18dff82908ffeda21f28796e7aa9091612b5",
+  "result": "Negative real A/B: synthetic correlated same-side false-depth counterexample is suppressed, but on TUM inferred Z support fell 18.16%, disconnected components fell 535 to 437 while largest component fraction remained ~46.7%; ALL five fixed-view visible pixel counts fell, especially free views. The room/desk remains visibly torn and unrecognizable. Do not promote diverse pairing to default or claim #74 PASS.",
+  "evidence_limits": [
+    "No independent surface ground truth",
+    "No independent human visual acceptance",
+    "Same-sensor holdout depth was not scored in this run",
+    "Original 640x480 RGB not redistributed pending source license review",
+    "Local montage and GLB are SHA-pinned but not committed to Git; real original Mesh and five views are in the linked Actions artifact, which expires."
+  ],
+  "historical_desk_v2": "FAIL 16.7779cm > frozen 15cm, unchanged",
+  "next_minimal_action": "On the same 48 anchors/4 sources, add train-only per-source visibility/occlusion checking using source-view inferred Z rather than relying on a hard global parallax-pair requirement; compare fixed five poses before adopting.",
+  "default_behavior": "top2 remains the default in the public CLI; only this real experiment workflow selects --pairing diverse."
+}
