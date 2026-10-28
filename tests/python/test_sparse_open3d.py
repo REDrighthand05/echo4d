@@ -10,7 +10,7 @@ from echo4d.holdout import read_echo_ply
 from echo4d.model import Camera, DataError
 from sparse_open3d_fusion import (fuse_sparse, validate_settings, reject_far_side_of_depth_edges,
                                   reject_cross_frame_foreground, select_cross_frame_neighbors,
-                                  smooth_measured_depth_bilateral)
+                                  smooth_measured_depth_bilateral, measured_edge_band)
 from tum_sparse_open3d import comparison_sheet, verify_inputs
 
 
@@ -199,3 +199,40 @@ def test_bilateral_depth_smooths_noise_without_crossing_occlusion_or_filling_hol
         validate_settings(.025, .12, 4., 1, depth_smooth_sigma_m=.12)
     with pytest.raises(DataError, match="2D"):
         smooth_measured_depth_bilateral(depth[0], .03)
+
+
+def test_local_tsdf_masks_only_measured_jump_and_preserves_holes():
+    depth = np.ones((25, 35), dtype=np.float32)
+    depth[:, 18:] = 2.
+    depth[2, 2] = 0.
+    wide, narrow = measured_edge_band(depth, jump_m=.08, inner_px=3, outer_px=7)
+    assert wide.dtype == bool and narrow.dtype == bool
+    assert not wide[2, 2] and not narrow[2, 2]
+    assert wide[12, 2] and not narrow[12, 2]
+    assert not wide[12, 17] and narrow[12, 17]
+    assert wide[12, 12] and narrow[12, 12]  # overlap for seam extraction
+    assert not np.any(wide & ~np.isfinite(depth))
+    smooth = np.ones((25, 35), dtype=np.float32)
+    w, n = measured_edge_band(smooth)
+    assert w.all() and not n.any()
+
+
+def test_local_tsdf_rejects_invalid_narrow_truncation_and_band():
+    for value in (0.02, 0.12, 0.14, -0.01, float("nan"), True):
+        with pytest.raises(DataError, match="Local edge truncation"):
+            validate_settings(.025, .12, 4., 1, local_edge_truncation_m=value)
+    with pytest.raises(DataError, match="Local TSDF"):
+        measured_edge_band(np.ones((3, 3), dtype=np.float32), inner_px=4, outer_px=4)
+
+
+def test_synthetic_local_tsdf_emits_observed_colored_mesh(tmp_path):
+    pytest.importorskip("open3d")
+    source = make_recording(tmp_path / "source")
+    result = fuse_sparse(source, tmp_path / "output", voxel_m=.025,
+                         truncation_m=.12, max_depth_m=2., pixel_stride=1,
+                         local_edge_truncation_m=.075)
+    vertices, faces = read_echo_ply(tmp_path / "output" / "mesh.ply")
+    assert len(vertices) > 10 and len(faces) > 10
+    assert result["local_edge_truncation_m"] == .075
+    assert result["local_edge_depth_pixels"] == 0
+    assert result["unknown_surface_fill"] is False
