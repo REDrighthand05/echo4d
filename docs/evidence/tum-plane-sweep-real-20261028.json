@@ -1,0 +1,76 @@
+{
+  "experiment": "tum-fr1-xyz-known-pose-cpu-plane-sweep-mvs-v1",
+  "date_utc": "2026-10-28",
+  "status": "real_mesh_generated_visual_fail",
+  "code_sha": "b73e4ecb642fc89a26651811c7ba6159eb8de3bc",
+  "real_run": "https://github.com/REDrighthand05/echo4d/actions/runs/40641168882",
+  "artifact": "https://github.com/REDrighthand05/echo4d/actions/runs/40641168882/artifacts/12794719524",
+  "artifact_zip_sha256": "0b51589ea842ee3aa8f1de05827dc2df5e5d62c3716baceb43c0f7aaa54a0761",
+  "inputs_retained": [
+    "TUM fr1_xyz original 640x480 RGB, decimated to 320x240",
+    "known metric poses",
+    "camera calibration",
+    "depth.txt timestamps solely for frozen selection"
+  ],
+  "inputs_removed": [
+    "sensor measured depth pixels",
+    "prior Mesh"
+  ],
+  "frozen_split": {
+    "train": 48,
+    "holdout": 12,
+    "holdout_indices": [
+      4,
+      5,
+      9,
+      10,
+      14,
+      19,
+      24,
+      25,
+      29,
+      34,
+      35,
+      55
+    ]
+  },
+  "algorithm": "CPU 64 inverse-depth plane ZNCC photometric sweep; two distinct training source views; 5x5 windows, no inpainting; existing ECHO TSDF fusion",
+  "replay": "python tools/tum_plane_sweep.py --work /tmp/tum-plane-sweep --report-dir artifacts/tum-plane-sweep --max-anchors 20 --planes 64",
+  "new_mesh": {
+    "sha256": "586d4fc4208a521a878f1c416558235d135481fb203a8afc44bcd592d8a6e057",
+    "vertices": 1067,
+    "triangles": 992,
+    "connected_face_components": 121,
+    "largest_component_fraction": 0.3024193548387097,
+    "usable_training_depth_frames": 12,
+    "candidate_anchors": 20,
+    "covered_pixels": {
+      "heldout-4": 13317,
+      "heldout-24": 9837,
+      "heldout-55": 7969,
+      "free-a": 5235,
+      "free-b": 4284
+    }
+  },
+  "prior_stereo": {
+    "run": "https://github.com/REDrighthand05/echo4d/actions/runs/40635179109",
+    "artifact_zip_sha256": "bd27514c58730021094befb4fb6f23da19625f506fc6d76d0d949068684353a3",
+    "mesh_sha256": "c66dabe499ab35636ecf39e2944619b91b5932ef86c1bcba13fb5e4a60d45aae",
+    "triangles": 4395,
+    "connected_face_components": 219,
+    "largest_component_fraction": 0.6384527872582481,
+    "usable_training_depth_frames": 24,
+    "anchor_budget": 48,
+    "covered_pixels": {
+      "heldout-4": 55756,
+      "heldout-24": 49989,
+      "heldout-55": 39722,
+      "free-a": 19030,
+      "free-b": 15316
+    }
+  },
+  "comparison_limit": "Both use same official scene, 60/48/12 frame identities, known metric poses and RGB; but plane sweep uses 20 anchor budget vs stereo 48 and 12 vs 24 usable depth frames. Visual difference is real but not controlled algorithm-only superiority comparison.",
+  "visual_review": "FAIL: plane-sweep produces sparse disconnected surfaces; cannot identify full room structure. Five raw Mesh depth renders verified from same run, no independent human #74 acceptance.",
+  "historical_desk_v2": "12-frame RMSE 16.7779 cm > frozen 15 cm; FAIL unchanged",
+  "next": "At equal training anchor budget, test train-only source-view support/occlusion and compare fixed five-view actual Mesh before any holdout-based tuning."
+}
