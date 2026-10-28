@@ -1,7 +1,7 @@
-"""Real TUM fr1_room: full-room loop trajectory, known poses + measured RGB-D.
+"""Real TUM fr1_room: controlled fine-voxel TSDF truncation A/B.
 
 Compare 96 known-pose RGB-D fusion variants on the SAME room scene:
-3cm voxels / stride2 versus 2.5cm voxels / full pixel stride1, with 12 frozen holdouts. Neither route uses holdout depth for fusion or geometry selection.
+2.5cm voxels / stride1 with 7.5cm versus 12cm TSDF truncation, 12 frozen holdouts. Neither route uses holdout depth for fusion or geometry selection.
 No inferred depth, mesh completion, or claim of independent surface truth.
 """
 from __future__ import annotations
@@ -195,7 +195,7 @@ def select_training(manifest: dict, *, baseline: int = BASE_FRAMES,
 def render_five(dataset: Path, imported: Path, target: Path, holdout: list[int]) -> list[dict]:
     rec = load_recording(imported / "recording.json")
     assoc = json.loads((imported / "association.json").read_text(encoding="utf8"))
-    keys = ("room-96-4m", "room-96-hires")
+    keys = ("room-96-fine-narrow", "room-96-fine-wide")
     meshes = {}
     for key in keys:
         mesh_path = target / key / "mesh.ply"
@@ -215,9 +215,9 @@ def render_five(dataset: Path, imported: Path, target: Path, holdout: list[int])
             original = raw.convert("RGB").copy()
         views = [rasterize_vertex_rgb(*meshes[key], camera, pose,
                  near=.15, far=MAX_DEPTH_M)[0] for key in keys]
-        name = f"heldout-{i:03d}-room-96-vs-hires.png"
+        name = f"heldout-{i:03d}-room-fine-truncation-ab.png"
         sheet(original, *views, visual / name, f"Real TUM fr1_room camera {i}",
-              ("96 known poses / measured depth", "96 known poses / 2.5cm voxels / stride1"))
+              ("2.5cm / stride1 / 7.5cm trunc", "2.5cm / stride1 / 12cm trunc"))
         images.append({"kind": "heldout_camera", "index": i, "name": name,
                        "sha256": file_sha256(visual / name),
                        "source_rgb_sha256": source["rgb_sha256"]})
@@ -234,9 +234,9 @@ def render_five(dataset: Path, imported: Path, target: Path, holdout: list[int])
         renders = [rasterize_vertex_rgb(*meshes[key], camera, pose,
                    near=.15, far=10.) for key in keys]
         views = [render[0] for render in renders]
-        name = f"free-{i}-room-96-vs-hires.png"
+        name = f"free-{i}-room-fine-truncation-ab.png"
         sheet(None, *views, visual / name, f"Real TUM room shifted free camera {i}",
-              ("96 known poses / measured depth", "96 known poses / 2.5cm voxels / stride1"))
+              ("2.5cm / stride1 / 7.5cm trunc", "2.5cm / stride1 / 12cm trunc"))
         images.append({"kind": "free_camera", "name": name,
                        "sha256": file_sha256(visual / name),
                        "anchor_holdout_index": index,
@@ -266,20 +266,20 @@ def run(args: argparse.Namespace, report: dict) -> None:
     manifest = json.loads((imported / "recording.json").read_text(encoding="utf8"))
     _, extra, selection = select_training(manifest)
     report["training_selection"] = selection
-    baseline_manifest = imported / "train-room-96-4m.json"
+    baseline_manifest = imported / "train-room-96-fine-narrow.json"
     baseline_manifest.write_text(
         json.dumps(extra, allow_nan=False, sort_keys=True) + "\n", encoding="utf8")
-    baseline_target = target / "room-96-4m"
-    report.setdefault("fusion", {})["room-96-4m"] = fuse_sparse(
-        baseline_manifest, baseline_target, voxel_m=VOXEL_M, truncation_m=TRUNC_M,
-        max_depth_m=MAX_DEPTH_M, pixel_stride=2)
-    # Same 96 known poses, depth, training timestamps and heldouts.
-    # One direct geometry action: finer TSDF with full pixel sampling.
-    report["fusion"]["room-96-hires"] = fuse_sparse(
-        baseline_manifest, target / "room-96-hires",
-        voxel_m=0.025, truncation_m=0.075,
+    baseline_target = target / "room-96-fine-narrow"
+    report.setdefault("fusion", {})["room-96-fine-narrow"] = fuse_sparse(
+        baseline_manifest, baseline_target, voxel_m=0.025, truncation_m=0.075,
         max_depth_m=MAX_DEPTH_M, pixel_stride=1)
-    for name in ("room-96-4m", "room-96-hires"):
+    # Same 96 known poses, measured depth, training timestamps, 2.5cm voxel and stride1.
+    # One geometry variable: TSDF truncation band 7.5cm -> 12cm.
+    report["fusion"]["room-96-fine-wide"] = fuse_sparse(
+        baseline_manifest, target / "room-96-fine-wide",
+        voxel_m=0.025, truncation_m=0.12,
+        max_depth_m=MAX_DEPTH_M, pixel_stride=1)
+    for name in ("room-96-fine-narrow", "room-96-fine-wide"):
         mesh = target / name / "mesh.ply"
         vertices, faces = read_echo_ply(mesh)
         score = evaluate_frames(vertices, faces, rec, selection["holdout_indices"],
@@ -291,7 +291,7 @@ def run(args: argparse.Namespace, report: dict) -> None:
             "same_sensor_holdout_diagnostic_only": {k: score[k] for k in (
                 "heldout_frames", "observed_depth_coverage", "rmse_m", "mae_m", "p95_abs_m")}}
     report["visual"] = render_five(dataset, imported, target, selection["holdout_indices"])
-    report["status"] = "real_room_3cm_stride2_vs_2p5cm_stride1_meshes_rendered_visual_review_pending"
+    report["status"] = "real_room_fine_voxel_truncation_7p5cm_vs_12cm_meshes_rendered_visual_review_pending"
 
 
 def main() -> int:
@@ -302,18 +302,18 @@ def main() -> int:
     args = parser.parse_args()
     args.report_dir.mkdir(parents=True, exist_ok=True)
     report = {
-        "experiment": "TUM-fr1_room-known-pose-native-pixel-finer-voxel-v1",
+        "experiment": "TUM-fr1_room-known-pose-fine-voxel-truncation-ab-v1",
         "started_utc": datetime.now(timezone.utc).isoformat(),
         "checkout_sha": os.environ.get("GITHUB_SHA"),
         "official_source": URL, "archive_checksum_status": "observed at run; not vendor-signed",
         "original_rgb_resolution": [640, 480],
         "camera_poses": "TUM motion-capture ground truth (not inferred)",
         "depth": "TUM sensor measurement (not predicted)",
-        "geometry": {"voxel_m": VOXEL_M, "truncation_m": TRUNC_M,
-                     "pixel_stride": 2, "depth_limit_m": MAX_DEPTH_M,
+        "geometry": {"voxel_m": 0.025, "truncation_m": 0.075,
+                     "pixel_stride": 1, "depth_limit_m": MAX_DEPTH_M,
                      "training_view_variants": [EXPANDED_FRAMES, EXPANDED_FRAMES],
-                     "variants": {"room-96-4m": {"voxel_m": 0.03, "truncation_m": 0.09, "pixel_stride": 2},
-                                  "room-96-hires": {"voxel_m": 0.025, "truncation_m": 0.075, "pixel_stride": 1}},
+                     "variants": {"room-96-fine-narrow": {"voxel_m": 0.025, "truncation_m": 0.075, "pixel_stride": 1},
+                                  "room-96-fine-wide": {"voxel_m": 0.025, "truncation_m": 0.12, "pixel_stride": 1}},
                      "frozen_holdout_max_depth_m": MAX_DEPTH_M},
         "independent_surface_truth": "not_available",
         "human_visual_review": "not_performed",
@@ -334,7 +334,7 @@ def main() -> int:
         (args.report_dir / "room-sparse-quality-report.json").write_text(
             json.dumps(report, indent=2, allow_nan=False) + "\n", encoding="utf8")
         (args.report_dir / "SUMMARY.md").write_text("\n".join([
-            "# Real fr1_room 96 known-pose: 3cm/stride2 vs 2.5cm/stride1 at 4m",
+            "# Real fr1_room 96 known-pose: 2.5cm/stride1 TSDF 7.5cm vs 12cm truncation",
             f"- Status: {report['status']}",
             "- Original RGB 640x480; 96 known-pose measured-depth views per variant, both 4m.",
             f"- Mesh results: {list(report.get('results', {}))}",
