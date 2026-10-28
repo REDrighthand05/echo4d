@@ -1,0 +1,72 @@
+{
+  "experiment": "tum-fr1_xyz-known-pose-rgb-mvs-subpixel-tsdf-20261028",
+  "status": "FAIL_visual_recognition_not_accepted",
+  "inputs_retained": [
+    "official TUM 640x480 original RGB (MVS at 320x240)",
+    "known metric camera poses",
+    "intrinsics",
+    "48 frozen training RGB-inferred camera-Z maps from run 40692184301"
+  ],
+  "inputs_removed": [
+    "measured depth PNG pixels",
+    "existing Mesh prior during reconstruction"
+  ],
+  "control": {
+    "run_id": 40692184301,
+    "mesh_sha256": "3cc08e890c1fed00f55d6fde1d4251eb3c997f51f5d6a7f370fb0a8d7a2cb258",
+    "triangles": 8419,
+    "components": 702,
+    "largest_component_fraction": 0.42273429,
+    "coverage": [
+      44579,
+      39302,
+      29776,
+      31534,
+      25945
+    ]
+  },
+  "strict_interpolation": {
+    "run_id": 40710628043,
+    "head_sha": "64508122bce14ed3ad536beac300443400856ac1",
+    "mesh_sha256": "9eab7468255475c9921284f1a78580c9d81126662ca65aa035d941fcd5e8ca28",
+    "triangles": 5830,
+    "coverage": [
+      43387,
+      37640,
+      28365,
+      26639,
+      22106
+    ],
+    "result": "FAIL, lost valid surface because strict unknown subpixel samples remove TSDF support"
+  },
+  "hybrid_nearest_fallback": {
+    "run_id": 40711532535,
+    "head_sha": "0ae94d9f8bc46f79b45e6f152e9b5e6f26f9454b",
+    "mesh_sha256": "f1ddb79be9e59160e81c7f0b4712d1e94ed8f51a51d3ca3735c5dc692f348d6d",
+    "triangles": 8237,
+    "components": 688,
+    "largest_component_fraction": 0.40038849,
+    "coverage": [
+      44450,
+      39447,
+      30070,
+      30923,
+      26298
+    ],
+    "test_count": 6,
+    "workflow_conclusion": "success",
+    "artifact_url": "https://github.com/REDrighthand05/echo4d/actions/runs/40711532535/artifacts/12826911548",
+    "montage_sha256": "",
+    "interpolated_subpixel_samples_not_independent_measurements": 2990619
+  },
+  "view_names": [
+    "heldout-4",
+    "heldout-24",
+    "heldout-55",
+    "free-a",
+    "free-b"
+  ],
+  "interpretation": "Hybrid restores much of strict interpolation's missing support, but largest connected face component decreases and free view A loses coverage. Desk/monitor and free-space structure still fragmented; #74 FAIL. No claim of complete life replay. Source sensor Z was not used in reconstruction.",
+  "next": "Compare TSDF zero-crossing and eight-corner support masks in the desk region; change actual voxel fusion/extraction, not another RGB pixel gate.",
+  "source": "TUM RGB-D dataset fr1_xyz, original source pinned SHA a0236d97b8c30cd93b653656d2b6c293ff7c982a4130ef2a1a8beecdb124ef98"
+}
