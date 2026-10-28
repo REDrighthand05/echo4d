@@ -19,9 +19,10 @@ from echo4d.output import output_transaction, write_json, write_ply
 
 def validate_settings(voxel_m: float, truncation_m: float, max_depth_m: float,
                       pixel_stride: int, edge_guard_m: float = 0.0,
-                      consistency_guard_m: float = 0.0, edge_halo_pixels: int = 1) -> None:
+                      consistency_guard_m: float = 0.0, edge_halo_pixels: int = 1,
+                      depth_smooth_sigma_m: float = 0.0) -> None:
     if not all(isinstance(v, (float, int)) and not isinstance(v, bool)
-               and math.isfinite(v) for v in (voxel_m, truncation_m, max_depth_m, edge_guard_m, consistency_guard_m)):
+               and math.isfinite(v) for v in (voxel_m, truncation_m, max_depth_m, edge_guard_m, consistency_guard_m, depth_smooth_sigma_m)):
         raise DataError("Sparse TSDF distances must be finite numbers")
     if not 0.005 <= voxel_m <= 0.10:
         raise DataError("Sparse voxel must be between 5mm and 10cm")
@@ -37,6 +38,48 @@ def validate_settings(voxel_m: float, truncation_m: float, max_depth_m: float,
         raise DataError("Cross-frame depth guard must be between 0 and 30cm")
     if type(edge_halo_pixels) is not int or edge_halo_pixels not in (1, 2):
         raise DataError("Edge halo must be one or two measured pixels")
+    if not 0 <= depth_smooth_sigma_m <= 0.10:
+        raise DataError("Depth bilateral range sigma must be within [0, 10cm]")
+
+
+def smooth_measured_depth_bilateral(depth: np.ndarray, sigma_m: float) -> tuple[np.ndarray, int]:
+    """3x3 edge-preserving average of *existing* metric depth, without hole filling.
+
+    Each valid center is averaged with valid immediate neighbors weighted by
+    measured depth similarity and pixel distance. A missing center stays missing.
+    This is a geometry denoising candidate, not a learned depth estimator.
+    """
+    if depth.ndim != 2 or not np.issubdtype(depth.dtype, np.floating):
+        raise DataError("Bilateral smoothing requires a 2D floating depth image")
+    if not math.isfinite(sigma_m) or sigma_m < 0 or sigma_m > .10:
+        raise DataError("Invalid bilateral range sigma")
+    if sigma_m == 0:
+        return depth, 0
+    valid = np.isfinite(depth) & (depth > 0)
+    result = depth.copy()
+    if not valid.any():
+        return result, 0
+    weighted = np.where(valid, depth, 0).astype(np.float64)
+    weight_sum = valid.astype(np.float64)
+    h, w = depth.shape
+    for dy in (-1, 0, 1):
+        for dx in (-1, 0, 1):
+            if dy == 0 and dx == 0:
+                continue
+            y0, y1 = max(0, -dy), min(h, h - dy)
+            x0, x1 = max(0, -dx), min(w, w - dx)
+            if y0 >= y1 or x0 >= x1:
+                continue
+            center = depth[y0:y1, x0:x1]
+            neighbor = depth[y0 + dy:y1 + dy, x0 + dx:x1 + dx]
+            both = valid[y0:y1, x0:x1] & valid[y0 + dy:y1 + dy, x0 + dx:x1 + dx]
+            diff = np.where(both, center - neighbor, 0)
+            weight = (both * math.exp(-.5 * (dx * dx + dy * dy)) *
+                      np.exp(-.5 * (diff / sigma_m) ** 2))
+            weighted[y0:y1, x0:x1] += weight * np.where(both, neighbor, 0)
+            weight_sum[y0:y1, x0:x1] += weight
+    result[valid] = (weighted[valid] / weight_sum[valid]).astype(depth.dtype)
+    return result, int(np.count_nonzero(valid & (result != depth)))
 
 
 def reject_far_side_of_depth_edges(depth: np.ndarray, jump_m: float,
@@ -181,7 +224,8 @@ def fuse_sparse(recording_path: Path, destination: Path, *, voxel_m: float = 0.0
                 truncation_m: float = 0.09, max_depth_m: float = 4.0,
                 pixel_stride: int = 2, edge_guard_m: float = 0.0,
                 consistency_guard_m: float = 0.0,
-                edge_halo_pixels: int = 1) -> dict:
+                edge_halo_pixels: int = 1,
+                depth_smooth_sigma_m: float = 0.0) -> dict:
     """Integrate registered RGB and camera-Z metric depth; output strict ECHO color PLY.
 
     Open3D expects world-to-camera extrinsics, whereas ECHO stores camera-to-world.
@@ -189,7 +233,8 @@ def fuse_sparse(recording_path: Path, destination: Path, *, voxel_m: float = 0.0
     pretend to know per-vertex independent observation counts.
     """
     validate_settings(voxel_m, truncation_m, max_depth_m, pixel_stride,
-                      edge_guard_m, consistency_guard_m, edge_halo_pixels)
+                      edge_guard_m, consistency_guard_m, edge_halo_pixels,
+                      depth_smooth_sigma_m)
     recording = load_recording(recording_path)
     if len(recording) > 120:
         raise DataError("Sparse quality experiment is bounded to 120 input frames")
@@ -206,6 +251,7 @@ def fuse_sparse(recording_path: Path, destination: Path, *, voxel_m: float = 0.0
         color_type=o3d.pipelines.integration.TSDFVolumeColorType.RGB8,
         volume_unit_resolution=16, depth_sampling_stride=pixel_stride)
     count, valid_pixels, edge_removed_pixels, cross_removed_pixels = 0, 0, 0, 0
+    smoothed_pixels = 0
     start = time.perf_counter()
     prepared = []
     for _, frame, _ in recording.iter_frames():
@@ -216,6 +262,8 @@ def fuse_sparse(recording_path: Path, destination: Path, *, voxel_m: float = 0.0
         if frame.excluded is not None:
             invalid |= frame.excluded
         depth[invalid] = 0
+        depth, changed = smooth_measured_depth_bilateral(depth, depth_smooth_sigma_m)
+        smoothed_pixels += changed
         depth, removed = reject_far_side_of_depth_edges(depth, edge_guard_m,
                                                        edge_halo_pixels)
         edge_removed_pixels += removed
@@ -270,6 +318,8 @@ def fuse_sparse(recording_path: Path, destination: Path, *, voxel_m: float = 0.0
             "vertices": len(vertices), "triangles": len(faces),
             "voxel_m": voxel_m, "truncation_m": truncation_m,
             "max_depth_m": max_depth_m, "pixel_stride": pixel_stride,
+            "depth_smooth_sigma_m": depth_smooth_sigma_m,
+            "depth_smoothed_pixels": smoothed_pixels,
             "edge_guard_m": edge_guard_m,
             "edge_halo_pixels": edge_halo_pixels,
             "edge_removed_pixels": edge_removed_pixels,
