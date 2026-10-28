@@ -56,8 +56,9 @@
     "test_count": 6,
     "workflow_conclusion": "success",
     "artifact_url": "https://github.com/REDrighthand05/echo4d/actions/runs/40711532535/artifacts/12826911548",
-    "montage_sha256": "",
-    "interpolated_subpixel_samples_not_independent_measurements": 2990619
+    "montage_sha256": "5b68eeb2b4ec22b46829ede8db1498767da45e190bae468952c3c8e927fce443",
+    "interpolated_subpixel_samples_not_independent_measurements": 2990619,
+    "glb_sha256": "2504d4e3bc28d39949d2a79b3ea781b90d404cb03afe936a69ad34c589ac95a5"
   },
   "view_names": [
     "heldout-4",
