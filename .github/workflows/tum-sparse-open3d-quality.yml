@@ -42,7 +42,7 @@ jobs:
           OPENBLAS_NUM_THREADS: '1'
           OMP_NUM_THREADS: '1'
         run: python -m pytest -q tests/python/test_sparse_open3d.py tests/python/test_tum_sparse_training_density.py
-      - name: Compare real 88-view sparse Mesh with and without occlusion edge guard; render 3+2
+      - name: Compare real 88-view sparse Mesh with and without cross-frame depth consistency; render 3+2
         env:
           PYTHONPATH: tools
           OPENBLAS_NUM_THREADS: '1'
@@ -51,7 +51,7 @@ jobs:
           python tools/tum_sparse_training_density.py \
             --work "$RUNNER_TEMP/tum-sparse-density" \
             --report-dir "$GITHUB_WORKSPACE/artifacts/tum-sparse-density" \
-            --edge-compare
+            --consistency-compare
       - name: Summarize actual result or failure
         if: always()
         run: |

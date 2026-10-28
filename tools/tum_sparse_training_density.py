@@ -209,11 +209,14 @@ def render_views(dataset: Path, original_import: Path, target: Path, *,
     camera = rec.camera.scaled(2)
     result = []
     edge_trial = comparison[1] == "sparse-edge-guard"
-    suffix = "pose-vs-edge" if edge_trial else "uniform-vs-pose"
-    labels = (("Pose-diverse 88 | unfiltered RGB-D",
-               "Pose-diverse 88 | far-side edge guard 8cm") if edge_trial
-              else ("Sparse TSDF 640 | uniform extra views",
-                    "Sparse TSDF 640 | pose-diverse extra views"))
+    cross_trial = comparison[1] == "sparse-cross-frame"
+    suffix = "pose-vs-cross" if cross_trial else ("pose-vs-edge" if edge_trial else "uniform-vs-pose")
+    labels = (("Pose-diverse 88 | unchanged sensor depth",
+               "Pose-diverse 88 | cross-frame foreground guard 10cm") if cross_trial
+              else (("Pose-diverse 88 | unfiltered RGB-D",
+                     "Pose-diverse 88 | far-side edge guard 8cm") if edge_trial
+                    else ("Sparse TSDF 640 | uniform extra views",
+                          "Sparse TSDF 640 | pose-diverse extra views")))
     for i in VIEWS:
         pose = np.asarray(rec.entries[i]["cameraToWorld"]).reshape(4, 4, order="F")
         spec = assoc["frames"][i]
@@ -293,10 +296,14 @@ def run(args: argparse.Namespace, report: dict) -> None:
         budget=len(extra["frames"]))
     report["training_selection"] = {"uniform": selection, "pose_diverse": diversity}
     manifests = {}
+    if args.edge_compare and args.consistency_compare:
+        raise DataError("Choose one geometry comparison per run")
     routes = ((("sparse-pose-diverse", dense, pose),
-               ("sparse-edge-guard", dense, pose)) if args.edge_compare
-              else (("sparse-expanded", expanded, extra),
-                    ("sparse-pose-diverse", dense, pose)))
+               ("sparse-cross-frame", dense, pose)) if args.consistency_compare
+              else ((("sparse-pose-diverse", dense, pose),
+                     ("sparse-edge-guard", dense, pose)) if args.edge_compare
+                    else (("sparse-expanded", expanded, extra),
+                          ("sparse-pose-diverse", dense, pose))))
     for name, folder, data in routes:
         manifest = folder / ("train-" + name + ".json")
         manifest.write_text(json.dumps(data, allow_nan=False, sort_keys=True) + "\n", encoding="utf8")
@@ -307,7 +314,8 @@ def run(args: argparse.Namespace, report: dict) -> None:
         report.setdefault("fusion", {})[name] = fuse_sparse(
             manifest, target / name, voxel_m=VOXEL_M, truncation_m=TRUNC_M,
             max_depth_m=MAX_DEPTH_M, pixel_stride=2,
-            edge_guard_m=0.08 if name == "sparse-edge-guard" else 0.0)
+            edge_guard_m=0.08 if name == "sparse-edge-guard" else 0.0,
+            consistency_guard_m=0.10 if name == "sparse-cross-frame" else 0.0)
         mesh = target / name / "mesh.ply"
         vertices, faces = read_echo_ply(mesh)
         score = evaluate_frames(vertices, faces, old_rec, list(HOLDOUT),
@@ -330,11 +338,14 @@ def main() -> int:
     parser.add_argument("--archive", type=Path)
     parser.add_argument("--edge-compare", action="store_true",
                         help="Compare identical pose-diverse training frames with/without edge guard")
+    parser.add_argument("--consistency-compare", action="store_true",
+                        help="Compare identical training frames with/without cross-frame depth rejection")
     args = parser.parse_args()
     args.report_dir.mkdir(parents=True, exist_ok=True)
     report = {
-        "experiment": ("TUM-fr1_xyz-Open3D-sparse-88-edge-guard-v1" if args.edge_compare
-                       else "TUM-fr1_xyz-Open3D-sparse-88-uniform-vs-pose-diverse-v1"),
+        "experiment": ("TUM-fr1_xyz-Open3D-sparse-88-cross-frame-v1" if args.consistency_compare
+                       else ("TUM-fr1_xyz-Open3D-sparse-88-edge-guard-v1" if args.edge_compare
+                             else "TUM-fr1_xyz-Open3D-sparse-88-uniform-vs-pose-diverse-v1")),
         "started_utc": datetime.now(timezone.utc).isoformat(),
         "checkout_sha": os.environ.get("GITHUB_SHA"),
         "dataset_url": URL, "dataset_sha256": PINNED_ARCHIVE_SHA256,
@@ -342,7 +353,8 @@ def main() -> int:
         "frozen_holdout_indices": list(HOLDOUT),
         "geometry": {"voxel_m": VOXEL_M, "truncation_m": TRUNC_M,
                      "pixel_stride": 2, "max_depth_m": MAX_DEPTH_M,
-                     "edge_guard_m": 0.08 if args.edge_compare else 0.0},
+                     "edge_guard_m": 0.08 if args.edge_compare else 0.0,
+                     "consistency_guard_m": 0.10 if args.consistency_compare else 0.0},
         "independent_surface_truth": "not_available",
         "human_visual_review": "not_performed",
         "issue_74": "FAIL / NOT ACCEPTED",
@@ -362,12 +374,15 @@ def main() -> int:
         (args.report_dir / "training-density-report.json").write_text(
             json.dumps(report, indent=2, allow_nan=False) + "\n", encoding="utf8")
         (args.report_dir / "SUMMARY.md").write_text("\n".join([
-            "# TUM real sparse RGB-D edge guard comparison" if args.edge_compare
-            else "# TUM real sparse RGB-D camera-pose diversity comparison",
+            ("# TUM real sparse RGB-D cross-frame consistency comparison" if args.consistency_compare
+             else ("# TUM real sparse RGB-D edge guard comparison" if args.edge_compare
+                   else "# TUM real sparse RGB-D camera-pose diversity comparison")),
             f"- Status: {report['status']}",
             ("- Original 640x480 RGB-D; same 88 pose-diverse frames, 30mm TSDF; "
-             "only far-side 8cm occlusion-edge guard differs." if args.edge_compare
-             else "- Original 640x480 RGB-D; same 30mm sparse TSDF, matched-count uniform vs pose-diverse frames."),
+             "only 10cm two-witness cross-frame depth guard differs." if args.consistency_compare
+             else ("- Original 640x480 RGB-D; same 88 pose-diverse frames, 30mm TSDF; "
+                   "only far-side 8cm occlusion-edge guard differs." if args.edge_compare
+                   else "- Original 640x480 RGB-D; same 30mm sparse TSDF, matched-count uniform vs pose-diverse frames.")),
             f"- Training: {report.get('training_selection', {})}",
             f"- Meshes: {list(report.get('results', {}))}",
             f"- Actual 3+2 visual images: {len(report.get('visual', []))}",

@@ -7,8 +7,9 @@ from PIL import Image
 import pytest
 
 from echo4d.holdout import read_echo_ply
-from echo4d.model import DataError
-from sparse_open3d_fusion import fuse_sparse, validate_settings, reject_far_side_of_depth_edges
+from echo4d.model import Camera, DataError
+from sparse_open3d_fusion import (fuse_sparse, validate_settings, reject_far_side_of_depth_edges,
+                                  reject_cross_frame_foreground, select_cross_frame_neighbors)
 from tum_sparse_open3d import comparison_sheet, verify_inputs
 
 
@@ -114,3 +115,52 @@ def test_edge_guard_rejects_invalid_settings():
     for bad in (-.01, .31, float("nan"), True):
         with pytest.raises(DataError):
             validate_settings(.03, .09, 4., 2, bad)
+
+
+
+def test_cross_frame_two_stable_farther_observations_reject_spurious_foreground():
+    camera = Camera(12, 12, 10., 10., 5.5, 5.5)
+    pose = np.eye(4)
+    depth = np.ones((12, 12), dtype=np.float32)
+    depth[0, 0] = 0.
+    far = np.full((12, 12), 1.4, dtype=np.float32)
+    filtered, removed = reject_cross_frame_foreground(
+        depth, pose, [(far, pose), (far, pose)], camera, .10)
+    assert removed == 100
+    assert np.all(filtered[1:11, 1:11] == 0)
+    assert depth[5, 5] == 1.0  # no mutation or invented depth
+    assert filtered[0, 0] == 0
+
+
+def test_cross_frame_agreement_and_occlusion_do_not_erase_observed_geometry():
+    camera = Camera(12, 12, 10., 10., 5.5, 5.5)
+    pose = np.eye(4)
+    depth = np.ones((12, 12), dtype=np.float32)
+    far = np.full_like(depth, 1.4)
+    agree = np.ones_like(depth)
+    nearer = np.full_like(depth, .5)
+    for witnesses in ([(far, pose), (agree, pose)],
+                      [(far, pose), (nearer, pose)],
+                      [(far, pose)], [(np.zeros_like(depth), pose), (far, pose)]):
+        filtered, removed = reject_cross_frame_foreground(
+            depth, pose, witnesses, camera, .10)
+        assert removed == 0
+        assert np.array_equal(filtered, depth)
+    with pytest.raises(DataError, match="calibrated depth"):
+        reject_cross_frame_foreground(depth[:10], pose, [], camera, .10)
+
+
+def test_cross_frame_neighbor_selection_requires_real_baseline_and_overlap():
+    poses = []
+    for i in range(5):
+        pose = np.eye(4)
+        pose[0, 3] = .06 * i
+        poses.append(pose)
+    chosen = select_cross_frame_neighbors(poses)
+    assert len(chosen[2]) >= 2
+    assert 2 not in chosen[2]
+    assert all(abs(i - 2) >= 1 for i in chosen[2])
+    no_parallax = select_cross_frame_neighbors([np.eye(4) for _ in range(3)])
+    assert no_parallax == [[], [], []]
+    with pytest.raises(DataError, match="Cross-frame depth guard"):
+        validate_settings(.03, .09, 4., 2, 0., -.1)
