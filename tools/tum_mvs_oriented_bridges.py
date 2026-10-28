@@ -62,6 +62,11 @@ def run(old: Path, source_root: Path, target: Path) -> dict:
     shutil.copyfile(old_mesh, comparison / "reconstruction/mesh.ply")
     # Prior runner freezes five camera poses in its comparison receipt.
     shutil.copyfile(prior / "prior-comparison/report.json", comparison / "report.json")
+    summary = mesh_summary(result)
+    # PLY export does not preserve per-vertex observation counts. The ones
+    # above are serialization placeholders, not real sensor confidence.
+    summary["min_nearest_voxel_observations"] = None
+    summary["max_nearest_voxel_observations"] = None
     report = {
         "checkout_sha": os.environ.get("GITHUB_SHA"),
         "source": "TUM fr1_xyz 640x480 original RGB, 320x240 inferred-Z; CC BY 4.0",
@@ -70,7 +75,8 @@ def run(old: Path, source_root: Path, target: Path) -> dict:
         "removed": ["measured sensor depth pixels", "external prior Mesh"],
         "prior_short_bridge_mesh_sha256": file_sha256(old_mesh),
         "new_mesh_sha256": file_sha256(reconstruction / "mesh.ply"),
-        "summary": mesh_summary(result),
+        "summary": summary,
+        "mesh_observation_counts": "unavailable in source PLY; exporter placeholder is not evidence",
         "support": support,
         "sensor_depth_files_opened": 0,
         "baseline_mesh_used_for_same_volume_face_labels_only": True,
