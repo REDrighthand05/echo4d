@@ -8,6 +8,7 @@ on:
       - 'src/echo4d/known_pose_stereo.py'
       - 'tools/tum_rgb_stereo.py'
       - 'tests/python/test_known_pose_stereo.py'
+      - 'tests/python/test_stereo_archive.py'
       - '.github/workflows/tum-rgb-stereo-ablation.yml'
   workflow_dispatch:
 
@@ -35,7 +36,7 @@ jobs:
           python -m pip install --no-deps -e .
           python -m pip install --no-deps opencv-python-headless==4.12.0.88
       - name: Synthetic plane oracle and failure counterexamples
-        run: python -m pytest -q tests/python/test_known_pose_stereo.py
+        run: python -m pytest -q tests/python/test_known_pose_stereo.py tests/python/test_stereo_archive.py
       - name: Run real TUM RGB stereo, retaining known poses but removing measured Z maps
         env:
           PYTHONPATH: tools

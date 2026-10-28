@@ -10,6 +10,8 @@ from datetime import datetime, timezone
 import json
 import math
 import os
+import shutil
+import re
 from pathlib import Path
 import subprocess
 import sys
@@ -21,10 +23,73 @@ from echo4d.model import Camera, DataError, file_sha256, safe_path
 from echo4d.tum import read_rows, interpolate_pose, nearest_timestamp
 from echo4d.holdout import read_echo_ply, rasterize_mesh_depth
 from echo4d.known_pose_stereo import infer_stereo, rectify_geometry
+from echo4d.output import output_transaction, write_json
 from tum_public_roundtrip import URL, ROOT, PINNED_ARCHIVE_SHA256, PINNED_ARCHIVE_BYTES, BOUNDS, download, extract
 
 HOLDOUT = (4, 5, 9, 10, 14, 19, 24, 25, 29, 34, 35, 55)
 TOTAL = 60
+
+
+def archive_stereo_inputs(manifest: Path, frames: list[dict], source_root: Path,
+                          destination: Path) -> dict:
+    """Retain actual inferred Z and raw metadata; source RGB stays in pinned TUM.
+
+    This is a replay bundle, not a self-contained video/photo distribution or a
+    claim that inferred stereo Z is sensor-measured depth.
+    """
+    manifest_raw = manifest.read_bytes()
+    if len(manifest_raw) > 8 * 1024 * 1024:
+        raise DataError('Stereo manifest exceeds archive budget')
+    data = json.loads(manifest_raw)
+    files = {'recording.json': manifest}
+    rgb_hashes = {}
+    for frame in data['frames']:
+        depth_name = frame['depth']
+        if not isinstance(depth_name, str) or not re.fullmatch(r"depth/[0-9]{5}\.npy", depth_name):
+            raise DataError("Unsafe stereo archive depth path")
+        files[depth_name] = safe_path(manifest.parent, depth_name)
+        color = safe_path(manifest.parent, frame['color'])
+        rgb_hashes[frame['color']] = file_sha256(color)
+    for name in ('rgb.txt', 'depth.txt', 'groundtruth.txt'):
+        files['source-index/' + name] = safe_path(source_root, name)
+    if sum(p.stat().st_size for p in files.values()) > 96 * 1024 * 1024:
+        raise DataError('Stereo replay archive exceeds 96 MiB budget')
+    pins = {name: file_sha256(p) for name, p in files.items()}
+    source_frames = []
+    for frame in frames:
+        if file_sha256(frame['rgb']) != frame['rgb_sha256']:
+            raise DataError('Source RGB changed before archival')
+        source_frames.append({'index': frame['index'], 't_s': frame['t_s'],
+            'rgb': str(frame['rgb'].relative_to(source_root.resolve())),
+            'rgb_sha256': frame['rgb_sha256'],
+            'cameraToWorld': frame['pose'].flatten(order='F').tolist()})
+    with output_transaction(destination) as folder:
+        receipt = {}
+        for name, source in files.items():
+            target = folder / name
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(source, target)
+            if file_sha256(target) != pins[name]:
+                raise DataError('Stereo archive input changed during copy')
+            receipt[name] = {'sha256': pins[name], 'bytes': target.stat().st_size}
+        # Ensure the manifest snapshot is exactly the bytes parsed above.
+        if (folder / 'recording.json').read_bytes() != manifest_raw:
+            raise DataError('Stereo manifest changed during archive preparation')
+        write_json(folder / 'source-frames.json', {'frames': source_frames,
+            'holdout_indices': list(HOLDOUT), 'archive_sha256': PINNED_ARCHIVE_SHA256})
+        receipt['source-frames.json'] = {'sha256': file_sha256(folder / 'source-frames.json'),
+                                        'bytes': (folder / 'source-frames.json').stat().st_size}
+        write_json(folder / 'archive.json', {'files': receipt,
+            'depth_kind': 'stereo_inferred_camera_z_not_measured',
+            'omitted_training_rgb_sha256': rgb_hashes,
+            'rgb_note': 'RGB not redistributed; reproduce from pinned official TUM and source frame identities'})
+        if any(file_sha256(source) != pins[name] for name, source in files.items()):
+            raise DataError('Stereo input changed before archive publication')
+    return receipt
+
+
+
+
 
 
 def rgb_pose_frames(root: Path) -> list[dict]:
@@ -268,6 +333,8 @@ def execute(args: argparse.Namespace, report: dict) -> None:
                                     stereo_width=args.stereo_width,
                                     fusion_width=args.fusion_width,
                                     max_anchors=args.max_anchors)
+    report['archived_inputs'] = archive_stereo_inputs(
+        manifest, frames, work/'dataset'/ROOT, args.report_dir/'inputs')
     target=args.report_dir/'reconstruction'
     cmd=[sys.executable,'-m','echo4d','reconstruct',str(manifest),'--output',str(target),
          '--bounds',*BOUNDS,'--voxel','0.05','--max-depth','4',
