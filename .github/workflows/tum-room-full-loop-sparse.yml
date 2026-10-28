@@ -1,4 +1,4 @@
-name: TUM real room wider-trajectory sparse RGB-D geometry
+name: TUM real room full-loop sparse RGB-D geometry
 
 on:
   push:
@@ -7,7 +7,7 @@ on:
     paths:
       - 'tools/tum_room_sparse_quality.py'
       - 'tests/python/test_tum_room_sparse_quality.py'
-      - '.github/workflows/tum-room-wide-trajectory-sparse.yml'
+      - '.github/workflows/tum-room-full-loop-sparse.yml'
   workflow_dispatch:
 
 permissions:

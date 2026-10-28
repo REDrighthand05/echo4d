@@ -9,9 +9,9 @@ from tum_room_sparse_quality import (
 )
 
 
-def synthetic_manifest():
+def synthetic_manifest(n=IMPORT_FRAMES):
     frames = []
-    for i in range(IMPORT_FRAMES):
+    for i in range(n):
         pose = np.eye(4)
         pose[0, 3] = 0.005 * i
         pose[1, 3] = 0.02 * np.sin(i / 18)
@@ -57,3 +57,13 @@ def test_rejects_missing_real_frames_and_insufficient_budget():
         select_training(original, baseline=48, expanded=121)
     with pytest.raises(DataError, match="budget"):
         select_training(original, baseline=48, expanded=96, guard_s=0.4)
+
+
+def test_shorter_real_room_sequence_keeps_twelve_holdouts():
+    data = synthetic_manifest(160)
+    baseline, expanded, receipt = select_training(data)
+    assert len(baseline["frames"]) == 48
+    assert len(expanded["frames"]) == 96
+    assert len(receipt["holdout_indices"]) == 12
+    assert set(receipt["expanded_indices"]).isdisjoint(receipt["holdout_indices"])
+    assert receipt["min_train_holdout_time_gap_s"] > 0.16

@@ -1,6 +1,6 @@
 """Real TUM fr1_room: full-room loop trajectory, known poses + measured RGB-D.
 
-Compare 48 vs 96 real training frames on the SAME desk scene with 12 frozen
+Compare 48 vs 96 real training frames on the SAME room scene with 12 frozen
 holdouts. Neither route uses holdout depth for fusion or geometry selection.
 No inferred depth, mesh completion, or claim of independent surface truth.
 """
@@ -137,15 +137,18 @@ def select_training(manifest: dict, *, baseline: int = BASE_FRAMES,
     pose, or geometric score enters the selection.
     """
     frames = manifest.get("frames")
-    if not isinstance(frames, list) or len(frames) != IMPORT_FRAMES:
-        raise DataError("Expected 180 synchronized real room RGB-D frames")
+    if not isinstance(frames, list) or not 140 <= len(frames) <= IMPORT_FRAMES:
+        raise DataError("Expected 140-180 synchronized real room RGB-D frames")
+    holdout = tuple(int(round(v)) for v in np.linspace(7, len(frames) - 8, 12))
+    if len(set(holdout)) != 12:
+        raise DataError("Room holdout selection must contain 12 distinct frames")
     if not (0 < guard_s <= 0.3 and 0 < baseline < expanded <= 120):
         raise DataError("Invalid desk training selection budget")
     times = np.array([float(f["t"]) for f in frames])
     if not np.isfinite(times).all() or np.any(np.diff(times) <= 0):
         raise DataError("Nonmonotonic TUM room timestamps")
-    held_times = times[list(HOLDOUT)]
-    candidates = [i for i in range(len(frames)) if i not in HOLDOUT and
+    held_times = times[list(holdout)]
+    candidates = [i for i in range(len(frames)) if i not in holdout and
                   np.min(np.abs(held_times - times[i])) > guard_s]
     if len(candidates) < expanded:
         raise DataError("Not enough independent real training views outside holdout guard")
@@ -178,7 +181,7 @@ def select_training(manifest: dict, *, baseline: int = BASE_FRAMES,
         return out
     trajectory_extent = np.ptp(centers[candidates], axis=0).tolist()
     return subset(base, "48 real views"), subset(selected, "96 pose-diverse real views"), {
-        "source_frames": len(frames), "holdout_indices": list(HOLDOUT),
+        "source_frames": len(frames), "holdout_indices": list(holdout),
         "holdout_guard_seconds": guard_s, "eligible_train": len(candidates),
         "baseline_indices": base, "expanded_indices": sorted(selected),
         "expanded_contains_baseline": set(base).issubset(selected),
@@ -188,7 +191,7 @@ def select_training(manifest: dict, *, baseline: int = BASE_FRAMES,
     }
 
 
-def render_five(dataset: Path, imported: Path, target: Path) -> list[dict]:
+def render_five(dataset: Path, imported: Path, target: Path, holdout: list[int]) -> list[dict]:
     rec = load_recording(imported / "recording.json")
     assoc = json.loads((imported / "association.json").read_text(encoding="utf8"))
     keys = ("room-48", "room-96")
@@ -201,7 +204,7 @@ def render_five(dataset: Path, imported: Path, target: Path) -> list[dict]:
     visual = target / "visual"
     visual.mkdir(exist_ok=True)
     images = []
-    for i in (HOLDOUT[0], HOLDOUT[5], HOLDOUT[-1]):
+    for i in (holdout[0], holdout[len(holdout) // 2], holdout[-1]):
         pose = np.asarray(rec.entries[i]["cameraToWorld"]).reshape(4, 4, order="F")
         source = assoc["frames"][i]
         original_path = safe_path(dataset, source["rgb_path"])
@@ -262,7 +265,7 @@ def run(args: argparse.Namespace, report: dict) -> None:
             max_depth_m=MAX_DEPTH_M, pixel_stride=2)
         mesh = target / name / "mesh.ply"
         vertices, faces = read_echo_ply(mesh)
-        score = evaluate_frames(vertices, faces, rec, list(HOLDOUT),
+        score = evaluate_frames(vertices, faces, rec, selection["holdout_indices"],
                                 max_depth=MAX_DEPTH_M)
         report.setdefault("results", {})[name] = {
             "mesh_sha256": file_sha256(mesh),
@@ -270,7 +273,7 @@ def run(args: argparse.Namespace, report: dict) -> None:
             "connectivity": face_components(len(vertices), faces),
             "same_sensor_holdout_diagnostic_only": {k: score[k] for k in (
                 "heldout_frames", "observed_depth_coverage", "rmse_m", "mae_m", "p95_abs_m")}}
-    report["visual"] = render_five(dataset, imported, target)
+    report["visual"] = render_five(dataset, imported, target, selection["holdout_indices"])
     report["status"] = "two_real_desk_meshes_rendered_visual_review_pending"
 
 
@@ -303,7 +306,7 @@ def main() -> int:
     except Exception as exc:
         report["status"] = "failed"
         report["failure"] = {"type": type(exc).__name__, "message": str(exc)}
-        print(f"TUM_DESK_SPARSE_REAL_FAILED: {exc}", file=sys.stderr)
+        print(f"TUM_ROOM_SPARSE_REAL_FAILED: {exc}", file=sys.stderr)
         code = 1
     finally:
         report["elapsed_seconds"] = round(time.perf_counter() - start, 2)
