@@ -289,8 +289,7 @@ def fuse_sparse(recording_path: Path, destination: Path, *, voxel_m: float = 0.0
             not 10000 <= decimate_to_faces <= 450000):
         raise DataError("Optional bounded preview decimation must target 10k-450k faces")
     recording = load_recording(recording_path)
-    if len(recording) > 120:
-        raise DataError("Sparse quality experiment is bounded to 120 input frames")
+    # The fixed real-room import has 170 frames, of which 158 are eligible after\n    # reserving 12 independent holdouts. Keep a bounded allocation ceiling.\n    if len(recording) > 180:\n        raise DataError("Sparse quality experiment is bounded to 180 input frames")
     try:
         import open3d as o3d
     except ImportError as exc:
