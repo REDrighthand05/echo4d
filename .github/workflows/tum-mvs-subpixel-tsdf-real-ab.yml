@@ -94,6 +94,10 @@ jobs:
         with:
           name: tum-mvs-subpixel-tsdf-ab-${{ github.run_id }}
           path: |
+            artifacts/old/inputs/
+            artifacts/old/report.json
+            artifacts/old/reconstruction/mesh.ply
+            artifacts/new/inputs/
             artifacts/new/reconstruction/
             artifacts/new/report.json
             artifacts/new/visual/

@@ -53,3 +53,18 @@ def test_reject_invalid_inferred_depth_and_rgb():
             upsample_observed_depth(z)
     with pytest.raises(DataError):
         upsample_observed_rgb(np.ones((3, 4, 3), np.float32))
+
+
+def test_subpixel_sampling_counts_one_observation_per_frame():
+    from echo4d.model import Frame
+    from echo4d.fusion import FusionConfig, TSDFVolume
+    camera = Camera(4, 3, 4., 4., 1.5, 1.)
+    z, _ = upsample_observed_depth(np.full((3, 4), 2., np.float32))
+    rgb = upsample_observed_rgb(np.zeros((3, 4, 3), np.uint8))
+    volume = TSDFVolume(FusionConfig((-.3, -.3, 1.8, .3, .3, 2.2), voxel=.05))
+    volume.integrate(Frame(0., np.eye(4), z, rgb), upsampled_camera(camera), 0)
+    assert volume.integrated == 1
+    assert np.count_nonzero(volume.weight) > 0
+    assert volume.weight.max() == 1
+    with pytest.raises(DataError):
+        volume.integrate(Frame(0., np.eye(4), z, rgb), upsampled_camera(camera), 0)
