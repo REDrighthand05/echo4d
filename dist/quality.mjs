@@ -1,6 +1,7 @@
 // ECHO quality evidence intake: local image preview and hash inventory, never automated P0 approval.
 import { parseIntake, matchesExpected } from "./quality-intake.mjs";
 const slots = [];
+let importGeneration = 0;
 const host = (id) => document.getElementById(id);
 function element(tag, className, text) {
   const node = document.createElement(tag);
@@ -24,7 +25,7 @@ function addSlot(container, id, title, subtitle) {
   const meta = element("div", "file-meta", "文件仅在浏览器内预览，不会上传。");
   section.append(top, picture, label, meta);
   container.append(section);
-  const slot = { id, title, subtitle, input, picture, meta, file: null, url: null, sha256: null, size: null, expectedSha: null, expectedName: null };
+  const slot = { id, title, subtitle, input, picture, meta, file: null, url: null, sha256: null, size: null, expectedSha: null, expectedName: null, generation: 0 };
   slots.push(slot);
   input.addEventListener("change", () => readImage(slot));
   return slot;
@@ -54,6 +55,7 @@ function checkDimensions(url) {
   });
 }
 function clearSlot(slot, resetInput = false) {
+  slot.generation++;
   if (slot.url) URL.revokeObjectURL(slot.url);
   slot.url = null;
   slot.file = null;
@@ -67,6 +69,7 @@ async function readImage(slot) {
   const file = slot.input.files && slot.input.files[0];
   if (!file) return;
   clearSlot(slot);
+  const generation = slot.generation;
   if (!["image/png", "image/jpeg", "image/webp"].includes(file.type) || file.size > 50 * 1024 * 1024) {
     slot.meta.textContent = "只接受 PNG/JPEG/WebP，单张上限 50 MB。";
     slot.input.value = "";
@@ -79,7 +82,7 @@ async function readImage(slot) {
       checkDimensions(nextUrl),
       crypto.subtle.digest("SHA-256", await file.arrayBuffer())
     ]);
-    if (slot.input.files[0] !== file) {
+    if (slot.generation !== generation || slot.input.files[0] !== file) {
       URL.revokeObjectURL(nextUrl);
       return;
     }
@@ -99,6 +102,7 @@ async function readImage(slot) {
     updateSummary();
   } catch (error) {
     URL.revokeObjectURL(nextUrl);
+    if (slot.generation !== generation || slot.input.files[0] !== file) return;
     slot.meta.textContent = "图片无法验证：" + error.message;
     slot.input.value = "";
   }
@@ -123,11 +127,13 @@ function updateSummary() {
   }));
 }
 host("importManifest").addEventListener("change", async (event) => {
+  const generation = ++importGeneration;
   const file = event.target.files?.[0];
   if (!file) return;
   try {
     if (file.size > 1024 * 1024) throw new Error("清单不能超过 1 MiB");
     const intake = parseIntake(JSON.parse(await file.text()));
+    if (generation !== importGeneration) return;
     for (const slot of slots) {
       clearSlot(slot, true);
       slot.expectedSha = intake.expected[slot.id].sha256;
@@ -142,9 +148,10 @@ host("importManifest").addEventListener("change", async (event) => {
     host("importStatus").textContent = "清单已读取；图片没有从清单恢复。请逐张重新选择文件并核对 SHA。";
     updateSummary();
   } catch (error) {
+    if (generation !== importGeneration) return;
     host("importStatus").textContent = "导入失败（原有内容未更改）：" + error.message;
   } finally {
-    event.target.value = "";
+    if (generation === importGeneration) event.target.value = "";
   }
 });
 host("meshSha").addEventListener("input", updateSummary);
