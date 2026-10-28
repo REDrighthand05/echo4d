@@ -6,6 +6,7 @@ on:
       - research/highres-rgbd-tsdf-quality-20261028
     paths:
       - 'tools/tum_room_sparse_quality.py'
+      - 'tools/sparse_open3d_fusion.py'
       - 'tools/room_pose_icp.py'
       - 'tests/python/test_room_pose_icp.py'
       - 'tests/python/test_tum_room_sparse_quality.py'
