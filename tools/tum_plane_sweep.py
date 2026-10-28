@@ -28,7 +28,8 @@ from tum_public_roundtrip import (URL, ROOT, PINNED_ARCHIVE_SHA256,
 
 def build_plane_sweep_recording(frames: list[dict], target: Path, report: dict,
                                 *, max_anchors: int = 48, planes: int = 64,
-                                max_sources: int = 4) -> Path:
+                                max_sources: int = 4,
+                                pairing: str = 'top2') -> Path:
     camera, _, _ = stereo_resolution(320)
     training = [i for i in range(TOTAL) if i not in HOLDOUT]
     selected, selection_stats = select_plane_sweep_views(
@@ -53,7 +54,7 @@ def build_plane_sweep_recording(frames: list[dict], target: Path, report: dict,
             raise DataError('Holdout RGB cannot enter plane-sweep reconstruction')
         sources = [(rgb(j), frames[j]['pose']) for j in partners]
         depth, stats = infer_plane_sweep(rgb(left), sources, camera,
-                                        frames[left]['pose'], planes=planes)
+                                        frames[left]['pose'], planes=planes, pairing=pairing)
         diagnostics.append({'left_index': left, 'source_indices': partners, **stats})
         if stats['valid_depth_pixels'] < 100:
             continue
@@ -66,7 +67,8 @@ def build_plane_sweep_recording(frames: list[dict], target: Path, report: dict,
                         'depth': f'depth/{n:05d}.npy'})
     report['plane_sweep'] = {'candidate_anchors': len(selected),
                              'saved_training_frames': len(entries),
-                             'planes': planes, 'max_sources': max_sources, 'per_anchor': diagnostics,
+                             'planes': planes, 'max_sources': max_sources, 'pairing': pairing,
+                             'per_anchor': diagnostics,
                              'no_sensor_depth_pixels': True,
                              'train_only': True}
     if len(entries) < 6:
@@ -107,7 +109,7 @@ def execute(args: argparse.Namespace, report: dict) -> None:
                        'pose_source': 'TUM groundtruth known metric poses'}
     manifest = build_plane_sweep_recording(frames, work / 'mvs', report,
                                            max_anchors=args.max_anchors, planes=args.planes,
-                                           max_sources=args.max_sources)
+                                           max_sources=args.max_sources, pairing=args.pairing)
     report['archived_inputs'] = archive_stereo_inputs(
         manifest, frames, root, args.report_dir / 'inputs')
     target = args.report_dir / 'reconstruction'
@@ -137,6 +139,7 @@ def main(argv=None):
     p.add_argument('--max-anchors', type=int, default=48)
     p.add_argument('--max-sources', type=int, default=4)
     p.add_argument('--planes', type=int, default=64)
+    p.add_argument('--pairing', choices=('top2', 'diverse'), default='top2')
     args = p.parse_args(argv)
     args.report_dir.mkdir(parents=True, exist_ok=True)
     report = {'experiment': 'tum-xyz-known-pose-cpu-plane-sweep-no-measured-Z',
