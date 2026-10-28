@@ -1,0 +1,97 @@
+{
+  "experiment": "tum-fr1-xyz-known-pose-plane-sweep-diverse-sources-48train-v2",
+  "date_utc": "2026-10-28",
+  "status": "real_mesh_generated_visual_fail",
+  "code_sha": "412e5fa425af55d020ea388292d76d3aaf12d975",
+  "real_run": "https://github.com/REDrighthand05/echo4d/actions/runs/40646588976",
+  "cross_platform_verify": "https://github.com/REDrighthand05/echo4d/actions/runs/40646589090",
+  "artifact": "https://github.com/REDrighthand05/echo4d/actions/runs/40646588976/artifacts/12797877093",
+  "artifact_zip_sha256": "25ff1d90085a1ac7dd10698209b3284f03f64a3be36aad4cddee9072e5c0de1b",
+  "archive_crc": "verified_no_errors",
+  "retained": [
+    "TUM fr1_xyz 640x480 source RGB, algorithm 320x240",
+    "known metric camera-to-world poses",
+    "calibration",
+    "depth.txt timestamps for frozen selection only"
+  ],
+  "removed": [
+    "measured sensor depth pixels",
+    "existing Mesh prior"
+  ],
+  "frozen_split": {
+    "train": 48,
+    "holdout": 12,
+    "holdout_indices": [
+      4,
+      5,
+      9,
+      10,
+      14,
+      19,
+      24,
+      25,
+      29,
+      34,
+      35,
+      55
+    ]
+  },
+  "algorithm": "CPU 64 inverse-depth plane ZNCC MVS, top-two agreeing of up to four geometry-selected TRAIN sources; deterministic 2m grid overlap and directional diversity, existing TSDF; no inpainting",
+  "replay": "python tools/tum_plane_sweep.py --work /tmp/tum-plane-sweep-diverse --report-dir artifacts/tum-plane-sweep --max-anchors 48 --max-sources 4 --planes 64",
+  "new_mesh": {
+    "sha256": "c0d47205fd2b3e11434475d1a79cde46a6187ca3095f6115e747513ded19e2b0",
+    "vertices": 5159,
+    "triangles": 5444,
+    "connected_face_components": 535,
+    "largest_component_fraction": 0.4671197648787656,
+    "eligible_anchors": 48,
+    "saved_training_depth_frames": 48,
+    "valid_inferred_depth_pixels": 1013210
+  },
+  "prior_plane_sweep": {
+    "code_sha": "b73e4ecb642fc89a26651811c7ba6159eb8de3bc",
+    "run": "https://github.com/REDrighthand05/echo4d/actions/runs/40641168882",
+    "artifact_zip_sha256": "0b51589ea842ee3aa8f1de05827dc2df5e5d62c3716baceb43c0f7aaa54a0761",
+    "mesh_sha256": "586d4fc4208a521a878f1c416558235d135481fb203a8afc44bcd592d8a6e057",
+    "vertices": 1067,
+    "triangles": 992,
+    "connected_face_components": 121,
+    "largest_component_fraction": 0.3094758064516129,
+    "candidate_anchors": 20,
+    "saved_training_depth_frames": 12,
+    "valid_inferred_depth_pixels": 151843
+  },
+  "same_pose_depth_render_pixels": {
+    "heldout-4": {
+      "old": 13317,
+      "new": 32177
+    },
+    "heldout-24": {
+      "old": 9837,
+      "new": 27802
+    },
+    "heldout-55": {
+      "old": 7969,
+      "new": 22628
+    },
+    "free-a": {
+      "old": 5235,
+      "new": 20441
+    },
+    "free-b": {
+      "old": 4284,
+      "new": 19611
+    }
+  },
+  "comparison_method": "Both Meshes re-rasterized at exactly the FIVE old-run cameraToWorld matrices with 320x240 TUM intrinsics, same near/far and perspective-correct ECHO z-buffer formula. This corrects the original per-Mesh free-camera-centering confound. No measured holdout depth pixels used for source selection.",
+  "local_comparison_png_sha256": "5abe53b331538371f681904bc9ccebc9dd175673c77474d24f396008839f4b0d",
+  "local_glb_sha256": {
+    "old": "a5c246e0e310c7406c83b64ccb7f1824fc87bd5426579ee69c35199cc166de83",
+    "new": "8099f6e7d642b8594f335fd5ce46053a412cc3cd1f438ec79b57267349f3f359"
+  },
+  "comparison_limit": "Old MVS used 20 candidate anchors, 2 sources and saved 12 frames; new uses 48 anchors, up to 4 sources and saved 48 frames. This is a controlled information-condition comparison (same scene and frozen split), NOT an isolated algorithm or same compute budget A/B. The separate high-information fr1_room 96-view run is a DIFFERENT scene and must not be scored against fr1_xyz.",
+  "visual_review": "FAIL: More surfaces and larger largest component, but still torn, floating and fragmented; cannot reliably recognize complete desk/wall/room geometry. No independent human #74 acceptance.",
+  "independent_surface_truth": "not_available",
+  "historical_desk_v2": "FAIL 16.7779cm > frozen 15cm; unchanged",
+  "next": "Run a fixed 48-anchor/4-source same-budget geometry test with train-only visibility/occlusion-aware photo consistency, then inspect same five fixed cameras and geometry continuity before reducing pose information."
+}
