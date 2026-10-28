@@ -1,4 +1,4 @@
-name: TUM desk single-volume TSDF 12cm vs 10cm real Mesh A/B
+name: TUM desk 25mm vs 18mm voxel real Mesh A/B
 
 on:
   push:
@@ -19,7 +19,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  real-single-truncation-ab:
+  real-fine-voxel-ab:
     runs-on: ubuntu-latest
     timeout-minutes: 65
     steps:
@@ -40,27 +40,27 @@ jobs:
           OPENBLAS_NUM_THREADS: '1'
           OMP_NUM_THREADS: '1'
         run: python -m pytest -q tests/python/test_tum_desk_sparse_quality.py tests/python/test_sparse_open3d.py
-      - name: Real 640x480 TUM desk 96-frame single TSDF 12cm vs 10cm
+      - name: Real 640x480 TUM desk 96-frame 25mm vs 18mm TSDF
         env:
           PYTHONPATH: tools
           OPENBLAS_NUM_THREADS: '1'
           OMP_NUM_THREADS: '1'
         run: |
           python tools/tum_desk_sparse_quality.py \
-            --single-truncation \
-            --work "$RUNNER_TEMP/tum-desk-single-tsdf" \
-            --report-dir "$GITHUB_WORKSPACE/artifacts/tum-desk-single-tsdf"
+            --fine-voxel \
+            --work "$RUNNER_TEMP/tum-desk-fine-voxel" \
+            --report-dir "$GITHUB_WORKSPACE/artifacts/tum-desk-fine-voxel"
       - name: Surface Mesh result or failure
         if: always()
         run: |
-          if [ -f artifacts/tum-desk-single-tsdf/SUMMARY.md ]; then
-            cat artifacts/tum-desk-single-tsdf/SUMMARY.md >> "$GITHUB_STEP_SUMMARY"
+          if [ -f artifacts/tum-desk-fine-voxel/SUMMARY.md ]; then
+            cat artifacts/tum-desk-fine-voxel/SUMMARY.md >> "$GITHUB_STEP_SUMMARY"
           fi
-      - name: Retain both real colored Meshes and 3+2 views
+      - name: Retain both real colored Meshes and 3+2 views (18mm vs 25mm)
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: tum-desk-single-tsdf-${{ github.run_id }}
-          path: artifacts/tum-desk-single-tsdf/
+          name: tum-desk-fine-voxel-${{ github.run_id }}
+          path: artifacts/tum-desk-fine-voxel/
           if-no-files-found: warn
           retention-days: 14
