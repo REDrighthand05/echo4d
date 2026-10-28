@@ -1,0 +1,77 @@
+name: TUM known-pose RGB MVS cross-view transfer A/B
+
+on:
+  push:
+    branches:
+      - research/plane-sweep-crossview-reprojection-20261028
+    paths:
+      - 'src/echo4d/known_pose_depth_fusion.py'
+      - 'tools/tum_plane_sweep.py'
+      - 'tools/tum_plane_sweep_compare.py'
+      - 'tests/python/test_known_pose_depth_fusion.py'
+      - '.github/workflows/tum-plane-sweep-crossview-reprojection.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tum-plane-sweep-crossview-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  real-tum-frozen-ab:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: requirements.lock
+      - name: Install locked Echo4D, CPU OpenCV and colored GLB export
+        run: |
+          python -m pip install -r requirements.lock
+          python -m pip install --no-deps -e .
+          python -m pip install --no-deps opencv-python-headless==4.12.0.88 trimesh==4.11.1
+      - name: Geometry and regression tests
+        run: |
+          python -m pytest -q tests/python/test_known_pose_depth_fusion.py tests/python/test_known_pose_depth_consensus.py tests/python/test_known_pose_plane_sweep.py tests/python/test_known_pose_plane_sweep_adaptive.py tests/python/test_known_pose_mvs_sources.py
+      - name: Control same 48/4/64 TUM RGB-inferred depths to actual Mesh
+        env:
+          PYTHONPATH: tools
+        run: |
+          python tools/tum_plane_sweep.py \
+            --work "$RUNNER_TEMP/mvs-old" \
+            --report-dir "$GITHUB_WORKSPACE/artifacts/old" \
+            --max-anchors 48 --max-sources 4 --planes 64 --pairing top2 \
+            --source-visibility --visibility-mode soft --window-mode adaptive \
+            --depth-regularization rgb-consensus
+      - name: Cross-view RGB reprojection same source and same budget to actual Mesh
+        env:
+          PYTHONPATH: tools
+        run: |
+          python tools/tum_plane_sweep.py \
+            --archive "$RUNNER_TEMP/mvs-old/source.tgz" \
+            --work "$RUNNER_TEMP/mvs-new" \
+            --report-dir "$GITHUB_WORKSPACE/artifacts/new" \
+            --max-anchors 48 --max-sources 4 --planes 64 --pairing top2 \
+            --source-visibility --visibility-mode soft --window-mode adaptive \
+            --depth-regularization rgb-consensus --crossview-fusion
+      - name: Frozen three original full-resolution RGB + two free poses and rotatable GLBs
+        env:
+          PYTHONPATH: tools
+        run: |
+          python tools/tum_plane_sweep_compare.py \
+            --old artifacts/old --new artifacts/new \
+            --source-root "$RUNNER_TEMP/mvs-old/dataset" \
+            --output artifacts/frozen-five
+      - name: Preserve actual meshes, source photos, same-pose views and failures
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tum-plane-sweep-crossview-ab-${{ github.run_id }}
+          path: artifacts/
+          if-no-files-found: warn
+          retention-days: 14
