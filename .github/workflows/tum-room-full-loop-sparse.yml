@@ -1,4 +1,4 @@
-name: TUM room real cross-frame foreground Mesh A/B
+name: TUM room 96 vs 120 real RGB-D views Mesh A/B
 
 on:
   push:
@@ -16,11 +16,11 @@ permissions:
   contents: read
 
 concurrency:
-  group: tum-room-crossframe-6cm-${{ github.ref }}
+  group: tum-room-dense-120-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
-  real-room-crossframe-ab:
+  real-room-dense-120-ab:
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
@@ -41,27 +41,27 @@ jobs:
           OPENBLAS_NUM_THREADS: '1'
           OMP_NUM_THREADS: '1'
         run: python -m pytest -q tests/python/test_tum_room_sparse_quality.py tests/python/test_sparse_open3d.py tests/python/test_room_pose_icp.py
-      - name: Reconstruct real fr1_room 25mm TSDF with and without 6cm cross-frame foreground guard
+      - name: Reconstruct real fr1_room 96 vs 120 measured RGB-D views with identical 25mm TSDF
         env:
           PYTHONPATH: tools
           OPENBLAS_NUM_THREADS: '1'
           OMP_NUM_THREADS: '1'
         run: |
           python tools/tum_room_sparse_quality.py \
-            --cross-frame \
-            --work "$RUNNER_TEMP/tum-room-crossframe-6cm" \
-            --report-dir "$GITHUB_WORKSPACE/artifacts/tum-room-crossframe-6cm"
+            --dense-views \
+            --work "$RUNNER_TEMP/tum-room-dense-120" \
+            --report-dir "$GITHUB_WORKSPACE/artifacts/tum-room-dense-120"
       - name: Show actual quality result or reproducible failure
         if: always()
         run: |
-          if [ -f artifacts/tum-room-crossframe-6cm/SUMMARY.md ]; then
-            cat artifacts/tum-room-crossframe-6cm/SUMMARY.md >> "$GITHUB_STEP_SUMMARY"
+          if [ -f artifacts/tum-room-dense-120/SUMMARY.md ]; then
+            cat artifacts/tum-room-dense-120/SUMMARY.md >> "$GITHUB_STEP_SUMMARY"
           fi
       - name: Retain actual colored meshes, 3+2 images, metrics or failure receipt
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: tum-room-crossframe-6cm-${{ github.run_id }}
-          path: artifacts/tum-room-crossframe-6cm/
+          name: tum-room-dense-120-${{ github.run_id }}
+          path: artifacts/tum-room-dense-120/
           if-no-files-found: warn
           retention-days: 14

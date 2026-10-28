@@ -88,3 +88,11 @@ def test_cross_frame_geometry_is_single_variable_and_train_only():
     assert geometry_variants(fine_voxel=True)[1][1] == .018
     with pytest.raises(DataError, match="one real geometry"):
         geometry_variants(fine_voxel=True, cross_frame=True)
+
+
+def test_dense_views_geometry_only_changes_real_training_frame_count():
+    base, dense = geometry_variants(dense_views=True)
+    assert base == ("room-96-fine-wide", .025, .12, 0.)
+    assert dense == ("room-120-fine-wide", .025, .12, 0.)
+    with pytest.raises(DataError, match="one real geometry"):
+        geometry_variants(dense_views=True, cross_frame=True)
