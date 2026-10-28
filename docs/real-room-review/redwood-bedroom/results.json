@@ -1,0 +1,54 @@
+{
+  "scene": "Redwood real bedroom",
+  "source": "Open3D public real RGB-D",
+  "geometry_engine": "stock Open3D 0.19 ScalableTSDFVolume",
+  "rgbd_frame_count": 21930,
+  "frames_used": 360,
+  "first_frame_id": 1,
+  "last_frame_id": 21930,
+  "trajectory_poses": 21931,
+  "raw_resolution": [
+    640,
+    480
+  ],
+  "logged_calibration": [
+    640,
+    480,
+    525.0,
+    525.0,
+    319.5,
+    239.5
+  ],
+  "mesh_triangles": 540222,
+  "colored_glb": "recorded-rgbd-preview.glb",
+  "prior_file_NOT_USED_IN_RECONSTRUCTION": "PREEXISTING-PRIOR-bedroom.ply",
+  "visuals": [
+    {
+      "view": "real camera",
+      "file": "visual/photo-vs-mesh-00000.png",
+      "covered_pixels": 76666
+    },
+    {
+      "view": "real camera",
+      "file": "visual/photo-vs-mesh-10995.png",
+      "covered_pixels": 75784
+    },
+    {
+      "view": "real camera",
+      "file": "visual/photo-vs-mesh-21929.png",
+      "covered_pixels": 76681
+    },
+    {
+      "view": "free camera",
+      "file": "visual/free-view-1.png",
+      "covered_pixels": 73873
+    },
+    {
+      "view": "free camera",
+      "file": "visual/free-view-2.png",
+      "covered_pixels": 71073
+    }
+  ],
+  "independent_geometry_accuracy": "not tested",
+  "issue_74": "FAIL unchanged"
+}
