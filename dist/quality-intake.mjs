@@ -14,13 +14,15 @@ export function parseIntake(value) {
   const expected = {};
   for (const file of value.files) {
     if (!file || typeof file !== "object" || !SLOT_IDS.includes(file.slot) ||
-        seen.has(file.slot) || (file.sha256 != null && (typeof file.sha256 !== "string" || !SHA256.test(file.sha256)))) {
+        seen.has(file.slot) || [file.sha256, file.expected_sha256].some(
+          (sha) => sha != null && (typeof sha !== "string" || !SHA256.test(sha)))) {
       throw new Error("证据槽位重复、缺失或 SHA-256 格式错误");
     }
     seen.add(file.slot);
     expected[file.slot] = {
-      sha256: file.sha256 ? file.sha256.toLowerCase() : null,
-      file_name: typeof file.file_name === "string" ? file.file_name.slice(0, 256) : null
+      sha256: (file.sha256 || file.expected_sha256)?.toLowerCase() || null,
+      file_name: typeof (file.file_name || file.expected_file_name) === "string"
+        ? (file.file_name || file.expected_file_name).slice(0, 256) : null
     };
   }
   if (seen.size !== SLOT_IDS.length) throw new Error("证据槽位不完整");
