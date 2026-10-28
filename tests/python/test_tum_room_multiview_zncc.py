@@ -1,7 +1,7 @@
 """CPU synthetic geometry and negative controls; real room runs in Actions."""
-import cv2
 import numpy as np
 import pytest
+cv2 = pytest.importorskip('cv2', reason='OpenCV installed by real-room workflow')
 
 from echo4d.model import DataError
 from tum_room_multiview_zncc import sweep_zncc
