@@ -89,9 +89,13 @@ def build_plane_sweep_recording(frames: list[dict], target: Path, report: dict,
                                         visibility_mode=visibility_mode,
                                         window_mode=window_mode)
         if depth_regularization == 'rgb-consensus':
+            stats['inference_before_regularization'] = stats.copy()
             depth, consensus = regularize_observed_depth(depth, rgb(left))
             stats['rgb_depth_consensus'] = consensus
             stats['valid_depth_pixels'] = consensus['remaining_valid_pixels']
+            stats['unknown_pixels'] = int(depth.size - stats['valid_depth_pixels'])
+            stats['valid_fraction'] = stats['valid_depth_pixels'] / depth.size
+            stats['adaptive_statistics_stage'] = 'before_regularization'
         elif depth_regularization != 'none':
             raise DataError('Unknown depth regularization mode')
         diagnostics.append({'left_index': left, 'source_indices': partners, **stats})
@@ -109,6 +113,7 @@ def build_plane_sweep_recording(frames: list[dict], target: Path, report: dict,
                              'planes': planes, 'max_sources': max_sources, 'pairing': pairing,
                              'window_mode': window_mode,
                              'depth_regularization': depth_regularization,
+                             'adaptive_statistics_stage': 'before_regularization',
                              'consensus_removed_pixels': sum(x.get('rgb_depth_consensus', {}).get('removed_isolated_pixels', 0) for x in diagnostics),
                              'consensus_adjusted_pixels': sum(x.get('rgb_depth_consensus', {}).get('adjusted_pixels', 0) for x in diagnostics),
                              'adaptive_reference_pixels': sum(x['adaptive_reference_pixels'] for x in diagnostics),
