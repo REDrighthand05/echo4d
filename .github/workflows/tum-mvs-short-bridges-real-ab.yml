@@ -105,6 +105,11 @@ jobs:
         with:
           name: tum-mvs-short-bridges-ab-${{ github.run_id }}
           path: |
+            artifacts/old/inputs/
+            artifacts/old/reconstruction/mesh.ply
+            artifacts/new/prior-comparison/report.json
+            artifacts/new/prior/unfiltered/control-replayed.ply
+            artifacts/new/prior/unfiltered/reconstruction/mesh.ply
             artifacts/new/report.json
             artifacts/new/reconstruction/mesh.ply
             artifacts/new/prior/report.json
