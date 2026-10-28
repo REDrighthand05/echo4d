@@ -1,0 +1,63 @@
+{
+  "experiment": "tum-fr1-room-known-pose-multiview-plane-sweep-v1",
+  "status": "VISUAL_FAIL",
+  "run_id": 40769461870,
+  "run_url": "https://github.com/REDrighthand05/echo4d/actions/runs/40769461870",
+  "artifact_url": "https://github.com/REDrighthand05/echo4d/actions/runs/40769461870/artifacts/12851068624",
+  "tested_checkout": "f2de3986949e8f01da60ca30996e242ebf5c25f9",
+  "source_archive_sha256": "5ace47a1d2e53696bc939a84999293a04a7226958e848a609666691fd3cc38da",
+  "retained": [
+    "640x480 original RGB (320x240 inference)",
+    "known metric TUM camera poses",
+    "camera intrinsics",
+    "96 fixed training identities"
+  ],
+  "removed_from_candidate": [
+    "sensor measured depth pixels",
+    "existing Mesh prior"
+  ],
+  "acquisition_caveat": "Importer still uses sensor depth timestamp association; no sensor Z passed to plane sweep or TSDF.",
+  "metric_scale": "known TUM metric camera translation",
+  "controls": {
+    "highinfo_measured_mesh_sha256": "65b8b25e5f8d46f494acbd1e4ab905fd7b5415e885705c104c00cee75704c741",
+    "old_rgb_stereo_mesh_sha256": "93eecc446eed77286f0399835813efa07da24e8ec29ad6f55980bd6df5c8910f",
+    "new_multiview_mesh_sha256": "83eebfc984d54ffc1e5927de9bf409be86074873f481e4ece6bbd3dfc7428f45"
+  },
+  "new_mesh": {
+    "vertices": 47848,
+    "faces": 44985,
+    "components": 6853,
+    "largest_component_face_fraction": 0.053306657774813825
+  },
+  "inferred_depth_frames": 32,
+  "five_view_covered_pixels": {
+    "highinfo": [
+      75892,
+      71206,
+      76745,
+      71902,
+      74958
+    ],
+    "old_rgb_stereo": [
+      137,
+      3599,
+      45446,
+      28663,
+      19739
+    ],
+    "new_rgb_multiview": [
+      19171,
+      15201,
+      45785,
+      32526,
+      31546
+    ]
+  },
+  "limitations": [
+    "More coverage than stereo at all frozen views, but fragmented, spatially incorrect, not recognizable room reconstruction",
+    "Only 32 inferred frames integrated, vs 41 old stereo and 96 measured; highinfo also differs in voxel resolution and pixel stride",
+    "No GPU/model weights; no claim of RGB-only unknown-pose reconstruction",
+    "No #74 acceptance; no life replay"
+  ],
+  "next_shortest_fix": "Improve multi-view depth map spatial consistency and reject photometric false minima before TSDF, not more Mesh postfilters."
+}
