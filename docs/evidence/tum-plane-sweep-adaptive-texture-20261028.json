@@ -1,0 +1,113 @@
+{
+  "experiment": "tum-fr1_xyz-known-pose-adaptive-RGB-patch-20261028",
+  "evidence_level": "E3 real public TUM reconstruction, not independent surface truth or #74 acceptance",
+  "source": {
+    "dataset": "TUM fr1_xyz",
+    "source_url": "https://cvg.cit.tum.de/rgbd/dataset/freiburg1/rgbd_dataset_freiburg1_xyz.tgz",
+    "source_archive_sha256": "a0236d97b8c30cd93b653656d2b6c293ff7c982a4130ef2a1a8beecdb124ef98",
+    "source_rgb_resolution": [
+      640,
+      480
+    ],
+    "algorithm_resolution": [
+      320,
+      240
+    ],
+    "retained": [
+      "clear RGB",
+      "TUM measured metric poses",
+      "camera intrinsics",
+      "depth.txt timestamps for frozen frame selection"
+    ],
+    "removed": [
+      "sensor depth pixels",
+      "prior Mesh"
+    ],
+    "depth_png_files_opened": 0,
+    "train": 48,
+    "holdout": 12
+  },
+  "method": {
+    "name": "CPU known-pose plane-sweep two-source ZNCC with observed adaptive patch support",
+    "change": "5x5 patch on textured pixels, 11x11 observed RGB patch only when 5x5 reference variance <64 and 11x11 >=48; no RGB evidence means zero unknown",
+    "window_mode": "adaptive",
+    "max_anchors": 48,
+    "max_sources": 4,
+    "planes": 64,
+    "pairing": "top2",
+    "source_visibility": true,
+    "visibility_mode": "soft",
+    "metric_scale": "supplied TUM camera poses, not recovered from unknown monocular scale",
+    "adaptive_reference_pixels": 758597,
+    "adaptive_valid_depth_pixels": 474376,
+    "penalized_photo_samples": 31672184
+  },
+  "implementation_head": "ef484030fbad5dc214f002bb3256322a2cff4caf",
+  "real_run": "https://github.com/REDrighthand05/echo4d/actions/runs/40676422310",
+  "verify": "https://github.com/REDrighthand05/echo4d/actions/runs/40676422181",
+  "artifact": "https://github.com/REDrighthand05/echo4d/actions/runs/40676422310/artifacts/12809909874",
+  "artifact_zip_sha256": "dcd4d5ffa2d7ed04004af2373aa78d8e6d5023ad2fdb55b46dab3298d3ca2cf5",
+  "command": "python tools/tum_plane_sweep.py --work <empty-work> --report-dir <empty-report> --max-anchors 48 --max-sources 4 --planes 64 --pairing top2 --source-visibility --visibility-mode soft --window-mode adaptive",
+  "result": {
+    "status": "mesh_generated_unreviewed",
+    "mesh_sha256": "4254965ba5a6267ae87d7dea7a7ec6eadcd9c3917f17082847a5ddc382393bb4",
+    "vertices": 8359,
+    "triangles": 9367,
+    "edge_connected_face_components": 774,
+    "largest_edge_connected_face_fraction": 0.3855022952919825,
+    "workflow_render_covered_pixels": {
+      "heldout-4": 44369,
+      "heldout-24": 39170,
+      "heldout-55": 29764,
+      "free-a": 33667,
+      "free-b": 27561
+    },
+    "frozen_baseline_pose_rerender_covered_pixels": {
+      "heldout-4": 44369,
+      "heldout-24": 39170,
+      "heldout-55": 29764,
+      "free-a": 31163,
+      "free-b": 28256
+    }
+  },
+  "baseline": {
+    "method": "fixed 5x5 ZNCC, same 48/4/64 and soft visibility",
+    "run": "https://github.com/REDrighthand05/echo4d/actions/runs/40668250937",
+    "mesh_sha256": "ec3388cafe9e5a4fe584fa1031cf7972b95e6a6e720a66219f43cef3834a6705",
+    "triangles": 4719,
+    "edge_connected_face_components": 490,
+    "largest_edge_connected_face_fraction": 0.42381860563678747,
+    "covered_pixels": {
+      "heldout-4": 32386,
+      "heldout-24": 27372,
+      "heldout-55": 21633,
+      "free-a": 21863,
+      "free-b": 18441
+    }
+  },
+  "high_information_same_scene": {
+    "method": "measured RGB-D and known metric poses, no prior Mesh",
+    "run": "https://github.com/REDrighthand05/echo4d/actions/runs/40599164123",
+    "covered_pixels": {
+      "heldout-4": 76211,
+      "heldout-24": 76024,
+      "heldout-55": 70671,
+      "free-a": 52323,
+      "free-b": 33740
+    }
+  },
+  "local_visual_review": {
+    "frozen_five_view_color_montage_sha256": "6d06bb575a45b4ffb7ee99750195852f1ed93e8b199e7fdf4b8766487c976c90",
+    "local_glb_sha256": "6ca4df11a69450bdb13ea21fa0e144ab17d20344b3f6ccf4eed22d82c4c33bb6",
+    "camera_poses": "All five views fixed to baseline report.json, including two free views. Workflow free views are re-centered per Mesh, so their counts are NOT directly comparable without frozen re-render.",
+    "observation": "Substantially more observed surfaces in all five frozen views, but more floating shards, weaker largest connected fraction, and no reliable complete room, floor or table structure."
+  },
+  "assessment": "FAIL: coverage improved 37-53% on fixed 3+2 camera poses, but edge-connected fragments increased 490 to 774 and largest face component fell 42.38% to 38.55%; does not pass #74 or life replay.",
+  "limits": [
+    "No independent measured surface truth",
+    "No full-resolution source RGB photographs redistributed",
+    "GLB and colored comparison generated locally; original Mesh PLY and five depth renders in Actions artifact",
+    "Original fr1_xyz scene is not the other task's fr1_room; do not compare across scenes"
+  ],
+  "next": "Use RGB-guided local plane continuity / confidence-aware aggregation to merge truly coplanar low-texture patches without adding hallucinated geometry; hold 48/4/64 and five camera poses fixed."
+}
