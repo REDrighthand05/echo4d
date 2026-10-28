@@ -122,9 +122,11 @@ def build_plane_sweep_recording(frames: list[dict], target: Path, report: dict,
                       for e in entries]
         saved_poses = [np.asarray(e['cameraToWorld'], dtype=np.float64).reshape(4, 4, order='F')
                        for e in entries]
+        # Preserve the existing no-keyword call for the default path and its
+        # test doubles; only the opt-in path changes the fusion contract.
+        fusion_kwargs = {'local_surface_support': True} if crossview_local_surface else {}
         fused_depths, fusion_receipts = fuse_reprojected_depths(
-            saved_depths, saved_poses, saved_rgbs, camera,
-            local_surface_support=crossview_local_surface)
+            saved_depths, saved_poses, saved_rgbs, camera, **fusion_kwargs)
         for e, fused, stats in zip(entries, fused_depths, saved_diagnostics):
             np.save(target / e['depth'], fused, allow_pickle=False)
             stats['inference_before_crossview_fusion'] = stats.copy()
