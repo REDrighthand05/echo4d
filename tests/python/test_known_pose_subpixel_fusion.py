@@ -68,3 +68,20 @@ def test_subpixel_sampling_counts_one_observation_per_frame():
     assert volume.weight.max() == 1
     with pytest.raises(DataError):
         volume.integrate(Frame(0., np.eye(4), z, rgb), upsampled_camera(camera), 0)
+
+
+def test_nearest_fallback_keeps_old_sampling_at_edges_and_unknown():
+    z = np.array([[2., 0., 3.], [2., 0., 3.],
+                  [2., 0., 3.]], np.float32)
+    out, report = upsample_observed_depth(z, fallback='nearest')
+    # At odd positions the original nearest rule rounds half-pixels UP.
+    assert out[0, 1] == 0
+    assert out[0, 3] == 3
+    assert out[1, 3] == 3
+    assert out[1, 1] == 0
+    np.testing.assert_array_equal(out[::2, ::2], z)
+    assert report['fallback'] == 'nearest'
+    assert report['nearest_fallback_samples_not_new_measurements'] > 0
+    step = np.array([[1., 3.], [1., 3.]], np.float32)
+    out, _ = upsample_observed_depth(step, fallback='nearest')
+    assert np.all(out[:, 1] == 3)
