@@ -1,6 +1,6 @@
 """Real TUM fr1_room: full-room loop trajectory, known poses + measured RGB-D.
 
-Compare the same 96 real training views with 4m vs 5m measured-depth limits
+Compare nested 96 vs 120 real training views with fixed 4m measured depth
 on the SAME room scene with 12 frozen holdouts. Neither route uses holdout depth for fusion or geometry selection.
 No inferred depth, mesh completion, or claim of independent surface truth.
 """
@@ -33,11 +33,11 @@ IMPORT_FRAMES = 180
 HOLDOUT = tuple(range(7, IMPORT_FRAMES, 15))
 BASE_FRAMES = 48
 EXPANDED_FRAMES = 96
+DENSE_FRAMES = 120
 GUARD_SECONDS = 0.16
 VOXEL_M = 0.03
 TRUNC_M = 0.09
 MAX_DEPTH_M = 4.0
-FAR_MAX_DEPTH_M = 5.0  # Experimental: retain additional actually measured distant surfaces.
 ROOT = "rgbd_dataset_freiburg1_room"
 URL = "https://cvg.cit.tum.de/rgbd/dataset/freiburg1/rgbd_dataset_freiburg1_room.tgz"
 MAX_ARCHIVE_BYTES = 1200 * 1024**2
@@ -195,7 +195,7 @@ def select_training(manifest: dict, *, baseline: int = BASE_FRAMES,
 def render_five(dataset: Path, imported: Path, target: Path, holdout: list[int]) -> list[dict]:
     rec = load_recording(imported / "recording.json")
     assoc = json.loads((imported / "association.json").read_text(encoding="utf8"))
-    keys = ("room-96-4m", "room-96-5m")
+    keys = ("room-96-4m", "room-120-4m")
     meshes = {}
     for key in keys:
         mesh_path = target / key / "mesh.ply"
@@ -214,25 +214,33 @@ def render_five(dataset: Path, imported: Path, target: Path, holdout: list[int])
         with Image.open(original_path) as raw:
             original = raw.convert("RGB").copy()
         views = [rasterize_vertex_rgb(*meshes[key], camera, pose,
-                 near=.15, far=FAR_MAX_DEPTH_M)[0] for key in keys]
-        name = f"heldout-{i:03d}-room-96-depth-4m-vs-5m.png"
+                 near=.15, far=MAX_DEPTH_M)[0] for key in keys]
+        name = f"heldout-{i:03d}-room-96-vs-120.png"
         sheet(original, *views, visual / name, f"Real TUM fr1_room camera {i}",
-              ("96 views / measured depth <=4m", "96 views / measured depth <=5m"))
+              ("96 real views / depth <=4m", "120 real views / depth <=4m"))
         images.append({"kind": "heldout_camera", "index": i, "name": name,
                        "sha256": file_sha256(visual / name),
                        "source_rgb_sha256": source["rgb_sha256"]})
-    vertices = meshes["room-96-5m"][0]
-    center = (vertices.min(axis=0) + vertices.max(axis=0)) / 2
-    span = max(float(np.ptp(vertices, axis=0).max()), .5)
-    for i, offset in enumerate(((.45, -1.25, .3), (1.2, .35, .45)), 1):
-        pose = look_at(center + span * np.asarray(offset), center)
-        views = [rasterize_vertex_rgb(*meshes[key], camera, pose,
-                 near=.15, far=10.)[0] for key in keys]
-        name = f"free-{i}-room-96-depth-4m-vs-5m.png"
-        sheet(None, *views, visual / name, f"Real TUM room free camera {i}",
-              ("96 views / measured depth <=4m", "96 views / measured depth <=5m"))
+    # Previous free cameras sat >10m from the room center but clipped at 10m,
+    # producing black renders independent of Mesh geometry. Shift two real
+    # camera poses for free third-person views, without using held-out RGB-D.
+    for i, (index, lateral) in enumerate(((holdout[2], .35),
+                                          (holdout[-3], -.35)), 1):
+        anchor = np.asarray(rec.entries[index]["cameraToWorld"]).reshape(
+            4, 4, order="F")
+        eye = anchor[:3, 3] + lateral * anchor[:3, 0] - .12 * anchor[:3, 1]
+        target_point = anchor[:3, 3] + 1.8 * anchor[:3, 2]
+        pose = look_at(eye, target_point)
+        renders = [rasterize_vertex_rgb(*meshes[key], camera, pose,
+                   near=.15, far=10.) for key in keys]
+        views = [render[0] for render in renders]
+        name = f"free-{i}-room-96-vs-120.png"
+        sheet(None, *views, visual / name, f"Real TUM room shifted free camera {i}",
+              ("96 real views / depth <=4m", "120 real views / depth <=4m"))
         images.append({"kind": "free_camera", "name": name,
                        "sha256": file_sha256(visual / name),
+                       "anchor_holdout_index": index,
+                       "rendered_mesh_pixels": [int(render[1]) for render in renders],
                        "camera_to_world": pose.flatten(order="F").tolist()})
     return images
 
@@ -256,15 +264,19 @@ def run(args: argparse.Namespace, report: dict) -> None:
     if rec.source != "recorded" or (rec.camera.width, rec.camera.height) != (640, 480):
         raise DataError("Expected full 640x480 measured RGB-D")
     manifest = json.loads((imported / "recording.json").read_text(encoding="utf8"))
-    base, extra, selection = select_training(manifest)
+    _, extra, selection = select_training(manifest)
+    _, dense, dense_selection = select_training(manifest, expanded=DENSE_FRAMES)
+    if not set(selection["expanded_indices"]).issubset(dense_selection["expanded_indices"]):
+        raise DataError("120-view selection must preserve all 96 training views")
+    selection["dense_indices"] = dense_selection["expanded_indices"]
+    selection["dense_contains_96"] = True
     report["training_selection"] = selection
-    for name, data, depth_limit in (("room-96-4m", extra, MAX_DEPTH_M),
-                                    ("room-96-5m", extra, FAR_MAX_DEPTH_M)):
+    for name, data in (("room-96-4m", extra), ("room-120-4m", dense)):
         path = imported / ("train-" + name + ".json")
         path.write_text(json.dumps(data, allow_nan=False, sort_keys=True) + "\n", encoding="utf8")
         report.setdefault("fusion", {})[name] = fuse_sparse(
             path, target / name, voxel_m=VOXEL_M, truncation_m=TRUNC_M,
-            max_depth_m=depth_limit, pixel_stride=2)
+            max_depth_m=MAX_DEPTH_M, pixel_stride=2)
         mesh = target / name / "mesh.ply"
         vertices, faces = read_echo_ply(mesh)
         score = evaluate_frames(vertices, faces, rec, selection["holdout_indices"],
@@ -276,7 +288,7 @@ def run(args: argparse.Namespace, report: dict) -> None:
             "same_sensor_holdout_diagnostic_only": {k: score[k] for k in (
                 "heldout_frames", "observed_depth_coverage", "rmse_m", "mae_m", "p95_abs_m")}}
     report["visual"] = render_five(dataset, imported, target, selection["holdout_indices"])
-    report["status"] = "two_real_room_depth_limit_meshes_rendered_visual_review_pending"
+    report["status"] = "two_real_room_96_vs_120_meshes_rendered_visual_review_pending"
 
 
 def main() -> int:
@@ -287,7 +299,7 @@ def main() -> int:
     args = parser.parse_args()
     args.report_dir.mkdir(parents=True, exist_ok=True)
     report = {
-        "experiment": "TUM-fr1_room-same-96-views-measured-depth-4m-vs-5m-v1",
+        "experiment": "TUM-fr1_room-nested-96-vs-120-measured-depth-4m-v1",
         "started_utc": datetime.now(timezone.utc).isoformat(),
         "checkout_sha": os.environ.get("GITHUB_SHA"),
         "official_source": URL, "archive_checksum_status": "observed at run; not vendor-signed",
@@ -295,7 +307,8 @@ def main() -> int:
         "camera_poses": "TUM motion-capture ground truth (not inferred)",
         "depth": "TUM sensor measurement (not predicted)",
         "geometry": {"voxel_m": VOXEL_M, "truncation_m": TRUNC_M,
-                     "pixel_stride": 2, "depth_limit_variants_m": [MAX_DEPTH_M, FAR_MAX_DEPTH_M],
+                     "pixel_stride": 2, "depth_limit_m": MAX_DEPTH_M,
+                     "training_view_variants": [EXPANDED_FRAMES, DENSE_FRAMES],
                      "frozen_holdout_max_depth_m": MAX_DEPTH_M},
         "independent_surface_truth": "not_available",
         "human_visual_review": "not_performed",
@@ -316,9 +329,9 @@ def main() -> int:
         (args.report_dir / "room-sparse-quality-report.json").write_text(
             json.dumps(report, indent=2, allow_nan=False) + "\n", encoding="utf8")
         (args.report_dir / "SUMMARY.md").write_text("\n".join([
-            "# Real fr1_room measured-depth 4m vs 5m RGB-D Mesh",
+            "# Real fr1_room 96 vs 120 views at fixed 4m measured depth",
             f"- Status: {report['status']}",
-            "- Original RGB 640x480; same 96 known-pose measured-depth views, 4m vs 5m.",
+            "- Original RGB 640x480; nested 96 vs 120 known-pose measured-depth views, both 4m.",
             f"- Mesh results: {list(report.get('results', {}))}",
             f"- 3 real camera + 2 free camera images: {len(report.get('visual', []))}",
             "- Sensor holdout is not independent surface truth; #74 FAIL.",

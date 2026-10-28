@@ -5,7 +5,7 @@ import pytest
 
 from echo4d.model import DataError
 from tum_room_sparse_quality import (
-    BASE_FRAMES, EXPANDED_FRAMES, HOLDOUT, IMPORT_FRAMES, select_training,
+    BASE_FRAMES, EXPANDED_FRAMES, DENSE_FRAMES, HOLDOUT, IMPORT_FRAMES, select_training,
 )
 
 
@@ -67,3 +67,15 @@ def test_shorter_real_room_sequence_keeps_twelve_holdouts():
     assert len(receipt["holdout_indices"]) == 12
     assert set(receipt["expanded_indices"]).isdisjoint(receipt["holdout_indices"])
     assert receipt["min_train_holdout_time_gap_s"] > 0.16
+
+
+def test_120_view_geometry_budget_nests_96_without_holdout_leakage():
+    manifest = synthetic_manifest(170)
+    _, baseline96, first = select_training(manifest)
+    _, dense120, second = select_training(manifest, expanded=DENSE_FRAMES)
+    assert len(baseline96["frames"]) == 96
+    assert len(dense120["frames"]) == 120
+    assert set(first["expanded_indices"]).issubset(second["expanded_indices"])
+    held = [manifest["frames"][i]["t"] for i in second["holdout_indices"]]
+    assert all(min(abs(frame["t"] - h) for h in held) > .16 for frame in dense120["frames"])
+    assert second["min_train_holdout_time_gap_s"] > .16
