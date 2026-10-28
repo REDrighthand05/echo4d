@@ -30,7 +30,8 @@ def build_plane_sweep_recording(frames: list[dict], target: Path, report: dict,
                                 *, max_anchors: int = 48, planes: int = 64,
                                 max_sources: int = 4,
                                 pairing: str = 'top2',
-                                source_visibility: bool = False) -> Path:
+                                source_visibility: bool = False,
+                                visibility_mode: str = 'hard') -> Path:
     camera, _, _ = stereo_resolution(320)
     training = [i for i in range(TOTAL) if i not in HOLDOUT]
     selected, selection_stats = select_plane_sweep_views(
@@ -80,7 +81,8 @@ def build_plane_sweep_recording(frames: list[dict], target: Path, report: dict,
             source_z = None
         depth, stats = infer_plane_sweep(rgb(left), sources, camera,
                                         frames[left]['pose'], planes=planes, pairing=pairing,
-                                        source_depths=source_z)
+                                        source_depths=source_z,
+                                        visibility_mode=visibility_mode)
         diagnostics.append({'left_index': left, 'source_indices': partners, **stats})
         if stats['valid_depth_pixels'] < 100:
             continue
@@ -95,6 +97,8 @@ def build_plane_sweep_recording(frames: list[dict], target: Path, report: dict,
                              'saved_training_frames': len(entries),
                              'planes': planes, 'max_sources': max_sources, 'pairing': pairing,
                              'source_visibility': source_visibility,
+                             'visibility_mode': visibility_mode if source_visibility else 'disabled',
+                             'penalized_photo_samples': sum(x['penalized_photo_samples'] for x in diagnostics),
                              'source_depth_maps_missing': missing_source_z,
                              'occluded_photo_samples': sum(x['occluded_photo_samples'] for x in diagnostics),
                              'per_anchor': diagnostics,
@@ -139,7 +143,8 @@ def execute(args: argparse.Namespace, report: dict) -> None:
     manifest = build_plane_sweep_recording(frames, work / 'mvs', report,
                                            max_anchors=args.max_anchors, planes=args.planes,
                                            max_sources=args.max_sources, pairing=args.pairing,
-                                           source_visibility=args.source_visibility)
+                                           source_visibility=args.source_visibility,
+                                           visibility_mode=args.visibility_mode)
     report['archived_inputs'] = archive_stereo_inputs(
         manifest, frames, root, args.report_dir / 'inputs')
     target = args.report_dir / 'reconstruction'
@@ -172,6 +177,8 @@ def main(argv=None):
     p.add_argument('--pairing', choices=('top2', 'diverse'), default='top2')
     p.add_argument('--source-visibility', action='store_true',
                    help='Two-pass TRAIN-only RGB depth occlusion test; no measured Z')
+    p.add_argument('--visibility-mode', choices=('hard', 'soft'), default='hard',
+                   help='Hard veto or bounded soft penalty for RGB-inferred occluders')
     args = p.parse_args(argv)
     args.report_dir.mkdir(parents=True, exist_ok=True)
     report = {'experiment': 'tum-xyz-known-pose-cpu-plane-sweep-no-measured-Z',
@@ -181,6 +188,7 @@ def main(argv=None):
                                   'camera intrinsics', 'depth.txt timestamp selection'],
               'inputs_removed': ['sensor depth PNG pixels', 'prior Mesh'],
               'source_visibility_enabled': args.source_visibility,
+              'visibility_mode': args.visibility_mode if args.source_visibility else 'disabled',
               'evidence_level': 'real data experiment; no independent surface truth or #74 acceptance'}
     start = time.perf_counter()
     try:
