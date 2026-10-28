@@ -7,6 +7,7 @@ on:
     paths:
       - 'src/echo4d/known_pose_depth_fusion.py'
       - 'tools/tum_plane_sweep_fusion_replay.py'
+      - 'tools/tum_plane_sweep.py'
       - 'tests/python/test_known_pose_depth_fusion_local_surface.py'
       - '.github/workflows/tum-mvs-local-surface-real-ab.yml'
   workflow_dispatch:
