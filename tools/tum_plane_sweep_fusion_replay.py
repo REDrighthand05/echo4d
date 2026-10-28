@@ -6,6 +6,7 @@ crossview fusion rule changes; measured depth is never opened here.
 from __future__ import annotations
 import argparse
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -15,7 +16,7 @@ from PIL import Image
 from echo4d.model import file_sha256
 from echo4d.known_pose_depth_fusion import fuse_reprojected_depths
 from tum_public_roundtrip import ROOT, BOUNDS
-from tum_rgb_stereo import HOLDOUT, rgb_pose_frames, load_stereo_rgb, stereo_resolution
+from tum_rgb_stereo import HOLDOUT, rgb_pose_frames, load_stereo_rgb, stereo_resolution, archive_stereo_inputs, render_mesh
 
 
 def replay(old: Path, source_root: Path, target: Path) -> dict:
@@ -26,8 +27,8 @@ def replay(old: Path, source_root: Path, target: Path) -> dict:
         raise ValueError('Expected pinned 48-frame 320x240 RGB-inferred source')
     if target.exists():
         raise FileExistsError(f'Replay output must not exist: {target}')
-    (target / 'inputs/color').mkdir(parents=True)
-    (target / 'inputs/depth').mkdir(parents=True)
+    (target / 'recording/color').mkdir(parents=True)
+    (target / 'recording/depth').mkdir(parents=True)
     camera, _, _ = stereo_resolution(320)
     poses, rgbs, depths = [], [], []
     for entry in entries:
@@ -42,14 +43,15 @@ def replay(old: Path, source_root: Path, target: Path) -> dict:
     fused, receipts = fuse_reprojected_depths(
         depths, poses, rgbs, camera, local_surface_support=True)
     for i, (entry, rgb, depth) in enumerate(zip(entries, rgbs, fused)):
-        Image.fromarray(rgb).save(target / 'inputs' / entry['color'])
-        np.save(target / 'inputs' / entry['depth'], depth, allow_pickle=False)
+        Image.fromarray(rgb).save(target / 'recording' / entry['color'])
+        np.save(target / 'recording' / entry['depth'], depth, allow_pickle=False)
     manifest = dict(old_manifest)
     manifest['name'] = 'TUM known-pose RGB MVS with local-surface-supported crossview Z'
     manifest['notes'] = ('RGB-inferred depth only, measured metric poses. Local source Z '
                          'neighborhood support before crossview transfer. No sensor Z or prior Mesh.')
-    path = target / 'inputs/recording.json'
+    path = target / 'recording/recording.json'
     path.write_text(json.dumps(manifest, indent=2, allow_nan=False) + '\n')
+    archived = archive_stereo_inputs(path, frames, source_root / ROOT, target / 'inputs')
     cmd = [sys.executable, '-m', 'echo4d', 'reconstruct', str(path),
            '--output', str(target / 'reconstruction'), '--bounds', *BOUNDS,
            '--voxel', '0.05', '--max-depth', '4', '--max-voxels', '4000000',
@@ -59,11 +61,20 @@ def replay(old: Path, source_root: Path, target: Path) -> dict:
     if process.returncode or not mesh.is_file():
         raise RuntimeError(f'Replay Mesh reconstruction failed: {process.stderr[-2000:]}')
     old_report = json.loads((old / 'report.json').read_text())
-    report = {**old_report, 'status': 'mesh_generated_unreviewed',
+    report = {'experiment': 'frozen-inference-local-surface-crossview-replay',
+              'checkout_sha': os.environ.get('GITHUB_SHA'),
+              'input': old_report['input'],
+              'inference_source_checkout_sha': old_report.get('checkout_sha'),
+              'inference_source_mesh_sha256': old_report.get('mesh_sha256'),
+              'inferred_manifest_sha256': file_sha256(path),
+              'archived_inputs': archived,
+              'status': 'mesh_generated_unreviewed',
               'mesh_sha256': file_sha256(mesh),
               'method': 'opt-in local surface support on crossview RGB inferred Z',
               'inference_reused': 'old/inputs/depth from real Actions 40692184301',
               'reconstruct_command': cmd,
+              'reconstruct_returncode': process.returncode,
+              'mesh_output': json.loads(process.stdout.strip().splitlines()[-1]),
               'reconstruct_stdout_tail': process.stdout[-2000:],
               'reconstruct_stderr_tail': process.stderr[-2000:],
               'crossview_fusion': {
@@ -73,6 +84,7 @@ def replay(old: Path, source_root: Path, target: Path) -> dict:
                   'per_anchor': receipts,
                   'no_measured_depth_pixels': True,
                   'train_only': True}}
+    render_mesh(mesh, frames, target / 'visual', report, camera)
     (target / 'report.json').write_text(json.dumps(report, indent=2, allow_nan=False) + '\n')
     return {'mesh_sha256': report['mesh_sha256'],
             'added_inferred_pixels': report['crossview_fusion']['newly_supported_depth_pixels'],
