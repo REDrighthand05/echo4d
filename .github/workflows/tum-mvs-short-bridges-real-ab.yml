@@ -1,0 +1,116 @@
+name: TUM RGB-MVS short topology bridges real A/B
+
+on:
+  push:
+    branches:
+      - research/mvs-short-bridge-support-20261029
+    paths:
+      - 'src/echo4d/known_pose_edge_bridges.py'
+      - 'tools/tum_mvs_short_bridges.py'
+      - 'tests/python/test_known_pose_edge_bridges.py'
+      - '.github/workflows/tum-mvs-short-bridges-real-ab.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  real-mesh-ab:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: requirements.lock
+      - name: Install pinned dependencies
+        run: |
+          python -m pip install -r requirements.lock
+          python -m pip install --no-deps -e .
+          python -m pip install --no-deps trimesh==4.11.1
+      - name: Test bridge geometry and prior independent-depth contract
+        run: |
+          python -m py_compile tools/tum_mvs_short_bridges.py
+          python -m pytest -q tests/python/test_known_pose_edge_bridges.py tests/python/test_known_pose_edge_crossview.py tests/python/test_known_pose_edge_extraction.py
+      - name: Recover frozen RGB-inferred depth maps (NOT sensor Z)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p artifacts/old
+          gh run download 40692184301 --repo "$GITHUB_REPOSITORY" \
+            --name tum-plane-sweep-crossview-ab-40692184301 \
+            --dir "$RUNNER_TEMP/prior"
+          cp -r "$RUNNER_TEMP/prior/old/." artifacts/old/
+          test -s artifacts/old/inputs/recording.json
+          test -s artifacts/old/reconstruction/mesh.ply
+      - name: Download pinned original TUM RGB and metric poses
+        env:
+          PYTHONPATH: tools
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import os
+          from tum_public_roundtrip import download, extract
+          root = Path(os.environ['RUNNER_TEMP']) / 'tum-short-bridge'
+          root.mkdir()
+          receipt = {}
+          download(root / 'source.tgz', receipt)
+          extract(root / 'source.tgz', root / 'dataset')
+          print('SOURCE_SHA256', receipt['download']['sha256'])
+          PY
+      - name: Replay same TSDF and compare centroid vs short bridge Mesh
+        env:
+          PYTHONPATH: tools
+        run: |
+          python tools/tum_mvs_short_bridges.py \
+            --old artifacts/old \
+            --source-root "$RUNNER_TEMP/tum-short-bridge/dataset" \
+            --target artifacts/new
+      - name: Three real 640x480 RGB source views and two frozen free views
+        env:
+          PYTHONPATH: tools
+        run: |
+          python tools/tum_plane_sweep_compare.py \
+            --old artifacts/new/prior-comparison --new artifacts/new \
+            --source-root "$RUNNER_TEMP/tum-short-bridge/dataset" \
+            --output artifacts/frozen-five
+      - name: Sensor Z posthoc only AFTER both Meshes exist
+        env:
+          PYTHONPATH: tools
+        run: |
+          python tools/tum_mvs_edge_crossview_diagnostic.py \
+            --old artifacts/new/prior-comparison --new artifacts/new \
+            --source-root "$RUNNER_TEMP/tum-short-bridge/dataset" \
+            --output artifacts/heldout-diagnostic
+      - name: Print actual visual and topology results
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          r=json.loads(Path('artifacts/new/report.json').read_text())
+          c=json.loads(Path('artifacts/frozen-five/comparison.json').read_text())
+          d=json.loads(Path('artifacts/heldout-diagnostic/diagnostic.json').read_text())
+          print('NEW_FACES',r['summary']['triangles'])
+          print('EDGE_BRIDGES',r['support'])
+          print('FROZEN_FIVE',[(x['view'],x['old_covered_pixels'],x['new_covered_pixels']) for x in c['views']])
+          print('SENSOR_POSTHOC',[(x['heldout_index'],x['new_only']) for x in d['heldout']])
+          print('VISUAL_VERDICT',r['visual_acceptance'])
+          PY
+      - name: Preserve real source RGB, meshes, GLBs, diagnostics and FAIL
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tum-mvs-short-bridges-ab-${{ github.run_id }}
+          path: |
+            artifacts/new/report.json
+            artifacts/new/reconstruction/mesh.ply
+            artifacts/new/prior/report.json
+            artifacts/new/prior/reconstruction/mesh.ply
+            artifacts/new/prior/unfiltered/report.json
+            artifacts/frozen-five/
+            artifacts/heldout-diagnostic/
+          if-no-files-found: warn
+          retention-days: 14
