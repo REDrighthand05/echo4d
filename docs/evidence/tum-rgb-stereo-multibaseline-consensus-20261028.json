@@ -1,0 +1,100 @@
+{
+  "experiment_id": "tum-fr1_xyz-known-metric-pose-stereo-48anchor-multibaseline-20261028",
+  "status": "real_mesh_generated_visual_recognizability_FAIL",
+  "fixed_experiment_commit": "173f80684c854631f8737bcfbce93cfac4aaa021",
+  "real_action_url": "https://github.com/REDrighthand05/echo4d/actions/runs/40618156896",
+  "verify_action_url": "https://github.com/REDrighthand05/echo4d/actions/runs/40618156877",
+  "action_result": "completed/success; geometry acceptance NOT established",
+  "source": {
+    "url": "https://cvg.cit.tum.de/rgbd/dataset/freiburg1/rgbd_dataset_freiburg1_xyz.tgz",
+    "archive_sha256": "a0236d97b8c30cd93b653656d2b6c293ff7c982a4130ef2a1a8beecdb124ef98",
+    "source_rgb": [
+      640,
+      480
+    ],
+    "stereo_rgb": [
+      320,
+      240
+    ],
+    "fusion_depth": [
+      320,
+      240
+    ],
+    "known_metric_poses": true,
+    "measured_depth_pixels_used": false,
+    "existing_mesh_prior_used": false,
+    "depth_txt_timestamps_used_only_for_frozen_selection": true,
+    "train_frames": 48,
+    "heldout_frames": 12,
+    "model_weights_used": false
+  },
+  "command": "python tools/tum_rgb_stereo.py --work \"$RUNNER_TEMP/tum-rgb-stereo\" --report-dir \"$GITHUB_WORKSPACE/artifacts/tum-rgb-stereo\" --stereo-width 320 --fusion-width 320 --max-anchors 48 --merge-backups",
+  "prior_control": {
+    "run": "https://github.com/REDrighthand05/echo4d/actions/runs/40613015971",
+    "mesh_sha256": "fb96a00306704d777b30c6515b783b819ac6d1a167719cf87889ea1aac952b00",
+    "saved_train_depth_frames": 24,
+    "vertices": 3057,
+    "faces": 3985,
+    "connected_face_components": 193,
+    "largest_component_face_fraction": 0.662
+  },
+  "current": {
+    "artifact_id": 12785204686,
+    "artifact_url": "https://github.com/REDrighthand05/echo4d/actions/runs/40618156896/artifacts/12785204686",
+    "artifact_zip_sha256": "52ba56cb08f02c21418458d2de059be52c66f04693720e6185fc7ef6763c1247",
+    "mesh_sha256": "359d55247b5573366882737cf843846ba4975a35fabb30847c87fc1e96b3716d",
+    "saved_train_depth_frames": 24,
+    "vertices": 3975,
+    "faces": 5077,
+    "connected_face_components": 272,
+    "largest_component_face_fraction": 0.634,
+    "attempted_stereo_pairs": 70,
+    "consensus_candidate_counts": {
+      "one": 8,
+      "two": 6,
+      "three": 10
+    },
+    "sum_agreed_multi_candidate_pixels": 79780,
+    "sum_conflict_rejected_pixels": 47136,
+    "source_depth_kind": "RGB-inferred; not measured"
+  },
+  "same_camera_cpu_render": {
+    "method": "same original-world mesh and same frozen camera matrices; independent local CPU perspective-correct triangle rasterization using existing echo4d holdout algorithm; original RGB not redistributed",
+    "views": [
+      {
+        "name": "heldout-4",
+        "old_pixels": 53070,
+        "new_pixels": 55558
+      },
+      {
+        "name": "heldout-24",
+        "old_pixels": 47396,
+        "new_pixels": 49570
+      },
+      {
+        "name": "heldout-55",
+        "old_pixels": 34599,
+        "new_pixels": 33534
+      },
+      {
+        "name": "free-a",
+        "old_pixels": 21897,
+        "new_pixels": 21328
+      },
+      {
+        "name": "free-b",
+        "old_pixels": 17160,
+        "new_pixels": 18191
+      }
+    ],
+    "visual_verdict": "FAIL: surface coverage mixed, disconnected fragments increase; neither reconstructs a reliably recognizable complete space"
+  },
+  "boundaries": [
+    "No independent surface ground truth",
+    "No independent human visual approval",
+    "Different high-information Open3D branch uses 88 training frames and is NOT a controlled 48-frame A/B against this experiment",
+    "Original desk V2 16.7779 cm > 15 cm remains FAIL",
+    "Same-sensor heldout depth metrics not recomputed; no accuracy PASS claimed"
+  ],
+  "next_shortest_action": "Compare training-only per-anchor confidence/overlap with the exact original camera and try a bounded single-variable geometric consistency improvement; freeze the same 48/12 split and 3+2 camera poses. Reject if free-view connectivity worsens."
+}
