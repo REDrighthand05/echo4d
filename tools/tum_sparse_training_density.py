@@ -104,20 +104,35 @@ def select_pose_diverse_training(base: dict, dense: dict, base_assoc: dict,
         raise DataError("Invalid pose-diverse training frame budget")
     if not 0 < guard_s <= .30:
         raise DataError("Invalid temporal holdout guard")
+    # TUM import skips frames lacking an interpolable pose / registered RGB.
+    # Thus stride-3 and stride-12 imports need NOT have a 4:1 output index
+    # relationship. Join on original absolute depth timestamps instead.
+    def source_time(item: dict) -> float:
+        t = float(item["depth_timestamp"])
+        if not np.isfinite(t):
+            raise DataError("Nonfinite source depth timestamp")
+        return t
+
+    rich_by_time = {source_time(item): j for j, item in enumerate(b)}
+    if len(rich_by_time) != len(b):
+        raise DataError("Duplicate stride-3 depth timestamps")
+    old_to_rich = []
     for i, frame in enumerate(original):
-        other = pool[4 * i]
-        if abs(float(frame["t"]) - float(other["t"])) > 1e-8:
-            raise DataError("Stride-3 timestamps differ from frozen stride-12")
+        j = rich_by_time.get(source_time(a[i]))
+        if j is None:
+            raise DataError("Frozen source depth timestamp absent in stride-3 import")
+        other = pool[j]
         if not np.allclose(frame["cameraToWorld"], other["cameraToWorld"],
                            rtol=0, atol=1e-9):
             raise DataError("Stride-3 poses differ from frozen stride-12")
         for key in ("rgb_path", "depth_path", "rgb_sha256", "depth_sha256"):
-            if a[i].get(key) is None or a[i][key] != b[4 * i].get(key):
+            if a[i].get(key) is None or a[i][key] != b[j].get(key):
                 raise DataError("Stride-3 source association mismatch: " + key)
-    held = [float(original[i]["t"]) for i in HOLDOUT]
-    allowed = [i for i, frame in enumerate(pool)
-               if min(abs(float(frame["t"]) - t) for t in held) > guard_s]
-    baseline = [4 * i for i in range(TOTAL) if i not in HOLDOUT]
+        old_to_rich.append(j)
+    held = [source_time(a[i]) for i in HOLDOUT]
+    allowed = [i for i, item in enumerate(b)
+               if min(abs(source_time(item) - t) for t in held) > guard_s]
+    baseline = [old_to_rich[i] for i in range(TOTAL) if i not in HOLDOUT]
     if not set(baseline).issubset(allowed):
         raise DataError("Temporal guard removed frozen baseline training")
     extras = [i for i in allowed if i not in set(baseline)]
@@ -154,7 +169,7 @@ def select_pose_diverse_training(base: dict, dense: dict, base_assoc: dict,
         "source_stride": 3, "selected_source_indices": chosen,
         "holdout_guard_seconds": guard_s,
         "nearest_training_to_holdout_seconds": min(
-            abs(float(pool[i]["t"]) - t) for i in chosen for t in held),
+            abs(source_time(b[i]) - t) for i in chosen for t in held),
         "same_frozen_baseline_associations": True,
     }
 
@@ -256,8 +271,7 @@ def run(args: argparse.Namespace, report: dict) -> None:
     if (old_rec.source != "recorded" or expanded_rec.source != "recorded"
             or old_rec.camera != expanded_rec.camera or old_rec.camera != dense_rec.camera
             or (old_rec.camera.width, old_rec.camera.height) != (640, 480)):
-        raise DataError("Both imports must be 640x480 recorded RGB-D with identical calibration")
-    baseline = split_training(json.loads((old / "recording.json").read_text(encoding="utf8")))
+        raise DataError("All three imports must be 640x480 recorded RGB-D with identical calibration")
     extra, selection = select_extra_training(
         json.loads((old / "recording.json").read_text(encoding="utf8")),
         json.loads((expanded / "recording.json").read_text(encoding="utf8")),
@@ -325,7 +339,7 @@ def main() -> int:
         code = 1
         report["status"] = "failed"
         report["failure"] = {"type": type(exc).__name__, "message": str(exc)}
-        print(f"TUM_DENSITY_REAL_EXPERIMENT_FAILED: {exc}", file=sys.stderr)
+        print(f"TUM_POSE_DIVERSE_REAL_EXPERIMENT_FAILED: {exc}", file=sys.stderr)
     finally:
         report["elapsed_seconds"] = round(time.perf_counter() - start, 2)
         (args.report_dir / "training-density-report.json").write_text(
