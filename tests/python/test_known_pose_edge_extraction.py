@@ -59,3 +59,21 @@ def test_new_island_without_old_shared_edge_is_rejected():
     faces = np.array([[0, 1, 2], [1, 2, 3], [4, 5, 6]], dtype=np.int32)
     attached = _attached_faces(faces, np.array([True, False, False]))
     assert attached.tolist() == [True, True, False]
+
+
+def test_control_replay_rejects_equal_count_changed_geometry(tmp_path, monkeypatch):
+    from pathlib import Path
+    import pytest
+    from echo4d.output import write_ply
+    monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[2] / 'tools'))
+    from tum_mvs_observed_edges import write_verified_control
+    baseline = _plane_volume().extract_mesh()
+    original = tmp_path / 'frozen.ply'
+    write_ply(original, baseline)
+    receipt = write_verified_control(baseline, original, tmp_path / 'exact.ply')
+    assert receipt['byte_identical']
+    old_faces = len(baseline.faces)
+    baseline.vertices[:, 0] += np.float32(.01)
+    assert len(baseline.faces) == old_faces
+    with pytest.raises(ValueError, match='SHA differs'):
+        write_verified_control(baseline, original, tmp_path / 'changed.ply')

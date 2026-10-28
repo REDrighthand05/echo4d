@@ -32,7 +32,9 @@ jobs:
           python -m pip install --no-deps -e .
           python -m pip install --no-deps trimesh==4.11.1
       - name: Test observed-edge and unknown-support boundaries
-        run: python -m pytest -q tests/python/test_known_pose_edge_extraction.py
+        run: |
+          python -m py_compile tools/tum_mvs_observed_edges.py
+          python -m pytest -q tests/python/test_known_pose_edge_extraction.py
       - name: Recover exact original frozen RGB-inferred Z and control Mesh
         env:
           GH_TOKEN: ${{ github.token }}
@@ -92,8 +94,10 @@ jobs:
         with:
           name: tum-mvs-observed-edge-ab-${{ github.run_id }}
           path: |
+            artifacts/old/inputs/
             artifacts/old/report.json
             artifacts/old/reconstruction/mesh.ply
+            artifacts/new/control-replayed.ply
             artifacts/new/report.json
             artifacts/new/reconstruction/mesh.ply
             artifacts/frozen-five/

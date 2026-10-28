@@ -21,6 +21,16 @@ from tum_public_roundtrip import ROOT, BOUNDS
 from tum_rgb_stereo import HOLDOUT, rgb_pose_frames, load_stereo_rgb
 
 
+def write_verified_control(baseline, original: Path, replayed: Path) -> dict:
+    """Require byte-identical baseline reproduction, not merely equal face counts."""
+    replayed.parent.mkdir(parents=True, exist_ok=True)
+    write_ply(replayed, baseline)
+    actual, expected = file_sha256(replayed), file_sha256(original)
+    if actual != expected:
+        raise ValueError("Replayed control Mesh SHA differs from frozen control")
+    return {"replayed_sha256": actual, "frozen_sha256": expected, "byte_identical": True}
+
+
 def replay(old: Path, source_root: Path, target: Path) -> dict:
     manifest = json.loads((old / "inputs/recording.json").read_text())
     entries = manifest["frames"]
@@ -58,8 +68,9 @@ def replay(old: Path, source_root: Path, target: Path) -> dict:
     original_mesh = mesh_summary(baseline)
     if original_mesh["triangles"] != 8419:
         raise ValueError("Frozen baseline TSDF no longer matches 8419 triangles")
+    control_receipt = write_verified_control(
+        baseline, old / 'reconstruction/mesh.ply', target / 'control-replayed.ply')
     candidate, stats = extract_observed_edge_mesh(volume)
-    target.mkdir(parents=True)
     reconstruction = target / "reconstruction"
     reconstruction.mkdir()
     mesh = reconstruction / "mesh.ply"
@@ -79,6 +90,9 @@ def replay(old: Path, source_root: Path, target: Path) -> dict:
         "prior_mesh_used_for_reconstruction": False,
         "control_mesh_sha256": file_sha256(old / "reconstruction/mesh.ply"),
         "control_faces_replayed": original_mesh["triangles"],
+        "control_replay": control_receipt,
+        "control_inferred_manifest_sha256": file_sha256(old / "inputs/recording.json"),
+        "control_inferred_depth_sha256": {entry["depth"]: file_sha256(old / "inputs" / entry["depth"]) for entry in entries},
         "control_mesh_summary": original_mesh,
         "new_mesh_summary": mesh_summary(candidate),
         "mesh_sha256": file_sha256(mesh),
