@@ -20,7 +20,8 @@ from echo4d.output import output_transaction, write_json, write_ply
 def validate_settings(voxel_m: float, truncation_m: float, max_depth_m: float,
                       pixel_stride: int, edge_guard_m: float = 0.0,
                       consistency_guard_m: float = 0.0, edge_halo_pixels: int = 1,
-                      depth_smooth_sigma_m: float = 0.0) -> None:
+                      depth_smooth_sigma_m: float = 0.0,
+                      local_edge_truncation_m: float = 0.0) -> None:
     if not all(isinstance(v, (float, int)) and not isinstance(v, bool)
                and math.isfinite(v) for v in (voxel_m, truncation_m, max_depth_m, edge_guard_m, consistency_guard_m, depth_smooth_sigma_m)):
         raise DataError("Sparse TSDF distances must be finite numbers")
@@ -40,6 +41,10 @@ def validate_settings(voxel_m: float, truncation_m: float, max_depth_m: float,
         raise DataError("Edge halo must be one or two measured pixels")
     if not 0 <= depth_smooth_sigma_m <= 0.10:
         raise DataError("Depth bilateral range sigma must be within [0, 10cm]")
+    if not isinstance(local_edge_truncation_m, (int, float)) or isinstance(local_edge_truncation_m, bool) or not math.isfinite(local_edge_truncation_m):
+        raise DataError("Local edge truncation must be finite")
+    if local_edge_truncation_m and not (2 * voxel_m <= local_edge_truncation_m < truncation_m):
+        raise DataError("Local edge truncation must be at least two voxels and below wide truncation")
 
 
 def smooth_measured_depth_bilateral(depth: np.ndarray, sigma_m: float) -> tuple[np.ndarray, int]:
@@ -124,6 +129,49 @@ def reject_far_side_of_depth_edges(depth: np.ndarray, jump_m: float,
     result[reject] = 0
     return result, int(np.count_nonzero(reject))
 
+
+
+
+def measured_edge_band(depth: np.ndarray, jump_m: float = 0.08,
+                       inner_px: int = 4, outer_px: int = 8
+                       ) -> tuple[np.ndarray, np.ndarray]:
+    """Two observed-depth masks for experimental dual-width TSDF.
+
+    Narrow integration sees a dilated band on BOTH sides of measured jumps.
+    Wide integration excludes only the inner band. Their 4px overlap supports
+    surface extraction at the seam; this is NOT a watertight mesh stitch.
+    No depth is estimated or filled, and missing pixels never become valid.
+    """
+    if depth.ndim != 2 or not np.issubdtype(depth.dtype, np.floating):
+        raise DataError("Local TSDF requires a 2D floating depth image")
+    if not math.isfinite(jump_m) or jump_m <= 0 or jump_m > .3:
+        raise DataError("Local TSDF jump threshold must be within (0, 30cm]")
+    if type(inner_px) is not int or type(outer_px) is not int or not (1 <= inner_px < outer_px <= 16):
+        raise DataError("Local TSDF requires 1 <= inner band < outer band <= 16 pixels")
+    valid = np.isfinite(depth) & (depth > 0)
+    edges = np.zeros(depth.shape, dtype=bool)
+    for a_slice, b_slice in ((np.s_[:-1, :], np.s_[1:, :]),
+                             (np.s_[:, :-1], np.s_[:, 1:])):
+        a, b = depth[a_slice], depth[b_slice]
+        jump = (valid[a_slice] & valid[b_slice] &
+                (np.abs(a - b) > np.maximum(jump_m, .04 * np.minimum(a, b))))
+        edges[a_slice] |= jump
+        edges[b_slice] |= jump
+
+    def dilate(mask: np.ndarray, steps: int) -> np.ndarray:
+        out = mask.copy()
+        for _ in range(steps):
+            grown = out.copy()
+            grown[1:, :] |= out[:-1, :]
+            grown[:-1, :] |= out[1:, :]
+            grown[:, 1:] |= out[:, :-1]
+            grown[:, :-1] |= out[:, 1:]
+            out = grown
+        return out
+
+    inner = dilate(edges, inner_px) & valid
+    outer = dilate(edges, outer_px) & valid
+    return valid & ~inner, outer
 
 
 def select_cross_frame_neighbors(poses: list[np.ndarray], *, max_neighbors: int = 4
@@ -225,7 +273,8 @@ def fuse_sparse(recording_path: Path, destination: Path, *, voxel_m: float = 0.0
                 pixel_stride: int = 2, edge_guard_m: float = 0.0,
                 consistency_guard_m: float = 0.0,
                 edge_halo_pixels: int = 1,
-                depth_smooth_sigma_m: float = 0.0) -> dict:
+                depth_smooth_sigma_m: float = 0.0,
+                local_edge_truncation_m: float = 0.0) -> dict:
     """Integrate registered RGB and camera-Z metric depth; output strict ECHO color PLY.
 
     Open3D expects world-to-camera extrinsics, whereas ECHO stores camera-to-world.
@@ -234,7 +283,7 @@ def fuse_sparse(recording_path: Path, destination: Path, *, voxel_m: float = 0.0
     """
     validate_settings(voxel_m, truncation_m, max_depth_m, pixel_stride,
                       edge_guard_m, consistency_guard_m, edge_halo_pixels,
-                      depth_smooth_sigma_m)
+                      depth_smooth_sigma_m, local_edge_truncation_m)
     recording = load_recording(recording_path)
     if len(recording) > 120:
         raise DataError("Sparse quality experiment is bounded to 120 input frames")
@@ -250,6 +299,12 @@ def fuse_sparse(recording_path: Path, destination: Path, *, voxel_m: float = 0.0
         voxel_length=float(voxel_m), sdf_trunc=float(truncation_m),
         color_type=o3d.pipelines.integration.TSDFVolumeColorType.RGB8,
         volume_unit_resolution=16, depth_sampling_stride=pixel_stride)
+    local_volume = (o3d.pipelines.integration.ScalableTSDFVolume(
+        voxel_length=float(voxel_m), sdf_trunc=float(local_edge_truncation_m),
+        color_type=o3d.pipelines.integration.TSDFVolumeColorType.RGB8,
+        volume_unit_resolution=16, depth_sampling_stride=pixel_stride)
+        if local_edge_truncation_m else None)
+    local_depth_pixels = 0
     count, valid_pixels, edge_removed_pixels, cross_removed_pixels = 0, 0, 0, 0
     smoothed_pixels = 0
     start = time.perf_counter()
@@ -279,17 +334,36 @@ def fuse_sparse(recording_path: Path, destination: Path, *, voxel_m: float = 0.0
                     depth, frame.camera_to_world, witnesses, camera, consistency_guard_m)
                 cross_removed_pixels += removed
             valid_pixels += int(np.count_nonzero(depth))
-            rgbd = o3d.geometry.RGBDImage.create_from_color_and_depth(
-                o3d.geometry.Image(np.ascontiguousarray(frame.color)),
-                o3d.geometry.Image(depth), depth_scale=1.0,
-                depth_trunc=float(max_depth_m), convert_rgb_to_intensity=False)
             # ECHO: cameraToWorld. Open3D integrate: worldToCamera.
             extrinsic = np.linalg.inv(frame.camera_to_world)
+            color = o3d.geometry.Image(np.ascontiguousarray(frame.color))
+            if local_volume is not None:
+                wide_mask, local_mask = measured_edge_band(depth)
+                local_depth_pixels += int(np.count_nonzero(local_mask))
+                # The inner band is removed only from the WIDE provider; its
+                # measured pixels remain available to the NARROW provider.
+                wide_depth = np.where(wide_mask, depth, 0).astype(np.float32)
+                local_depth = np.where(local_mask, depth, 0).astype(np.float32)
+                local_rgbd = o3d.geometry.RGBDImage.create_from_color_and_depth(
+                    color, o3d.geometry.Image(np.ascontiguousarray(local_depth)),
+                    depth_scale=1.0, depth_trunc=float(max_depth_m),
+                    convert_rgb_to_intensity=False)
+                local_volume.integrate(local_rgbd, intrinsic, extrinsic)
+            else:
+                wide_depth = depth
+            rgbd = o3d.geometry.RGBDImage.create_from_color_and_depth(
+                color, o3d.geometry.Image(np.ascontiguousarray(wide_depth)),
+                depth_scale=1.0, depth_trunc=float(max_depth_m),
+                convert_rgb_to_intensity=False)
             volume.integrate(rgbd, intrinsic, extrinsic)
             count += 1
         if not valid_pixels:
             raise DataError("No valid observed depth for sparse TSDF")
         surface = volume.extract_triangle_mesh()
+        if local_volume is not None:
+            narrow_surface = local_volume.extract_triangle_mesh()
+            if narrow_surface.has_triangles():
+                surface += narrow_surface
         if not surface.has_triangles():
             raise DataError("Sparse TSDF did not extract an observed surface")
         surface.compute_vertex_normals()
@@ -319,6 +393,11 @@ def fuse_sparse(recording_path: Path, destination: Path, *, voxel_m: float = 0.0
             "voxel_m": voxel_m, "truncation_m": truncation_m,
             "max_depth_m": max_depth_m, "pixel_stride": pixel_stride,
             "depth_smooth_sigma_m": depth_smooth_sigma_m,
+            "local_edge_truncation_m": local_edge_truncation_m,
+            "local_edge_depth_pixels": local_depth_pixels,
+            "local_edge_policy": ("dual TSDF: 7.5cm narrow around measured jumps, "
+                                  "12cm wide away from jumps; 4px overlap, "
+                                  "unstitched seam possible") if local_volume is not None else "disabled",
             "depth_smoothed_pixels": smoothed_pixels,
             "edge_guard_m": edge_guard_m,
             "edge_halo_pixels": edge_halo_pixels,
