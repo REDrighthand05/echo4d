@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - research/known-pose-rgb-stereo-ablation-20261028
+      - research/rgb-stereo-multiview-consensus-20261028
     paths:
       - 'src/echo4d/known_pose_stereo.py'
       - 'tools/tum_rgb_stereo.py'
@@ -46,7 +47,8 @@ jobs:
             --report-dir "$GITHUB_WORKSPACE/artifacts/tum-rgb-stereo" \
             --stereo-width 320 \
             --fusion-width 320 \
-            --max-anchors 48
+            --max-anchors 48 \
+            --merge-backups
       - name: Summarize evidence without upgrading to geometry PASS
         if: always()
         run: |
@@ -61,6 +63,8 @@ jobs:
             'TSDF fusion resolution: '+str(r.get('tsdf_fusion_resolution','not reached')),
             'Eligible train anchors: '+str(r.get('eligible_anchor_count','not reached')),
             'Saved RGB-derived training frames: '+str(r.get('saved_frames','not reached')),
+            'Multi-baseline consensus enabled: '+str(r.get('merge_backups','not reached')),
+            'Per-anchor consensus: '+str(r.get('anchor_consensus','not reached')),
             'Mesh SHA: '+str(r.get('mesh_sha256','none')),
             'Error: '+str(r.get('error','none')),
             'Prior measured-depth TSDF is a separate baseline; this is NOT independent surface truth or #74 acceptance.'
