@@ -29,8 +29,8 @@ def test_more_real_training_views_without_holdout_or_temporal_neighbors():
     times = {frame["t"] for frame in selected["frames"]}
     assert info["baseline_train_frames"] == 48
     assert 48 < info["expanded_train_frames"] < 108
-    assert all(old[i]["t"] in times for i in range(60) if i not in HOLDOUT)
-    assert all(min(abs(t - old[i]["t"]) for i in HOLDOUT) > .24 for t in times)
+    assert all(old["frames"][i]["t"] in times for i in range(60) if i not in HOLDOUT)
+    assert all(min(abs(t - old["frames"][i]["t"]) for i in HOLDOUT) > .24 for t in times)
     assert info["nearest_training_to_holdout_seconds"] > .24
 
 
