@@ -36,7 +36,8 @@ def build_plane_sweep_recording(frames: list[dict], target: Path, report: dict,
                                 visibility_mode: str = 'hard',
                                 window_mode: str = 'fixed',
                                 depth_regularization: str = 'none',
-                                crossview_fusion: bool = False,\n                                crossview_local_surface: bool = False) -> Path:
+                                crossview_fusion: bool = False,
+                                crossview_local_surface: bool = False) -> Path:
     camera, _, _ = stereo_resolution(320)
     training = [i for i in range(TOTAL) if i not in HOLDOUT]
     selected, selection_stats = select_plane_sweep_views(
@@ -122,7 +123,8 @@ def build_plane_sweep_recording(frames: list[dict], target: Path, report: dict,
         saved_poses = [np.asarray(e['cameraToWorld'], dtype=np.float64).reshape(4, 4, order='F')
                        for e in entries]
         fused_depths, fusion_receipts = fuse_reprojected_depths(
-            saved_depths, saved_poses, saved_rgbs, camera,\n            local_surface_support=crossview_local_surface)
+            saved_depths, saved_poses, saved_rgbs, camera,
+            local_surface_support=crossview_local_surface)
         for e, fused, stats in zip(entries, fused_depths, saved_diagnostics):
             np.save(target / e['depth'], fused, allow_pickle=False)
             stats['inference_before_crossview_fusion'] = stats.copy()
@@ -132,7 +134,8 @@ def build_plane_sweep_recording(frames: list[dict], target: Path, report: dict,
         report['crossview_fusion'] = {
             'method': 'two independent RGB-consistent training depth projections',
             'input_depth_source': 'RGB-inferred, not measured',
-            'train_only': True, 'source_views_per_anchor_max': 6,\n            'local_surface_support': crossview_local_surface,
+            'train_only': True, 'source_views_per_anchor_max': 6,
+            'local_surface_support': crossview_local_surface,
             'tolerance_m': 0.12, 'rgb_mae_threshold': 45.0,
             'newly_supported_depth_pixels': sum(x['added_pixels'] for x in fusion_receipts),
             'adjusted_depth_pixels': sum(x['adjusted_pixels'] for x in fusion_receipts),
@@ -199,7 +202,8 @@ def execute(args: argparse.Namespace, report: dict) -> None:
                                            visibility_mode=args.visibility_mode,
                                            window_mode=args.window_mode,
                                            depth_regularization=args.depth_regularization,
-                                           crossview_fusion=args.crossview_fusion,\n                                           crossview_local_surface=args.crossview_local_surface)
+                                           crossview_fusion=args.crossview_fusion,
+                                           crossview_local_surface=args.crossview_local_surface)
     report['archived_inputs'] = archive_stereo_inputs(
         manifest, frames, root, args.report_dir / 'inputs')
     target = args.report_dir / 'reconstruction'
@@ -240,7 +244,11 @@ def main(argv=None):
                    help='Only regularize observed inferred Z; no hole filling or measured depth')
     p.add_argument('--crossview-fusion', action='store_true',
                    help='Reproject matching RGB-inferred training surfaces into holes; require two views')
-    p.add_argument('--crossview-local-surface', action='store_true',\n                   help='Require adjacent RGB-inferred Z support before source reprojection')\n    args = p.parse_args(argv)\n    if args.crossview_local_surface and not args.crossview_fusion:\n        p.error('--crossview-local-surface requires --crossview-fusion')
+    p.add_argument('--crossview-local-surface', action='store_true',
+                   help='Require adjacent RGB-inferred Z support before source reprojection')
+    args = p.parse_args(argv)
+    if args.crossview_local_surface and not args.crossview_fusion:
+        p.error('--crossview-local-surface requires --crossview-fusion')
     args.report_dir.mkdir(parents=True, exist_ok=True)
     report = {'experiment': 'tum-xyz-known-pose-cpu-plane-sweep-no-measured-Z',
               'status': 'running', 'started_utc': datetime.now(timezone.utc).isoformat(),
@@ -252,7 +260,8 @@ def main(argv=None):
               'visibility_mode': args.visibility_mode if args.source_visibility else 'disabled',
               'window_mode': args.window_mode,
               'depth_regularization': args.depth_regularization,
-              'crossview_fusion_enabled': args.crossview_fusion,\n              'crossview_local_surface_enabled': args.crossview_local_surface,
+              'crossview_fusion_enabled': args.crossview_fusion,
+              'crossview_local_surface_enabled': args.crossview_local_surface,
               'evidence_level': 'real data experiment; no independent surface truth or #74 acceptance'}
     start = time.perf_counter()
     try:
