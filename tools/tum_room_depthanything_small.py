@@ -152,6 +152,35 @@ def run_with_model(args, report):
     report["model_revision"] = MODEL_REVISION
     report["no_gpu_claim"] = True
     _original_run(args, report)
+    previous_dir = os.environ.get("ECHO_PREVIOUS_ZNCC")
+    if previous_dir:
+        import json
+        import trimesh
+        from echo4d.holdout import read_echo_ply
+        from tum_graph_visual import read_vertex_rgb
+        previous = Path(previous_dir)
+        old_report = json.loads((previous / "report.json").read_text())
+        old_mesh = previous / "multiview-mesh" / "mesh.ply"
+        new_mesh = args.report_dir / "multiview-mesh" / "mesh.ply"
+        if (file_sha256(old_mesh) != old_report["new_mesh"]["sha256"]
+                or old_report["source_archive_sha256"] != report["source_archive_sha256"]
+                or old_report["selection"]["expanded_indices"]
+                   != report["selection"]["expanded_indices"]):
+            raise DataError("Previous ZNCC control source/training/mesh mismatch")
+        high = json.loads((args.baseline / "room-sparse-quality-report.json").read_text())
+        report["visual_zncc_vs_da2"] = base.compare_multiview_five(
+            args.work / "room-import", old_mesh, new_mesh, high,
+            args.report_dir / "visual-zncc-vs-da2",
+            "previous known-pose RGB ZNCC / no prior Mesh")
+        vv, ff = read_echo_ply(old_mesh)
+        cc = read_vertex_rgb(old_mesh, len(vv))
+        old_glb = args.report_dir / "old-zncc-rgb.glb"
+        trimesh.Trimesh(vertices=vv, faces=ff, vertex_colors=cc,
+                        process=False).export(old_glb)
+        report["old_zncc_control"] = {
+            "mesh_sha256": file_sha256(old_mesh),
+            "glb_sha256": file_sha256(old_glb),
+            "role": "posthoc A/B only; never candidate input"}
     report["issue_74"] = "FAIL / NOT ACCEPTED until human reviews 3+2 actual Mesh"
     report["status"] = "real_room_DA2_small_mesh_generated_visual_review_required"
 
