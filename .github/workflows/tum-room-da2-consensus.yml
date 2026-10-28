@@ -18,7 +18,7 @@ permissions:
 
 concurrency:
   group: room-da2-consensus-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   real-room-da2-consensus:
