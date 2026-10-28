@@ -18,7 +18,8 @@ import numpy as np
 from PIL import Image
 from echo4d.model import DataError, file_sha256
 from echo4d.known_pose_plane_sweep import infer_plane_sweep
-from tum_rgb_stereo import (HOLDOUT, TOTAL, rgb_pose_frames, select_pairs,
+from echo4d.known_pose_mvs_sources import select_plane_sweep_views
+from tum_rgb_stereo import (HOLDOUT, TOTAL, rgb_pose_frames,
                             stereo_resolution, load_stereo_rgb,
                             archive_stereo_inputs, render_mesh)
 from tum_public_roundtrip import (URL, ROOT, PINNED_ARCHIVE_SHA256,
@@ -26,14 +27,17 @@ from tum_public_roundtrip import (URL, ROOT, PINNED_ARCHIVE_SHA256,
 
 
 def build_plane_sweep_recording(frames: list[dict], target: Path, report: dict,
-                                *, max_anchors: int = 20, planes: int = 64) -> Path:
+                                *, max_anchors: int = 48, planes: int = 64,
+                                max_sources: int = 4) -> Path:
     camera, _, _ = stereo_resolution(320)
-    pairs = select_pairs(frames, camera, max_pairs=max_anchors, backups_per_left=3)
-    by_left: dict[int, list[int]] = {}
-    for left, right in pairs:
-        if left in HOLDOUT or right in HOLDOUT:
-            raise DataError('Holdout RGB cannot enter plane-sweep reconstruction')
-        by_left.setdefault(left, []).append(right)
+    training = [i for i in range(TOTAL) if i not in HOLDOUT]
+    selected, selection_stats = select_plane_sweep_views(
+        frames, camera, training, max_anchors=max_anchors, max_sources=max_sources)
+    report['source_selection'] = selection_stats
+    report['selected_source_indices'] = [
+        {'left_index': i, 'source_indices': js} for i, js in selected]
+    if len(selected) < 6:
+        raise DataError(f'Only {len(selected)} eligible train anchors with >=2 overlapping MVS sources')
     target.mkdir(parents=True, exist_ok=False)
     (target / 'color').mkdir()
     (target / 'depth').mkdir()
@@ -44,14 +48,13 @@ def build_plane_sweep_recording(frames: list[dict], target: Path, report: dict,
         return cache[i]
     entries = []
     diagnostics = []
-    for left, partners in sorted(by_left.items()):
-        if len(partners) < 2:
-            diagnostics.append({'left_index': left, 'status': 'blocked_two_sources_unavailable'})
-            continue
-        sources = [(rgb(j), frames[j]['pose']) for j in partners[:2]]
+    for left, partners in selected:
+        if left in HOLDOUT or any(j in HOLDOUT for j in partners):
+            raise DataError('Holdout RGB cannot enter plane-sweep reconstruction')
+        sources = [(rgb(j), frames[j]['pose']) for j in partners]
         depth, stats = infer_plane_sweep(rgb(left), sources, camera,
                                         frames[left]['pose'], planes=planes)
-        diagnostics.append({'left_index': left, 'source_indices': partners[:2], **stats})
+        diagnostics.append({'left_index': left, 'source_indices': partners, **stats})
         if stats['valid_depth_pixels'] < 100:
             continue
         n = len(entries)
@@ -61,9 +64,9 @@ def build_plane_sweep_recording(frames: list[dict], target: Path, report: dict,
                         'cameraToWorld': frames[left]['pose'].flatten(order='F').tolist(),
                         'color': f'color/{n:05d}.png',
                         'depth': f'depth/{n:05d}.npy'})
-    report['plane_sweep'] = {'candidate_anchors': len(by_left),
+    report['plane_sweep'] = {'candidate_anchors': len(selected),
                              'saved_training_frames': len(entries),
-                             'planes': planes, 'per_anchor': diagnostics,
+                             'planes': planes, 'max_sources': max_sources, 'per_anchor': diagnostics,
                              'no_sensor_depth_pixels': True,
                              'train_only': True}
     if len(entries) < 6:
@@ -103,7 +106,8 @@ def execute(args: argparse.Namespace, report: dict) -> None:
                        'depth_png_files_opened': 0,
                        'pose_source': 'TUM groundtruth known metric poses'}
     manifest = build_plane_sweep_recording(frames, work / 'mvs', report,
-                                           max_anchors=args.max_anchors, planes=args.planes)
+                                           max_anchors=args.max_anchors, planes=args.planes,
+                                           max_sources=args.max_sources)
     report['archived_inputs'] = archive_stereo_inputs(
         manifest, frames, root, args.report_dir / 'inputs')
     target = args.report_dir / 'reconstruction'
@@ -130,7 +134,8 @@ def main(argv=None):
     p.add_argument('--work', type=Path, required=True)
     p.add_argument('--report-dir', type=Path, required=True)
     p.add_argument('--archive', type=Path)
-    p.add_argument('--max-anchors', type=int, default=20)
+    p.add_argument('--max-anchors', type=int, default=48)
+    p.add_argument('--max-sources', type=int, default=4)
     p.add_argument('--planes', type=int, default=64)
     args = p.parse_args(argv)
     args.report_dir.mkdir(parents=True, exist_ok=True)
