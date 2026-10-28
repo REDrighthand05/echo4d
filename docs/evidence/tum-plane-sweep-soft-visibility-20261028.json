@@ -101,5 +101,7 @@
     "Same-scene high-info reference is fr1_xyz; high-information fr1_room work is different scene",
     "Local montage and GLB not committed to GitHub, but SHA-pinned; original PLY and five renders in Actions artifact"
   ],
-  "next": "Prioritize robust multiview textureless depth and better real-scene coverage; no more simple occlusion threshold tuning."
+  "next": "Prioritize robust multiview textureless depth and better real-scene coverage; no more simple occlusion threshold tuning.",
+  "local_colored_five_view_montage_sha256": "cfb18cf3f22ee3689d9af96fe8c17441dfd1e7a75bf804dd1ca78f834b580692",
+  "local_colored_render_note": "Same five camera matrices, vertex-color perspective-correct rasterization. Coverage differs by <0.6% from workflow renderer because of rasterization pixel conventions. Source RGB photographs are not included."
 }
