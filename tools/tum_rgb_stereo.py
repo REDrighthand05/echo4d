@@ -115,9 +115,29 @@ def load_stereo_rgb(path: Path, width: int) -> np.ndarray:
     return pixels[::stride, ::stride].copy()
 
 
+def reduce_native_depth_for_fusion(depth: np.ndarray) -> np.ndarray:
+    """Conservative 2x2 consolidation before TSDF, with no invented surfaces."""
+    if depth.shape != (480, 640) or not np.isfinite(depth).all() or (depth < 0).any():
+        raise DataError('Expected finite nonnegative native 640x480 depth')
+    blocks = depth.reshape(240, 2, 320, 2).transpose(0, 2, 1, 3).reshape(240, 320, 4)
+    valid = blocks > 0
+    count = valid.sum(axis=-1)
+    ordered = np.sort(np.where(valid, blocks, np.inf), axis=-1)
+    mid = np.take_along_axis(ordered, np.maximum((count - 1) // 2, 0)[..., None], axis=-1)[..., 0]
+    high = np.take_along_axis(ordered, np.maximum(count - 1, 0)[..., None], axis=-1)[..., 0]
+    mid = np.where(count > 0, mid, 0)
+    high = np.where(count > 0, high, 0)
+    agree = (count == 1) | ((high - ordered[..., 0]) <= np.maximum(.08, .05 * mid))
+    return np.where((count > 0) & agree, mid, 0).astype(np.float32)
+
+
 def build_stereo_recording(frames: list[dict], target: Path, report: dict,
-                           *, stereo_width: int = 640) -> Path:
+                           *, stereo_width: int = 640, fusion_width: int = 320) -> Path:
     camera, _stride, num_disparities = stereo_resolution(stereo_width)
+    fusion_camera, _fusion_stride, _ = stereo_resolution(fusion_width)
+    if fusion_width > stereo_width:
+        raise DataError('Fusion resolution cannot exceed stereo matching resolution')
+    report['tsdf_fusion_resolution'] = [fusion_camera.width, fusion_camera.height]
     report['stereo_algorithm_resolution'] = [camera.width, camera.height]
     report['stereo_num_disparities'] = num_disparities
     pairs = select_pairs(frames, camera)
@@ -161,10 +181,13 @@ def build_stereo_recording(frames: list[dict], target: Path, report: dict,
         projected = np.full((camera.height,camera.width),np.inf,dtype=np.float32)
         np.minimum.at(projected,(vv[valid],uu[valid]),zz[valid].astype(np.float32))
         projected[~np.isfinite(projected)] = 0
+        if stereo_width == 640 and fusion_width == 320:
+            projected = reduce_native_depth_for_fusion(projected)
         if np.count_nonzero(projected) < 100:
             continue
         n=len(entries)
-        Image.fromarray(a).save(target / 'color' / f'{n:05d}.png')
+        Image.fromarray(load_stereo_rgb(left['rgb'], fusion_width)).save(
+            target / 'color' / f'{n:05d}.png')
         np.save(target / 'depth' / f'{n:05d}.npy',projected,allow_pickle=False)
         entries.append({'t':float(left['t_s']-frames[0]['t_s']),
                         'cameraToWorld':left['pose'].flatten(order='F').tolist(),
@@ -179,7 +202,7 @@ def build_stereo_recording(frames: list[dict], target: Path, report: dict,
     data={'version':'echo-dataset-1','source':'recorded','units':'meters',
           'name':'TUM RGB stereo, known GT poses, inferred depths',
           'duration':float(max(entries[-1]['t'],.001)), 'depth_scale':1,
-          'intrinsics':camera.to_dict(),'frames':entries,
+          'intrinsics':fusion_camera.to_dict(),'frames':entries,
           'notes':'Depth is RGB stereo-inferred, not sensor-measured. Metric scale comes exclusively from supplied TUM GT poses; depth index used only for frozen frame selection.'}
     manifest=target/'recording.json'
     manifest.write_text(json.dumps(data,allow_nan=False,indent=2)+'\n',encoding='utf8')
@@ -233,12 +256,14 @@ def execute(args: argparse.Namespace, report: dict) -> None:
     camera, _stride, _num_disparities = stereo_resolution(args.stereo_width)
     report['rgb_input']={'original_resolution':[640,480],
                          'algorithm_resolution':[camera.width,camera.height],
+                         'tsdf_fusion_resolution':[args.fusion_width, int(args.fusion_width*3/4)],
                          'frame_count':len(frames),'train_count':48,'holdout_indices':list(HOLDOUT),
                          'rgb_source_sha256':[f['rgb_sha256'] for f in frames],
                          'depth_png_files_opened':0,'depth_index_used_for_frame_selection_only':True,
                          'metric_pose_source':'TUM supplied groundtruth.txt; not RGB-only pose estimation'}
     manifest=build_stereo_recording(frames,work/'stereo',report,
-                                    stereo_width=args.stereo_width)
+                                    stereo_width=args.stereo_width,
+                                    fusion_width=args.fusion_width)
     target=args.report_dir/'reconstruction'
     cmd=[sys.executable,'-m','echo4d','reconstruct',str(manifest),'--output',str(target),
          '--bounds',*BOUNDS,'--voxel','0.05','--max-depth','4',
@@ -262,6 +287,8 @@ def main(argv=None):
     p.add_argument('--archive',type=Path)
     p.add_argument('--stereo-width',type=int,choices=(320,640),default=640,
                    help='Algorithm RGB width: native 640 (default), or 320 control')
+    p.add_argument('--fusion-width',type=int,choices=(320,640),default=320,
+                   help='TSDF depth width: conservative 320 (default), or native 640')
     args=p.parse_args(argv)
     args.report_dir.mkdir(parents=True,exist_ok=True)
     report={'experiment':'tum-xyz-known-pose-RGB-stereo-no-measured-depth-v1',

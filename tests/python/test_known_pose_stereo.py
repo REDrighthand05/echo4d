@@ -132,3 +132,23 @@ def test_native_rgb_rejects_wrong_original_resolution(tmp_path):
     Image.fromarray(np.zeros((240, 320, 3), np.uint8)).save(bad)
     with pytest.raises(DataError, match='640x480'):
         load_stereo_rgb(bad, 640)
+
+
+def test_native_depth_consolidation_rejects_conflicting_surfaces():
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'tools'))
+    from tum_rgb_stereo import reduce_native_depth_for_fusion
+    native = np.zeros((480, 640), np.float32)
+    native[0:2, 0:2] = [[2.0, 2.01], [0, 0]]
+    native[0:2, 2:4] = [[1.0, 3.0], [0, 0]]
+    native[2:4, 0:2] = [[0, 0], [0, 1.2]]
+    result = reduce_native_depth_for_fusion(native)
+    assert result.shape == (240, 320)
+    assert result[0, 0] == pytest.approx(2.0)
+    assert result[0, 1] == 0
+    assert result[1, 0] == pytest.approx(1.2)
+    assert np.count_nonzero(result) == 2
+    native[0, 0] = np.nan
+    with pytest.raises(DataError, match='finite'):
+        reduce_native_depth_for_fusion(native)

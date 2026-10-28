@@ -43,7 +43,8 @@ jobs:
           python tools/tum_rgb_stereo.py \
             --work "$RUNNER_TEMP/tum-rgb-stereo" \
             --report-dir "$GITHUB_WORKSPACE/artifacts/tum-rgb-stereo" \
-            --stereo-width 640
+            --stereo-width 640 \
+            --fusion-width 320
       - name: Summarize evidence without upgrading to geometry PASS
         if: always()
         run: |
@@ -55,6 +56,7 @@ jobs:
             '## Known-pose RGB stereo ablation (no measured depth maps used in reconstruction)',
             'Status: '+r['status'],
             'Stereo input resolution: '+str(r.get('stereo_algorithm_resolution','not reached')),
+            'TSDF fusion resolution: '+str(r.get('tsdf_fusion_resolution','not reached')),
             'Saved RGB-derived training frames: '+str(r.get('saved_frames','not reached')),
             'Mesh SHA: '+str(r.get('mesh_sha256','none')),
             'Error: '+str(r.get('error','none')),
