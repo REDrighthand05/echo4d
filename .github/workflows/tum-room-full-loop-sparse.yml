@@ -1,0 +1,64 @@
+name: TUM real room wider-trajectory sparse RGB-D geometry
+
+on:
+  push:
+    branches:
+      - research/highres-rgbd-tsdf-quality-20261028
+    paths:
+      - 'tools/tum_room_sparse_quality.py'
+      - 'tests/python/test_tum_room_sparse_quality.py'
+      - '.github/workflows/tum-room-wide-trajectory-sparse.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tum-room-wider-trajectory-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  real-room-geometry:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: requirements.lock
+      - name: Install locked project and Open3D geometry engine
+        run: |
+          python -m pip install -r requirements.lock
+          python -m pip install --no-deps -e .
+          python -m pip install 'open3d==0.19.0'
+      - name: Check frozen real-view selection and sparse geometry regression
+        env:
+          PYTHONPATH: tools
+          OPENBLAS_NUM_THREADS: '1'
+          OMP_NUM_THREADS: '1'
+        run: python -m pytest -q tests/python/test_tum_room_sparse_quality.py tests/python/test_sparse_open3d.py
+      - name: Reconstruct two real fr1_room meshes from full-resolution measured RGB-D
+        env:
+          PYTHONPATH: tools
+          OPENBLAS_NUM_THREADS: '1'
+          OMP_NUM_THREADS: '1'
+        run: |
+          python tools/tum_room_sparse_quality.py \
+            --work "$RUNNER_TEMP/tum-room-wide" \
+            --report-dir "$GITHUB_WORKSPACE/artifacts/tum-room-wide"
+      - name: Show actual quality result or reproducible failure
+        if: always()
+        run: |
+          if [ -f artifacts/tum-room-wide/SUMMARY.md ]; then
+            cat artifacts/tum-room-wide/SUMMARY.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Retain actual colored meshes, 3+2 images, metrics or failure receipt
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tum-room-wide-${{ github.run_id }}
+          path: artifacts/tum-room-wide/
+          if-no-files-found: warn
+          retention-days: 14
