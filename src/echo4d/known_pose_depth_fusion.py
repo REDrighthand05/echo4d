@@ -8,10 +8,29 @@ from __future__ import annotations
 import numpy as np
 
 
+def _supported_local_surface(depth: np.ndarray) -> np.ndarray:
+    """Two adjacent agreeing inferred-Z samples, never a measured-depth prior."""
+    support = np.zeros(depth.shape, dtype=np.uint8)
+    for dy, dx in ((-1, 0), (1, 0), (0, -1), (0, 1)):
+        other = np.zeros_like(depth)
+        if dy == -1:
+            other[1:] = depth[:-1]
+        elif dy == 1:
+            other[:-1] = depth[1:]
+        elif dx == -1:
+            other[:, 1:] = depth[:, :-1]
+        else:
+            other[:, :-1] = depth[:, 1:]
+        agreement = ((depth > 0) & (other > 0) &
+                     (np.abs(depth - other) <= np.maximum(.12, .05 * depth)))
+        support += agreement.astype(np.uint8)
+    return (depth > 0) & (support >= 2)
+
+
 def fuse_reprojected_depths(depths: list[np.ndarray], poses: list[np.ndarray],
                             rgbs: list[np.ndarray], camera, *,
                             neighbors: int = 6, tolerance_m: float = 0.12,
-                            color_threshold: float = 45.0) -> tuple[list[np.ndarray], list[dict]]:
+                            color_threshold: float = 45.0,\n                            local_surface_support: bool = False) -> tuple[list[np.ndarray], list[dict]]:
     if (not 3 <= len(depths) == len(poses) == len(rgbs) <= 64 or
             type(neighbors) is not int or not 2 <= neighbors <= 8 or
             not np.isfinite(tolerance_m) or not 0.02 <= tolerance_m <= 0.25 or
@@ -36,7 +55,7 @@ def fuse_reprojected_depths(depths: list[np.ndarray], poses: list[np.ndarray],
     matrices = np.stack(poses)
     centers = matrices[:, :3, 3]
     distances = np.linalg.norm(centers[:, None, :] - centers[None, :, :], axis=2)
-    fused, reports = [], []
+    source_support = ([_supported_local_surface(d).reshape(-1) for d in depths]\n                      if local_surface_support else None)\n    fused, reports = [], []
     for i, anchor in enumerate(depths):
         # Pose-only selection; this function receives training maps only.
         chosen = [int(j) for j in np.argsort(distances[i], kind='stable')
@@ -50,7 +69,7 @@ def fuse_reprojected_depths(depths: list[np.ndarray], poses: list[np.ndarray],
         projected = []
         for j in chosen:
             src = depths[j].reshape(-1)
-            valid = (src >= 0.4) & (src <= 4.0)
+            valid = (src >= 0.4) & (src <= 4.0)\n            if source_support is not None:\n                valid &= source_support[j]
             if not np.any(valid):
                 projected.append(np.zeros((h, w), np.float32))
                 continue
@@ -107,5 +126,5 @@ def fuse_reprojected_depths(depths: list[np.ndarray], poses: list[np.ndarray],
                             matching & (np.abs(out - anchor) > 1e-6))),
                         'original_valid_pixels': int(np.count_nonzero(anchor)),
                         'fused_valid_pixels': int(np.count_nonzero(out)),
-                        'depth_source': 'two RGB-consistent, pose-reprojected inferred-depth views'})
+                        'depth_source': 'two RGB-consistent, pose-reprojected inferred-depth views',\n                        'local_surface_support': local_surface_support})
     return fused, reports
