@@ -147,3 +147,31 @@ def test_source_view_depth_shape_and_sign_rejected():
     with pytest.raises(DataError, match='Source visibility'):
         infer_plane_sweep(ref, sources, c, np.eye(4),
                           source_depths=[valid, -np.ones(shape, dtype=np.float32)])
+
+
+def test_soft_source_visibility_preserves_unknown_and_limits_penalty():
+    c, ref, sources = sample()
+    shape = (c.height, c.width)
+    unknown = [np.zeros(shape, dtype=np.float32) for _ in sources]
+    old, _ = infer_plane_sweep(ref, sources, c, np.eye(4))
+    neutral, stats = infer_plane_sweep(
+        ref, sources, c, np.eye(4), source_depths=unknown,
+        visibility_mode='soft')
+    np.testing.assert_array_equal(neutral, old)
+    assert stats['penalized_photo_samples'] == 0
+    assert stats['visibility_mode'] == 'soft'
+
+    foreground = [np.full(shape, 1., dtype=np.float32), unknown[1]]
+    hard, _ = infer_plane_sweep(
+        ref, sources, c, np.eye(4), source_depths=foreground)
+    soft, stats = infer_plane_sweep(
+        ref, sources, c, np.eye(4), source_depths=foreground,
+        visibility_mode='soft')
+    assert stats['penalized_photo_samples'] > 0
+    assert stats['penalized_photo_samples'] == stats['occluded_photo_samples']
+    # A soft vote cannot be equivalent to discarding all foreground votes.
+    assert np.count_nonzero(soft > 1.6) > np.count_nonzero(hard > 1.6)
+
+    with pytest.raises(DataError, match='visibility mode'):
+        infer_plane_sweep(ref, sources, c, np.eye(4),
+                          source_depths=unknown, visibility_mode='unsafe')
