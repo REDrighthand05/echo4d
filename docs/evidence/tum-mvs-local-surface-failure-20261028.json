@@ -1,0 +1,97 @@
+{
+  "experiment": "tum-fr1_xyz-known-pose-crossview-local-surface-20261028",
+  "status": "FAIL_room_and_table_not_continuously_recognizable",
+  "inputs_retained": [
+    "original TUM RGB 640x480 (algorithm 320x240)",
+    "measured metric camera poses",
+    "intrinsics",
+    "48 frozen training / 12 holdout"
+  ],
+  "inputs_removed_from_reconstruction": [
+    "measured depth PNG pixels",
+    "prior Mesh"
+  ],
+  "diagnostic_sensor_depth": "read only AFTER old/new Mesh are generated; never used for inference or tuning within this run",
+  "baseline": "frozen no-crossview real MVS Mesh from Actions 40692184301",
+  "method": "RGB-inferred source Z requires two adjacent depth-consistent pixels before crossview transfer; opt-in; same old MVS depth maps and 48/4/64 budget",
+  "real_runs": {
+    "initial_diagnosis": "https://github.com/REDrighthand05/echo4d/actions/runs/40700907967",
+    "tested_replay": "https://github.com/REDrighthand05/echo4d/actions/runs/40701504255",
+    "artifact": "https://github.com/REDrighthand05/echo4d/actions/runs/40701504255/artifacts/12821228613",
+    "initial_failure": "https://github.com/REDrighthand05/echo4d/actions/runs/40701324869",
+    "previous_naive_crossview": "https://github.com/REDrighthand05/echo4d/actions/runs/40692184301"
+  },
+  "meshes": {
+    "control": {
+      "sha256": "3cc08e890c1fed00f55d6fde1d4251eb3c997f51f5d6a7f370fb0a8d7a2cb258",
+      "triangles": 8419,
+      "components": 702,
+      "largest_component_fraction": 0.42273429148354913
+    },
+    "naive_crossview": {
+      "sha256": "cf35048ba39387d937bbdc09b1225d6f6815c141f7fa17cf8f5a209fb963aede",
+      "triangles": 8586,
+      "components": 702,
+      "largest_component_fraction": 0.387724202189611
+    },
+    "local_surface_crossview": {
+      "sha256": "560ffeb3fd1611d000fc3f03fd27cd79fb87f1d692d669b8464260d81211d4b2",
+      "glb_sha256": "54add34576a200cca1bc0ac9292939a9fd7385fecde13c66b81c36e6ba149d23",
+      "triangles": 8432,
+      "components": 699,
+      "largest_component_fraction": 0.38697817836812143
+    }
+  },
+  "frozen_five_views": {
+    "names": [
+      "heldout-4",
+      "heldout-24",
+      "heldout-55",
+      "free-a",
+      "free-b"
+    ],
+    "control": [
+      44579,
+      39302,
+      29776,
+      31534,
+      25945
+    ],
+    "naive_crossview": [
+      45691,
+      40236,
+      30527,
+      32017,
+      26949
+    ],
+    "local_surface_crossview": [
+      45489,
+      40036,
+      30581,
+      31990,
+      26829
+    ]
+  },
+  "posthoc_training_sensor": {
+    "sensor_valid_pixels": 2785541,
+    "local_new_only_measured_pixels": 288844,
+    "local_new_only_mae_m": 0.09508176304211048,
+    "local_new_only_over_30cm_fraction": 0.05603716885239091,
+    "naive_new_only_measured_pixels": 309571,
+    "naive_new_only_mae_m": 0.09981683208893885,
+    "naive_new_only_over_30cm_fraction": 0.0617984242710073
+  },
+  "posthoc_heldout_sensor": {
+    "sensor_valid_pixels": 177458,
+    "local_new_only_measured_pixels": 3469,
+    "local_new_only_mae_m": 0.12721497184709982,
+    "local_new_only_over_30cm_fraction": 0.11328913231478813,
+    "naive_new_only_measured_pixels": 3514,
+    "naive_new_only_mae_m": 0.1292186359078218,
+    "naive_new_only_over_30cm_fraction": 0.09704040978941378,
+    "local_gained_pixels": 3469,
+    "local_lost_pixels": 1611
+  },
+  "conclusion": "Local source support reduces training depth errors but fails to improve heldout false-surface fraction or Mesh continuity. Do not promote based on train-only improvement; visual #74 FAIL.",
+  "next": "Change the depth-to-TSDF integration and free-view continuity rather than adding more local crossview pixel filters; preserve old and new real Mesh and 3+2 frozen views."
+}
