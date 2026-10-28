@@ -1,4 +1,4 @@
-name: TUM desk 12cm TSDF far-side depth-edge halo geometry
+name: TUM desk 12cm TSDF bilateral measured-depth geometry
 
 on:
   push:
@@ -41,7 +41,7 @@ jobs:
           OPENBLAS_NUM_THREADS: '1'
           OMP_NUM_THREADS: '1'
         run: python -m pytest -q tests/python/test_tum_desk_sparse_quality.py tests/python/test_sparse_open3d.py
-      - name: Reconstruct 96-view desk 12cm TSDF baseline vs 2px far-side edge halo
+      - name: Reconstruct 96-view desk 12cm TSDF baseline vs 3cm bilateral depth
         env:
           PYTHONPATH: tools
           OPENBLAS_NUM_THREADS: '1'
@@ -60,7 +60,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: tum-desk-edge-halo-${{ github.run_id }}
+          name: tum-desk-bilateral-${{ github.run_id }}
           path: artifacts/tum-desk-wide/
           if-no-files-found: warn
           retention-days: 14
