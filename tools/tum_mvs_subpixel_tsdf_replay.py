@@ -3,7 +3,7 @@
 Control is the exact old Mesh in Actions #40692184301. The experiment uses
 the same 48 inferred 320x240 train maps and known metric poses. No MVS rerun,
 no measured Z, no prior Mesh during reconstruction. Subpixel Z is interpolated
-ONLY between agreeing, already inferred source samples; no hole inpainting.
+ONLY between agreeing, already inferred source samples; where it cannot,\nold nearest-neighbor sampling is preserved. No new sensor measurements.
 """
 from __future__ import annotations
 import argparse
@@ -51,7 +51,7 @@ def replay(old: Path, source_root: Path, target: Path) -> dict:
         if depth.shape != (240, 320) or depth.dtype != np.float32:
             raise ValueError('Frozen depth format changed')
         rgb = load_stereo_rgb(matches[0]['rgb'], 320)
-        refined, stats = upsample_observed_depth(depth)
+        refined, stats = upsample_observed_depth(depth, fallback='nearest')
         rgb_refined = upsample_observed_rgb(rgb)
         np.save(target / 'recording' / entry['depth'], refined, allow_pickle=False)
         Image.fromarray(rgb_refined).save(target / 'recording' / entry['color'])
@@ -62,7 +62,7 @@ def replay(old: Path, source_root: Path, target: Path) -> dict:
     manifest['intrinsics'] = upsampled_camera(camera).to_dict()
     manifest['name'] = 'TUM MVS same 48 RGB-inferred Z maps, conservative 2x-1 TSDF sampling'
     manifest['notes'] = ('Same original inferred Z at even pixels; odd sites interpolate only '
-                         'mutually agreeing RGB-inferred Z. They are not independent observations. '
+                         'mutually agreeing RGB-inferred Z, with exact old nearest-depth fallback at edges/unknown. They are not independent observations. '
                          'Measured metric poses retained; no measured depth or prior Mesh.')
     manifest_path = target / 'recording/recording.json'
     manifest_path.write_text(json.dumps(manifest, indent=2, allow_nan=False) + '\n')
@@ -92,7 +92,7 @@ def replay(old: Path, source_root: Path, target: Path) -> dict:
         'original_depth_resolution': [320, 240],
         'fusion_sampling_resolution': [639, 479],
         'original_inferred_valid_pixels': original_valid,
-        'interpolated_subpixel_samples_not_new_measurements': interpolated,
+        'interpolated_subpixel_samples_not_new_measurements': interpolated,\n        'edge_fallback': 'nearest old inferred depth, never new measurement',
         'per_frame': receipts,
         'input_archive': archive,
         'inferred_manifest_sha256': file_sha256(manifest_path),
