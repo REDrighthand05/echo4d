@@ -199,7 +199,7 @@ def render_five(dataset: Path, imported: Path, target: Path, holdout: list[int],
     keys = (("room-96-fine-wide", "room-96-fine-18mm") if fine_voxel else
             ("room-96-fine-narrow", "room-96-fine-wide"))
     tag = "fine-18mm" if fine_voxel else "fine-truncation"
-    labels = (("25mm / stride1 / 12cm trunc", "18mm / stride1 / 12cm trunc")
+    labels = (("25mm / stride1 / 12cm trunc", "18mm / 12cm TSDF; bounded preview")
               if fine_voxel else
               ("25mm / stride1 / 7.5cm trunc", "25mm / stride1 / 12cm trunc"))
     meshes = {}
@@ -276,7 +276,9 @@ def run(args: argparse.Namespace, report: dict) -> None:
     baseline_manifest.write_text(
         json.dumps(extra, allow_nan=False, sort_keys=True) + "\n", encoding="utf8")
     # Same measured RGB-D frames, poses, timestamps and calibrated intrinsics.
-    # --fine-voxel changes ONLY voxel length, not the 12cm truncation.
+    # --fine-voxel changes voxel length only during TSDF fusion.
+    # If the 18mm extraction exceeds the bounded renderer, its exported
+    # topology is explicitly quadric-decimated; this confounds visual A/B.
     variants = (("room-96-fine-wide", 0.025, 0.12),
                 ("room-96-fine-18mm", 0.018, 0.12)) if args.fine_voxel else (
                 ("room-96-fine-narrow", 0.025, 0.075),
@@ -284,7 +286,8 @@ def run(args: argparse.Namespace, report: dict) -> None:
     for name, voxel_m, truncation_m in variants:
         report.setdefault("fusion", {})[name] = fuse_sparse(
             baseline_manifest, target / name, voxel_m=voxel_m,
-            truncation_m=truncation_m, max_depth_m=MAX_DEPTH_M, pixel_stride=1)
+            truncation_m=truncation_m, max_depth_m=MAX_DEPTH_M, pixel_stride=1,
+            decimate_to_faces=450000 if args.fine_voxel and voxel_m < 0.02 else 0)
     for name, _, _ in variants:
         mesh = target / name / "mesh.ply"
         vertices, faces = read_echo_ply(mesh)
@@ -332,6 +335,10 @@ def main() -> int:
                      "frozen_holdout_max_depth_m": MAX_DEPTH_M},
         "independent_surface_truth": "not_available",
         "human_visual_review": "not_performed",
+        "fine_voxel_export_note": ("18mm TSDF extracted at native voxel resolution; "
+                                   "if oversized, exported PLY is quadric-decimated "
+                                   "to <=450k faces for bounded viewers; not a pure "
+                                   "native-resolution A/B" if args.fine_voxel else None),
         "issue_74": "FAIL / NOT ACCEPTED",
         "desk_v2_frozen": "FAIL 16.7779cm > 15cm; unchanged protocol",
         "commands": [], "status": "started"}

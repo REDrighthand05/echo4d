@@ -274,7 +274,8 @@ def fuse_sparse(recording_path: Path, destination: Path, *, voxel_m: float = 0.0
                 consistency_guard_m: float = 0.0,
                 edge_halo_pixels: int = 1,
                 depth_smooth_sigma_m: float = 0.0,
-                local_edge_truncation_m: float = 0.0) -> dict:
+                local_edge_truncation_m: float = 0.0,
+                decimate_to_faces: int = 0) -> dict:
     """Integrate registered RGB and camera-Z metric depth; output strict ECHO color PLY.
 
     Open3D expects world-to-camera extrinsics, whereas ECHO stores camera-to-world.
@@ -284,6 +285,9 @@ def fuse_sparse(recording_path: Path, destination: Path, *, voxel_m: float = 0.0
     validate_settings(voxel_m, truncation_m, max_depth_m, pixel_stride,
                       edge_guard_m, consistency_guard_m, edge_halo_pixels,
                       depth_smooth_sigma_m, local_edge_truncation_m)
+    if type(decimate_to_faces) is not int or (decimate_to_faces != 0 and
+            not 10000 <= decimate_to_faces <= 450000):
+        raise DataError("Optional bounded preview decimation must target 10k-450k faces")
     recording = load_recording(recording_path)
     if len(recording) > 120:
         raise DataError("Sparse quality experiment is bounded to 120 input frames")
@@ -366,6 +370,33 @@ def fuse_sparse(recording_path: Path, destination: Path, *, voxel_m: float = 0.0
                 surface += narrow_surface
         if not surface.has_triangles():
             raise DataError("Sparse TSDF did not extract an observed surface")
+        original_vertex_count = len(surface.vertices)
+        original_face_count = len(surface.triangles)
+        decimated = False
+        if original_vertex_count > 300000 or original_face_count > 500000:
+            if not decimate_to_faces:
+                raise DataError(
+                    f"Sparse Mesh exceeds bounded 3+2 renderer: "
+                    f"{original_vertex_count} vertices, {original_face_count} faces")
+            # Preserve the 18mm TSDF extraction, then reduce only its export
+            # topology for the existing bounded PLY/holdout/3+2 viewers.
+            # This simplification is explicit and confounds an A/B voxel test.
+            raw_surface = surface
+            surface = raw_surface.simplify_quadric_decimation(
+                target_number_of_triangles=decimate_to_faces)
+            decimated = True
+            if not surface.has_vertex_colors():
+                from scipy.spatial import cKDTree
+                original_points = np.asarray(raw_surface.vertices)
+                original_colors = np.asarray(raw_surface.vertex_colors)
+                _, nearest = cKDTree(original_points).query(
+                    np.asarray(surface.vertices), k=1, workers=1)
+                surface.vertex_colors = o3d.utility.Vector3dVector(
+                    original_colors[nearest])
+        if (len(surface.vertices) > 300000 or len(surface.triangles) > 500000):
+            raise DataError(
+                f"Preview simplification did not fit bounded renderer: "
+                f"{len(surface.vertices)} vertices, {len(surface.triangles)} faces")
         surface.compute_vertex_normals()
         vertices = np.asarray(surface.vertices, dtype=np.float64).copy()
         faces = np.asarray(surface.triangles, dtype=np.int32).copy()
@@ -373,8 +404,6 @@ def fuse_sparse(recording_path: Path, destination: Path, *, voxel_m: float = 0.0
         rgb = np.asarray(surface.vertex_colors, dtype=np.float64)
         if rgb.shape != vertices.shape or not np.isfinite(rgb).all():
             raise DataError("Open3D did not return registered vertex RGB")
-        if (len(vertices) > 300000 or len(faces) > 500000):
-            raise DataError("Sparse Mesh exceeds the bounded 3+2 review renderer")
         colors = np.rint(np.clip(rgb, 0, 1) * 255).astype(np.uint8)
         # Mesh.observations is required for validation but NOT exported in PLY;
         # these ones are placeholders, not an estimate of observation support.
@@ -390,6 +419,10 @@ def fuse_sparse(recording_path: Path, destination: Path, *, voxel_m: float = 0.0
             "camera_resolution": [camera.width, camera.height],
             "frames_integrated": count, "valid_depth_pixels": valid_pixels,
             "vertices": len(vertices), "triangles": len(faces),
+            "raw_extracted_vertices": original_vertex_count,
+            "raw_extracted_triangles": original_face_count,
+            "preview_quadric_decimated": decimated,
+            "preview_target_faces": decimate_to_faces if decimated else None,
             "voxel_m": voxel_m, "truncation_m": truncation_m,
             "max_depth_m": max_depth_m, "pixel_stride": pixel_stride,
             "depth_smooth_sigma_m": depth_smooth_sigma_m,
