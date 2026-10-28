@@ -1,0 +1,59 @@
+name: TUM Room real 158-view micro-island geometry cleanup
+
+on:
+  push:
+    branches:
+      - research/highres-rgbd-tsdf-quality-20261028
+    paths:
+      - 'tools/tum_room_microprune.py'
+      - 'tests/python/test_tum_room_microprune.py'
+      - '.github/workflows/tum-room-microprune.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  real-158-mesh-prune:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: requirements.lock
+      - name: Install project and mesh renderer
+        run: |
+          python -m pip install -r requirements.lock
+          python -m pip install --no-deps -e .
+          python -m pip install 'trimesh>=4.4,<5' 'scipy>=1.11,<2'
+      - name: Test small-island geometry logic
+        env:
+          PYTHONPATH: tools
+        run: python -m pytest -q tests/python/test_tum_room_microprune.py
+      - name: Download pinned real TUM Room 158-view original mesh and visual evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p artifacts/original-158
+          gh run download 40759653811 --name tum-room-all-158-40759653811 --dir artifacts/original-158
+      - name: Create real Mesh before-after and two fixed free-camera renders
+        env:
+          PYTHONPATH: tools
+          OPENBLAS_NUM_THREADS: '1'
+          OMP_NUM_THREADS: '1'
+        run: |
+          python tools/tum_room_microprune.py \
+            --source artifacts/original-158 \
+            --output artifacts/real-room-microprune
+      - name: Retain original GLB, candidate GLB/PLY, and honest A/B images
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tum-room-microprune-${{ github.run_id }}
+          path: artifacts/real-room-microprune/
+          if-no-files-found: warn
+          retention-days: 14
