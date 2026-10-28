@@ -1,4 +1,5 @@
 // ECHO quality evidence intake: local image preview and hash inventory, never automated P0 approval.
+import { parseIntake, matchesExpected } from "./quality-intake.mjs";
 const slots = [];
 const host = (id) => document.getElementById(id);
 function element(tag, className, text) {
@@ -23,7 +24,7 @@ function addSlot(container, id, title, subtitle) {
   const meta = element("div", "file-meta", "文件仅在浏览器内预览，不会上传。");
   section.append(top, picture, label, meta);
   container.append(section);
-  const slot = { id, title, subtitle, input, picture, meta, file: null, url: null, sha256: null, size: null };
+  const slot = { id, title, subtitle, input, picture, meta, file: null, url: null, sha256: null, size: null, expectedSha: null, expectedName: null };
   slots.push(slot);
   input.addEventListener("change", () => readImage(slot));
   return slot;
@@ -52,9 +53,20 @@ function checkDimensions(url) {
     image.src = url;
   });
 }
+function clearSlot(slot, resetInput = false) {
+  if (slot.url) URL.revokeObjectURL(slot.url);
+  slot.url = null;
+  slot.file = null;
+  slot.size = null;
+  slot.sha256 = null;
+  if (resetInput) slot.input.value = "";
+  slot.picture.replaceChildren(element("div", "empty", "尚未载入真实证据"));
+  updateSummary();
+}
 async function readImage(slot) {
   const file = slot.input.files && slot.input.files[0];
   if (!file) return;
+  clearSlot(slot);
   if (!["image/png", "image/jpeg", "image/webp"].includes(file.type) || file.size > 50 * 1024 * 1024) {
     slot.meta.textContent = "只接受 PNG/JPEG/WebP，单张上限 50 MB。";
     slot.input.value = "";
@@ -71,16 +83,19 @@ async function readImage(slot) {
       URL.revokeObjectURL(nextUrl);
       return;
     }
-    if (slot.url) URL.revokeObjectURL(slot.url);
+    const sha = hex(new Uint8Array(digest));
+    if (!matchesExpected(sha, slot.expectedSha)) {
+      throw new Error("SHA-256 与已导入清单不符，拒绝将此图计入证据");
+    }
     slot.url = nextUrl;
     slot.file = file;
     slot.size = size;
-    slot.sha256 = hex(new Uint8Array(digest));
+    slot.sha256 = sha;
     const img = document.createElement("img");
     img.src = nextUrl;
     img.alt = slot.title + "：本地导入的证据图片";
     slot.picture.replaceChildren(img);
-    slot.meta.textContent = file.name + " · " + size.width + "×" + size.height + " px · SHA-256 " + slot.sha256.slice(0, 16) + "…";
+    slot.meta.textContent = file.name + " · " + size.width + "×" + size.height + " px · SHA-256 " + slot.sha256.slice(0, 16) + "…" + (slot.expectedSha ? " · 与清单匹配" : "");
     updateSummary();
   } catch (error) {
     URL.revokeObjectURL(nextUrl);
@@ -107,6 +122,31 @@ function updateSummary() {
     return li;
   }));
 }
+host("importManifest").addEventListener("change", async (event) => {
+  const file = event.target.files?.[0];
+  if (!file) return;
+  try {
+    if (file.size > 1024 * 1024) throw new Error("清单不能超过 1 MiB");
+    const intake = parseIntake(JSON.parse(await file.text()));
+    for (const slot of slots) {
+      clearSlot(slot, true);
+      slot.expectedSha = intake.expected[slot.id].sha256;
+      slot.expectedName = intake.expected[slot.id].file_name;
+      slot.meta.textContent = slot.expectedSha
+        ? "待重新选择原图核对 · 清单记录：" + (slot.expectedName || "未命名") + " · SHA-256 " + slot.expectedSha.slice(0, 16) + "…"
+        : "清单未提供此图哈希；须重新选择并人工核实来源。";
+    }
+    host("sceneId").value = intake.scene_id;
+    host("meshSha").value = intake.mesh_sha256;
+    host("reviewNotes").value = intake.notes;
+    host("importStatus").textContent = "清单已读取；图片没有从清单恢复。请逐张重新选择文件并核对 SHA。";
+    updateSummary();
+  } catch (error) {
+    host("importStatus").textContent = "导入失败（原有内容未更改）：" + error.message;
+  } finally {
+    event.target.value = "";
+  }
+});
 host("meshSha").addEventListener("input", updateSummary);
 updateSummary();
 host("exportManifest").addEventListener("click", () => {
@@ -118,6 +158,8 @@ host("exportManifest").addEventListener("click", () => {
     bytes: s.file ? s.file.size : null,
     pixels: s.size,
     sha256: s.sha256,
+    expected_sha256: s.expectedSha,
+    expected_file_name: s.expectedName,
     source_verified: false,
     actual_camera_pose_verified: false
   }));
