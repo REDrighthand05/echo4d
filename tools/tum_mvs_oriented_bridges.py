@@ -61,12 +61,19 @@ def run(old: Path, source_root: Path, target: Path) -> dict:
     old_mesh = prior / "reconstruction/mesh.ply"
     shutil.copyfile(old_mesh, comparison / "reconstruction/mesh.ply")
     # Prior runner freezes five camera poses in its comparison receipt.
-    shutil.copyfile(prior / "prior-comparison/report.json", comparison / "report.json")
+    frozen = json.loads((prior / "prior-comparison/report.json").read_text())
+    (comparison / "report.json").write_text(json.dumps({
+        "checkout_sha": os.environ.get("GITHUB_SHA"),
+        "mesh_sha256": file_sha256(old_mesh),
+        "views": [{"name": v["name"], "pose": v["pose"]} for v in frozen["views"]],
+        "view_pose_source": "frozen cameras; no inherited Mesh or render identity",
+    }, indent=2) + "\n")
     summary = mesh_summary(result)
     # PLY export does not preserve per-vertex observation counts. The ones
     # above are serialization placeholders, not real sensor confidence.
     summary["min_nearest_voxel_observations"] = None
     summary["max_nearest_voxel_observations"] = None
+    summary["note"] = "PLY lacks TSDF counts; exporter placeholders are not observation evidence."
     report = {
         "checkout_sha": os.environ.get("GITHUB_SHA"),
         "source": "TUM fr1_xyz 640x480 original RGB, 320x240 inferred-Z; CC BY 4.0",

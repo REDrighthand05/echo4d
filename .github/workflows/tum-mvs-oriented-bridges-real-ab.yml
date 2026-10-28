@@ -34,7 +34,7 @@ jobs:
       - name: Test bridge geometry and prior independent-depth contract
         run: |
           python -m py_compile tools/tum_mvs_oriented_bridges.py
-          python -m pytest -q tests/python/test_known_pose_edge_orientation.py tests/python/test_known_pose_edge_crossview.py tests/python/test_known_pose_edge_extraction.py
+          python -m pytest -q tests/python/test_known_pose_edge_orientation.py tests/python/test_known_pose_edge_bridges.py tests/python/test_known_pose_edge_crossview.py tests/python/test_known_pose_edge_extraction.py
       - name: Recover frozen RGB-inferred depth maps (NOT sensor Z)
         env:
           GH_TOKEN: ${{ github.token }}
@@ -108,13 +108,15 @@ jobs:
             artifacts/old/inputs/
             artifacts/old/reconstruction/mesh.ply
             artifacts/new/prior-comparison/report.json
-            artifacts/new/prior/unfiltered/control-replayed.ply
-            artifacts/new/prior/unfiltered/reconstruction/mesh.ply
+            artifacts/new/prior/prior/unfiltered/control-replayed.ply
+            artifacts/new/prior/prior/unfiltered/reconstruction/mesh.ply
+            artifacts/new/prior/prior/report.json
+            artifacts/new/prior/prior/reconstruction/mesh.ply
             artifacts/new/report.json
             artifacts/new/reconstruction/mesh.ply
             artifacts/new/prior/report.json
             artifacts/new/prior/reconstruction/mesh.ply
-            artifacts/new/prior/unfiltered/report.json
+            artifacts/new/prior/prior/unfiltered/report.json
             artifacts/frozen-five/
             artifacts/heldout-diagnostic/
           if-no-files-found: warn

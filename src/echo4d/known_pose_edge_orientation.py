@@ -59,9 +59,17 @@ def _orientation_votes(vertices, faces, depths, poses, camera,
                                (y+2-camera.cy)*db/camera.fy, db), axis=1)
             local = np.cross(right-left, bottom-top)
             local_norm = np.linalg.norm(local, axis=1)
+            unit_local = local / np.maximum(local_norm[:, None], 1e-9)
+            center_point = np.stack(((x-camera.cx)*dc/camera.fx,
+                                     (y-camera.cy)*dc/camera.fy, dc), axis=1)
+            patch = np.stack((left, right, top, bottom, center_point), axis=1)
+            plane_origin = (left + right + top + bottom) / 4
+            residual = np.max(np.abs(np.sum(
+                (patch - plane_origin[:, None, :]) * unit_local[:, None, :], axis=2)), axis=1)
+            coplanar = residual <= np.maximum(.10, .04 * dc)
             local_world = local @ pose[:3, :3].T
             cosine = np.abs(np.sum(local_world * normals[ids], axis=1)) / np.maximum(local_norm, 1e-9)
-            supported[ids] = observed & (local_norm > 1e-8) & (cosine >= normal_cosine)
+            supported[ids] = observed & coplanar & (local_norm > 1e-8) & (cosine >= normal_cosine)
         votes.append(supported)
     independent = np.zeros(len(faces), dtype=bool)
     for j in range(len(poses)):
@@ -111,6 +119,7 @@ def filter_oriented_bridge_faces(original_vertices, original_faces,
         "max_raw_normal_votes": int(raw_votes.max(initial=0)),
         "normal_cosine_threshold": normal_cosine,
         "normal_patch_offset_px": 2,
+        "normal_patch_plane_residual_tolerance": "max(0.10m, 4% center inferred Z)",
         "independent_camera_baseline_m": .04,
         "sensor_depth_used": False,
         "external_prior_mesh_used": False,
