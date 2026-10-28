@@ -1,0 +1,86 @@
+name: Redwood Bedroom observed Mesh + explicitly labeled existing prior
+on:
+  push:
+    branches: [research/redwood-official-room-baseline-20261029]
+    paths:
+      - tools/redwood_prior_gapfill.py
+      - tests/python/test_redwood_prior_gapfill.py
+      - .github/workflows/redwood-prior-gapfill.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  prior-assisted-room:
+    runs-on: ubuntu-latest
+    timeout-minutes: 110
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install mature geometry providers
+        run: |
+          pip install -r requirements.lock
+          pip install --no-deps -e .
+          pip install 'open3d==0.19.0' 'trimesh>=4,<5'
+      - name: Test missing-surface selection and registration guard
+        env:
+          PYTHONPATH: tools
+        run: python -m pytest -q tests/python/test_redwood_prior_gapfill.py
+      - name: Real Bedroom gap geometry from labeled prior, fixed 3+2 review
+        env:
+          PYTHONPATH: tools
+          OPENBLAS_NUM_THREADS: '1'
+          OMP_NUM_THREADS: '1'
+        run: |
+          python tools/redwood_prior_gapfill.py \
+            --observed docs/real-room-review/redwood-bedroom-dense600/recorded-rgbd-preview.glb \
+            --cache "$RUNNER_TEMP/redwood-prior" \
+            --output "$GITHUB_WORKSPACE/artifacts/bedroom-prior-assisted" \
+            --gap-m 0.09
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: redwood-prior-gapfill-${{ github.run_id }}
+          path: artifacts/bedroom-prior-assisted/
+          retention-days: 14
+
+  publish-real-geometry:
+    needs: prior-assisted-room
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: redwood-prior-gapfill-${{ github.run_id }}
+          path: review
+      - name: Publish actual prior-assisted GLB and fixed 3+2 comparisons
+        run: |
+          mkdir -p docs/real-room-review/redwood-bedroom-prior-assisted/before-after
+          cp review/before-after/*.png docs/real-room-review/redwood-bedroom-prior-assisted/before-after/
+          cp review/prior-assisted-viewable.glb docs/real-room-review/redwood-bedroom-prior-assisted/
+          cp review/geometry-source-mask.glb docs/real-room-review/redwood-bedroom-prior-assisted/
+          cp review/results.json docs/real-room-review/redwood-bedroom-prior-assisted/
+          cat > docs/real-room-review/redwood-bedroom-prior-assisted/README.md <<'EOF'
+          # Real Redwood Bedroom, labeled PRIOR-assisted geometry
+          Left side of each comparison: 600-frame observed-only Mesh.
+          Right side: observed-only Mesh plus triangles from the supplied
+          pre-existing bedroom.ply where observed geometry has no nearby
+          support. For actual-camera views, each side also shows the photo.
+          Cyan/orange source-mask GLB: cyan = measured RGB-D reconstruction,
+          orange = explicitly pre-existing prior geometry.
+          This is NOT independent reconstruction, NOT a 100% result,
+          and does NOT pass #74 without human review.
+          Original observed-only baseline: ../redwood-bedroom-dense600/
+          EOF
+          git config user.name "echo4d-real-room-ci"
+          git config user.email "echo4d-real-room-ci@users.noreply.github.com"
+          git add docs/real-room-review/redwood-bedroom-prior-assisted/
+          git diff --cached --quiet && exit 0
+          git commit -m "results(real-room): actual labeled prior-assisted bedroom geometry and 3+2 A/B"
+          git fetch origin research/redwood-official-room-baseline-20261029
+          git rebase origin/research/redwood-official-room-baseline-20261029
+          git push origin HEAD:refs/heads/research/redwood-official-room-baseline-20261029
