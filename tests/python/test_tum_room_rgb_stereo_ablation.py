@@ -43,3 +43,52 @@ def test_rejects_unusable_baseline_and_mismatched_images():
     right_pose[0,3] = .1
     with pytest.raises(DataError):
         infer_rectified_stereo_depth(image[:100],image,camera,np.eye(4),right_pose)
+
+
+def test_replay_ledger_retains_exact_inputs_original_rgb_and_baseline(tmp_path):
+    import hashlib
+    import json
+    from tum_room_rgb_stereo_ablation import preserve_replay_inputs, ROOT
+    imported, inferred, baseline = [tmp_path/name for name in ('import', 'inferred', 'baseline')]
+    for folder in (imported, inferred, baseline/'room-96-fine-wide'):
+        folder.mkdir(parents=True)
+    def write(path, data):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(data)
+    association = {'frames': []}
+    for i in range(4):
+        raw = b'original rgb ' + bytes([i])
+        relative = f'rgb/{i}.png'
+        write(tmp_path/'source'/ROOT/relative, raw)
+        association['frames'].append({'rgb_path': relative, 'rgb_sha256': hashlib.sha256(raw).hexdigest()})
+    for name in ('rgb.txt', 'depth.txt', 'groundtruth.txt'):
+        write(tmp_path/'source'/ROOT/name, name.encode())
+    write(tmp_path/'source'/ROOT/'depth'/'private.png', b'sensor Z must not be copied')
+    (imported/'recording.json').write_text('{}')
+    (imported/'association.json').write_text(json.dumps(association))
+    (inferred/'recording.json').write_text(json.dumps({'frames': [{'color':'color/0.png','depth':'depth/0.npy'}]}))
+    write(inferred/'color/0.png', b'actual resized rgb')
+    (inferred/'depth').mkdir()
+    np.save(inferred/'depth/0.npy', np.array([[0., 1.]], dtype=np.float32))
+    (baseline/'room-sparse-quality-report.json').write_text('{}')
+    write(baseline/'room-96-fine-wide/mesh.ply', b'actual frozen control bytes')
+    target = tmp_path/'retained'
+    result = preserve_replay_inputs(imported, inferred, baseline, target,
+                                    {'expanded_indices':[0], 'holdout_indices':[1,2,3]})
+    ledger = json.loads((target/'ledger.json').read_text())
+    assert ledger['original_rgb_indices'] == [0,1,2,3]
+    assert not (target/'source/depth').exists()
+    assert not result['sensor_depth_arrays_retained']
+    assert result['files'] == 14
+    assert result['ledger_sha256'] == hashlib.sha256((target/'ledger.json').read_bytes()).hexdigest()
+    for entry in ledger['files']:
+        payload = (target/entry['path']).read_bytes()
+        assert len(payload) == entry['bytes']
+        assert hashlib.sha256(payload).hexdigest() == entry['sha256']
+    assert np.array_equal(np.load(target/'inferred/depth/0.npy'), [[0.,1.]])
+    assert (target/'baseline/mesh.ply').read_bytes() == b'actual frozen control bytes'
+    # A changed original cannot acquire a fresh trusted receipt.
+    write(tmp_path/'source'/ROOT/'rgb/0.png', b'changed')
+    with pytest.raises(DataError, match='checksum changed'):
+        preserve_replay_inputs(imported,inferred,baseline,tmp_path/'bad',
+                               {'expanded_indices':[0], 'holdout_indices':[1,2,3]})

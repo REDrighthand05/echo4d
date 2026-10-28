@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 import json
 import math
 import os
+import shutil
 from pathlib import Path
 import sys
 import time
@@ -144,7 +145,9 @@ def build_rgb_stereo_manifest(imported: Path, target: Path, report: dict) -> Pat
         except (DataError,cv2.error) as exc:
             receipts.append({'anchor':i,'partner':j,'status':'failed','reason':str(exc)})
             continue
-        receipts.append({'anchor':i,'partner':j,'status':'inferred',**detail})
+        receipts.append({'anchor':i,'partner':j,'source_anchor_index':receipt['expanded_indices'][i],
+                         'source_partner_index':receipt['expanded_indices'][j],
+                         'status':'inferred',**detail})
         if detail['valid_original_pixels'] < 150:
             continue
         k = len(output)
@@ -152,7 +155,9 @@ def build_rgb_stereo_manifest(imported: Path, target: Path, report: dict) -> Pat
         np.save(target/'depth'/f'{k:03d}.npy',z,allow_pickle=False)
         output.append({'t':float(frames[i]['t']-frames[0]['t']),
                        'cameraToWorld':frames[i]['cameraToWorld'],
-                       'color':f'color/{k:03d}.png','depth':f'depth/{k:03d}.npy'})
+                       'color':f'color/{k:03d}.png','depth':f'depth/{k:03d}.npy',
+                       'source_anchor_index':receipt['expanded_indices'][i],
+                       'source_partner_index':receipt['expanded_indices'][j]})
     report['stereo_pair_results'] = receipts
     report['inferred_depth_frames'] = len(output)
     if len(output) < 8:
@@ -165,6 +170,54 @@ def build_rgb_stereo_manifest(imported: Path, target: Path, report: dict) -> Pat
     manifest = target/'recording.json'
     manifest.write_text(json.dumps(recording,indent=2,allow_nan=False)+'\n')
     return manifest
+
+
+def preserve_replay_inputs(imported: Path, inferred: Path, baseline: Path,
+                           target: Path, selection: dict) -> dict:
+    """Retain exact inferred inputs and original training/review RGB, not sensor Z."""
+    target.mkdir(parents=True, exist_ok=False)
+    files = []
+
+    def copy(source: Path, relative: str):
+        destination = target / relative
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(source, destination)
+        digest = file_sha256(source)
+        if file_sha256(destination) != digest:
+            raise DataError("Retained replay input changed during copy")
+        files.append({'path': relative, 'bytes': destination.stat().st_size,
+                      'sha256': digest})
+
+    data = json.loads((inferred/'recording.json').read_text())
+    copy(inferred/'recording.json', 'inferred/recording.json')
+    for frame in data['frames']:
+        for key in ('color', 'depth'):
+            copy(safe_path(inferred, frame[key]), 'inferred/' + frame[key])
+    copy(imported/'recording.json', 'source/recording.json')
+    copy(imported/'association.json', 'source/association.json')
+    association = json.loads((imported/'association.json').read_text())
+    source_root = imported.parent/'source'/ROOT
+    for name in ('rgb.txt', 'depth.txt', 'groundtruth.txt'):
+        copy(source_root/name, 'source/' + name)
+    # All training RGB is needed to re-run partner selection and inference.
+    # Review RGB is kept separately; no holdout is passed to reconstruction.
+    indices = set(selection['expanded_indices'])
+    holdouts = selection['holdout_indices']
+    indices.update((holdouts[0], holdouts[len(holdouts)//2], holdouts[-1]))
+    for index in sorted(indices):
+        item = association['frames'][index]
+        source = safe_path(source_root, item['rgb_path'])
+        if file_sha256(source) != item['rgb_sha256']:
+            raise DataError("Original room RGB checksum changed")
+        copy(source, 'source/' + item['rgb_path'])
+    copy(baseline/'room-sparse-quality-report.json', 'baseline/report.json')
+    copy(baseline/'room-96-fine-wide'/'mesh.ply', 'baseline/mesh.ply')
+    ledger = {'files': files, 'sensor_depth_arrays_retained': False,
+              'source_manifest_note': 'source manifest references sensor files absent here; use inferred manifest for TSDF replay',
+              'original_rgb_indices': sorted(indices)}
+    (target/'ledger.json').write_text(json.dumps(ledger, indent=2, allow_nan=False)+'\n')
+    return {'ledger_sha256': file_sha256(target/'ledger.json'),
+            'files': len(files), 'sensor_depth_arrays_retained': False}
 
 
 def correct_inferred_mesh_provenance(folder: Path) -> dict:
@@ -249,6 +302,13 @@ def run(args, report):
     manifest = build_rgb_stereo_manifest(imported,work/'inferred',report)
     if report['selection']['expanded_indices'] != high['training_selection']['expanded_indices']:
         raise DataError("RGB-only training identities differ from measured baseline")
+    report['replay_inputs'] = preserve_replay_inputs(
+        imported, manifest.parent, args.baseline, args.report_dir/'replay-inputs', report['selection'])
+    report['comparison_limits'] = {
+        'not_single_variable_depth_ablation': True,
+        'baseline': {'frames': 96, 'voxel_m': .025, 'pixel_stride': 1},
+        'candidate': {'frames': report['inferred_depth_frames'], 'voxel_m': .04, 'pixel_stride': 2},
+        'note': '96-frame selection pool is shared; actual fusion frames and spatial sampling differ'}
     report['inferred_manifest_sha256'] = file_sha256(manifest)
     fuse_sparse(manifest,args.report_dir/'rgb-stereo-mesh',
                 voxel_m=.04,truncation_m=.12,max_depth_m=4.,pixel_stride=2)
@@ -265,7 +325,9 @@ def run(args, report):
         vv,ff = read_echo_ply(path)
         cc = read_vertex_rgb(path,len(vv))
         tm = trimesh.Trimesh(vertices=vv,faces=ff,vertex_colors=cc,process=False)
-        tm.export(args.report_dir/(name+'.glb'))
+        glb = args.report_dir/(name+'.glb')
+        tm.export(glb)
+        report.setdefault('glbs', {})[name] = {'sha256': file_sha256(glb), 'bytes': glb.stat().st_size}
     report['status']='real_room_mesh_and_five_views_generated_visual_FAIL_pending_review'
 
 
