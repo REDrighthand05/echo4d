@@ -1,4 +1,4 @@
-name: TUM real desk wider-trajectory sparse RGB-D geometry
+name: TUM desk cross-scene fine TSDF truncation geometry
 
 on:
   push:
@@ -14,7 +14,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: tum-desk-wider-trajectory-${{ github.ref }}
+  group: tum-desk-truncation-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -39,7 +39,7 @@ jobs:
           OPENBLAS_NUM_THREADS: '1'
           OMP_NUM_THREADS: '1'
         run: python -m pytest -q tests/python/test_tum_desk_sparse_quality.py tests/python/test_sparse_open3d.py
-      - name: Reconstruct two real fr1_desk meshes from full-resolution measured RGB-D
+      - name: Reconstruct 96-view desk Mesh A/B at 7.5cm and 12cm TSDF truncation
         env:
           PYTHONPATH: tools
           OPENBLAS_NUM_THREADS: '1'

@@ -1,8 +1,8 @@
-"""Real TUM fr1_desk: wider handheld trajectory, known poses + measured RGB-D.
+"""Real TUM fr1_desk: cross-scene check of Room TSDF truncation gain.
 
-Compare 48 vs 96 real training frames on the SAME desk scene with 12 frozen
-holdouts. Neither route uses holdout depth for fusion or geometry selection.
-No inferred depth, mesh completion, or claim of independent surface truth.
+Same 96 measured-depth frames, known poses, 2.5cm voxels and pixel stride 1.
+Compare 7.5cm vs 12cm truncation ONLY. Twelve frozen holdouts excluded from fusion.
+Neither route uses an old Mesh prior, inferred depth or fabricated geometry.
 """
 from __future__ import annotations
 
@@ -143,7 +143,7 @@ def select_training(manifest: dict, *, baseline: int = BASE_FRAMES,
 def render_five(dataset: Path, imported: Path, target: Path) -> list[dict]:
     rec = load_recording(imported / "recording.json")
     assoc = json.loads((imported / "association.json").read_text(encoding="utf8"))
-    keys = ("desk-48", "desk-96")
+    keys = ("desk-96-narrow", "desk-96-wide")
     meshes = {}
     for key in keys:
         mesh_path = target / key / "mesh.ply"
@@ -163,24 +163,29 @@ def render_five(dataset: Path, imported: Path, target: Path) -> list[dict]:
             original = raw.convert("RGB").copy()
         views = [rasterize_vertex_rgb(*meshes[key], camera, pose,
                  near=.15, far=MAX_DEPTH_M)[0] for key in keys]
-        name = f"heldout-{i:03d}-desk-48-vs-96.png"
+        name = f"heldout-{i:03d}-desk-truncation-ab.png"
         sheet(original, *views, visual / name, f"Real TUM fr1_desk camera {i}",
-              ("48 measured views / 30mm", "96 pose-diverse views / 30mm"))
+              ("96 views / 25mm / 7.5cm trunc", "96 views / 25mm / 12cm trunc"))
         images.append({"kind": "heldout_camera", "index": i, "name": name,
                        "sha256": file_sha256(visual / name),
                        "source_rgb_sha256": source["rgb_sha256"]})
-    vertices = meshes["desk-96"][0]
-    center = (vertices.min(axis=0) + vertices.max(axis=0)) / 2
-    span = max(float(np.ptp(vertices, axis=0).max()), .5)
-    for i, offset in enumerate(((.45, -1.25, .3), (1.2, .35, .45)), 1):
-        pose = look_at(center + span * np.asarray(offset), center)
-        views = [rasterize_vertex_rgb(*meshes[key], camera, pose,
-                 near=.15, far=10.)[0] for key in keys]
-        name = f"free-{i}-desk-48-vs-96.png"
-        sheet(None, *views, visual / name, f"Real TUM desk free camera {i}",
-              ("48 measured views / 30mm", "96 pose-diverse views / 30mm"))
+    # Shift real camera anchors by 35cm for free views; no heldout RGB-D fused.
+    for i, (index, lateral) in enumerate(((HOLDOUT[2], .35),
+                                          (HOLDOUT[-3], -.35)), 1):
+        anchor = np.asarray(rec.entries[index]["cameraToWorld"]).reshape(4, 4, order="F")
+        eye = anchor[:3, 3] + lateral * anchor[:3, 0] - .12 * anchor[:3, 1]
+        target_point = anchor[:3, 3] + 1.8 * anchor[:3, 2]
+        pose = look_at(eye, target_point)
+        renders = [rasterize_vertex_rgb(*meshes[key], camera, pose,
+                   near=.15, far=10.) for key in keys]
+        name = f"free-{i}-desk-truncation-ab.png"
+        sheet(None, *[render[0] for render in renders], visual / name,
+              f"Real TUM desk shifted free camera {i}",
+              ("96 views / 25mm / 7.5cm trunc", "96 views / 25mm / 12cm trunc"))
         images.append({"kind": "free_camera", "name": name,
                        "sha256": file_sha256(visual / name),
+                       "anchor_holdout_index": index,
+                       "rendered_mesh_pixels": [int(render[1]) for render in renders],
                        "camera_to_world": pose.flatten(order="F").tolist()})
     return images
 
@@ -205,14 +210,17 @@ def run(args: argparse.Namespace, report: dict) -> None:
     if rec.source != "recorded" or (rec.camera.width, rec.camera.height) != (640, 480):
         raise DataError("Expected full 640x480 measured RGB-D")
     manifest = json.loads((imported / "recording.json").read_text(encoding="utf8"))
-    base, extra, selection = select_training(manifest)
+    _, extra, selection = select_training(manifest)
     report["training_selection"] = selection
-    for name, data in (("desk-48", base), ("desk-96", extra)):
-        path = imported / ("train-" + name + ".json")
-        path.write_text(json.dumps(data, allow_nan=False, sort_keys=True) + "\n", encoding="utf8")
+    training_path = imported / "train-desk-96-truncation-ab.json"
+    training_path.write_text(
+        json.dumps(extra, allow_nan=False, sort_keys=True) + "\n", encoding="utf8")
+    # Same 96 known poses, measured depth, timestamps, voxel size and stride.
+    # Only the TSDF truncation band changes between the two integrations.
+    for name, truncation in (("desk-96-narrow", 0.075), ("desk-96-wide", 0.12)):
         report.setdefault("fusion", {})[name] = fuse_sparse(
-            path, target / name, voxel_m=VOXEL_M, truncation_m=TRUNC_M,
-            max_depth_m=MAX_DEPTH_M, pixel_stride=2)
+            training_path, target / name, voxel_m=0.025,
+            truncation_m=truncation, max_depth_m=MAX_DEPTH_M, pixel_stride=1)
         mesh = target / name / "mesh.ply"
         vertices, faces = read_echo_ply(mesh)
         score = evaluate_frames(vertices, faces, rec, list(HOLDOUT),
@@ -224,7 +232,7 @@ def run(args: argparse.Namespace, report: dict) -> None:
             "same_sensor_holdout_diagnostic_only": {k: score[k] for k in (
                 "heldout_frames", "observed_depth_coverage", "rmse_m", "mae_m", "p95_abs_m")}}
     report["visual"] = render_five(dataset, imported, target)
-    report["status"] = "two_real_desk_meshes_rendered_visual_review_pending"
+    report["status"] = "real_desk_fine_voxel_truncation_ab_meshes_rendered_visual_review_pending"
 
 
 def main() -> int:
@@ -235,15 +243,17 @@ def main() -> int:
     args = parser.parse_args()
     args.report_dir.mkdir(parents=True, exist_ok=True)
     report = {
-        "experiment": "TUM-fr1_desk-full-trajectory-48-vs-96-sparse-TSDF-v1",
+        "experiment": "TUM-fr1_desk-cross-scene-96view-truncation-7p5-vs-12cm-v1",
         "started_utc": datetime.now(timezone.utc).isoformat(),
         "checkout_sha": os.environ.get("GITHUB_SHA"),
         "official_source": URL, "pinned_source_sha256": PINNED_SHA256,
         "original_rgb_resolution": [640, 480],
         "camera_poses": "TUM motion-capture ground truth (not inferred)",
         "depth": "TUM sensor measurement (not predicted)",
-        "geometry": {"voxel_m": VOXEL_M, "truncation_m": TRUNC_M,
-                     "pixel_stride": 2, "max_depth_m": MAX_DEPTH_M},
+        "geometry": {"voxel_m": 0.025, "pixel_stride": 1,
+                     "max_depth_m": MAX_DEPTH_M,
+                     "variants": {"desk-96-narrow": {"truncation_m": 0.075},
+                                  "desk-96-wide": {"truncation_m": 0.12}}},
         "independent_surface_truth": "not_available",
         "human_visual_review": "not_performed",
         "issue_74": "FAIL / NOT ACCEPTED",
@@ -263,12 +273,12 @@ def main() -> int:
         (args.report_dir / "desk-sparse-quality-report.json").write_text(
             json.dumps(report, indent=2, allow_nan=False) + "\n", encoding="utf8")
         (args.report_dir / "SUMMARY.md").write_text("\n".join([
-            "# Real fr1_desk wide-trajectory RGB-D Mesh",
+            "# Real fr1_desk 96-view 2.5cm TSDF truncation 7.5cm vs 12cm",
             f"- Status: {report['status']}",
-            "- Original RGB 640x480; 48 vs 96 known-pose measured-depth views.",
+            "- Original RGB 640x480; same 96 known-pose measured-depth views per variant.",
             f"- Mesh results: {list(report.get('results', {}))}",
             f"- 3 real camera + 2 free camera images: {len(report.get('visual', []))}",
-            "- Sensor holdout is not independent surface truth; #74 FAIL.",
+            "- Same-sensor holdout is not independent surface truth; #74 FAIL.",
             f"- Failure: {report.get('failure', {}).get('message', 'none')}"]) + "\n",
             encoding="utf8")
     return code
