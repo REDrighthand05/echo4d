@@ -1,0 +1,83 @@
+{
+  "experiment": "tum-fr1-room-known-pose-rgb-multiview-depth-coherence-v1",
+  "status": "VISUAL_FAIL_FRAGMENTED",
+  "run_id": 40772290473,
+  "run_url": "https://github.com/REDrighthand05/echo4d/actions/runs/40772290473",
+  "artifact_url": "https://github.com/REDrighthand05/echo4d/actions/runs/40772290473/artifacts/12853172253",
+  "tested_checkout": "4586cce1dda441321208d3db0a764ec8da8bbe93",
+  "dependent_parent_pr": 94,
+  "source_archive_sha256": "5ace47a1d2e53696bc939a84999293a04a7226958e848a609666691fd3cc38da",
+  "inputs_retained": [
+    "original 640x480 TUM fr1_room RGB, 320x240 plane-sweep",
+    "96 fixed training identities, 74 eligible anchors",
+    "known metric TUM camera-to-world poses",
+    "camera intrinsics"
+  ],
+  "inputs_removed_from_candidate": [
+    "measured sensor depth pixel arrays",
+    "existing Mesh prior"
+  ],
+  "caveats": [
+    "Importer still uses depth timestamp association; this is not a sensor-free import",
+    "Previous measured and inferred Mesh read only after candidate fusion, for A/B",
+    "No unknown depth filled, no GPU/model weights",
+    "Metric scale from known TUM poses, not recovered by RGB"
+  ],
+  "algorithm": "existing 4-source RGB plane sweep followed by 5x5 RGB-gated inferred-depth median consensus before existing Open3D TSDF",
+  "inference": {
+    "frames": 32,
+    "original_valid_depth_pixels": 1392814,
+    "corrected_spikes": 51822,
+    "locally_smoothed_pixels": 923115,
+    "unknown_pixels_filled": 0
+  },
+  "mesh": {
+    "previous_sha256": "83eebfc984d54ffc1e5927de9bf409be86074873f481e4ece6bbd3dfc7428f45",
+    "new_sha256": "9fb01d54dedd9247c49d4511510fc7702aada3113f6375cff0c4e785e122886c",
+    "previous_faces": 44985,
+    "new_faces": 46463,
+    "previous_components": 6853,
+    "new_components": 6707,
+    "previous_largest_component_face_fraction": 0.053306657774813825,
+    "new_largest_component_face_fraction": 0.05479628952069389
+  },
+  "frozen_views": [
+    {
+      "name": "heldout-7.png",
+      "old_covered": 19171,
+      "new_covered": 19493,
+      "sha256": "285e6b5be2a62aa28103cba5fb8239184f3d0187c93cbec2ad5a262c9529aa27"
+    },
+    {
+      "name": "heldout-92.png",
+      "old_covered": 15201,
+      "new_covered": 16060,
+      "sha256": "93c280ae4f0e57102290d039928cf0f6f3ba0f5f384f25cd3265843afa4fe9e9"
+    },
+    {
+      "name": "heldout-162.png",
+      "old_covered": 45785,
+      "new_covered": 47774,
+      "sha256": "f4115a310166bb90d1b6e091ea747670dcacc1e3bcbe4eabe7daf812a3ddbbce"
+    },
+    {
+      "name": "free-3.png",
+      "old_covered": 32526,
+      "new_covered": 33873,
+      "sha256": "b97919d8f63295e51dc242a881c31911c316c58b5b23f4a4828a69e80bb1ef67"
+    },
+    {
+      "name": "free-4.png",
+      "old_covered": 31546,
+      "new_covered": 33706,
+      "sha256": "76616dc2213184d9d0c1e6af38d1944a2b07852dce2a2bd4c86586b647316fea"
+    }
+  ],
+  "execution": {
+    "workflow_conclusion": "success",
+    "synthetic_tests": "10 passed",
+    "real_execution_seconds": 219.66
+  },
+  "visual_review": "Direct inspection of heldout-162 and free-3 PNG: still fragmented, floating patches and missing room surfaces; five-view coverage gain is not proof of correct geometry; #74 FAIL",
+  "next_shortest_fix": "Replace per-pixel photometric depth selection with a stronger multi-view depth cost/uniqueness or geometrically consistent depth producer; do not keep smoothing fragments or add posthoc mesh filters."
+}
