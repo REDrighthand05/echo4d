@@ -111,3 +111,39 @@ def test_unknown_pairing_rejected():
     c, ref, sources = _four_source_plane((-.1, .1), (2., 2.))
     with pytest.raises(DataError, match='pairing'):
         infer_plane_sweep(ref, sources, c, np.eye(4), pairing='anything')
+
+
+def test_source_view_occlusion_uses_inferred_z_and_preserves_unknown():
+    c, ref, sources = sample()
+    old, _ = infer_plane_sweep(ref, sources, c, np.eye(4))
+    shape = (c.height, c.width)
+    unknown = [np.zeros(shape, dtype=np.float32) for _ in sources]
+    same, stats = infer_plane_sweep(ref, sources, c, np.eye(4),
+                                    source_depths=unknown)
+    np.testing.assert_array_equal(same, old)
+    assert stats['source_visibility'] is True
+    assert stats['occluded_photo_samples'] == 0
+
+    # First source has a stable nearer surface; the hypothesized 2m plane
+    # cannot receive its vote. The other source alone cannot form two-view Z.
+    foreground = [np.full(shape, 1., dtype=np.float32), unknown[1]]
+    filtered, stats = infer_plane_sweep(ref, sources, c, np.eye(4),
+                                        source_depths=foreground)
+    assert stats['occluded_photo_samples'] > 0
+    assert np.count_nonzero(filtered > 1.6) < np.count_nonzero(old > 1.6) / 4
+
+    consistent = [np.full(shape, 2., dtype=np.float32) for _ in sources]
+    retained, _ = infer_plane_sweep(ref, sources, c, np.eye(4),
+                                    source_depths=consistent)
+    assert np.count_nonzero(retained) >= np.count_nonzero(old) * .75
+
+
+def test_source_view_depth_shape_and_sign_rejected():
+    c, ref, sources = sample()
+    shape = (c.height, c.width)
+    valid = np.zeros(shape, dtype=np.float32)
+    with pytest.raises(DataError, match='Source visibility'):
+        infer_plane_sweep(ref, sources, c, np.eye(4), source_depths=[valid])
+    with pytest.raises(DataError, match='Source visibility'):
+        infer_plane_sweep(ref, sources, c, np.eye(4),
+                          source_depths=[valid, -np.ones(shape, dtype=np.float32)])

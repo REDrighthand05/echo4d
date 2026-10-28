@@ -29,7 +29,8 @@ from tum_public_roundtrip import (URL, ROOT, PINNED_ARCHIVE_SHA256,
 def build_plane_sweep_recording(frames: list[dict], target: Path, report: dict,
                                 *, max_anchors: int = 48, planes: int = 64,
                                 max_sources: int = 4,
-                                pairing: str = 'top2') -> Path:
+                                pairing: str = 'top2',
+                                source_visibility: bool = False) -> Path:
     camera, _, _ = stereo_resolution(320)
     training = [i for i in range(TOTAL) if i not in HOLDOUT]
     selected, selection_stats = select_plane_sweep_views(
@@ -47,14 +48,39 @@ def build_plane_sweep_recording(frames: list[dict], target: Path, report: dict,
         if i not in cache:
             cache[i] = load_stereo_rgb(frames[i]['rgb'], 320)
         return cache[i]
+    # First pass estimates source-camera Z from the SAME training RGB and
+    # known poses. The second pass tests whether each plane is hidden behind
+    # this estimated source surface. No holdout or sensor-depth PNG is read.
+    prepass: dict[int, np.ndarray] = {}
+    if source_visibility:
+        first_pass_stats = []
+        for left, partners in selected:
+            z, stats = infer_plane_sweep(rgb(left),
+                [(rgb(j), frames[j]['pose']) for j in partners],
+                camera, frames[left]['pose'], planes=planes, pairing=pairing)
+            prepass[left] = z
+            first_pass_stats.append({'left_index': left,
+                                     'valid_depth_pixels': stats['valid_depth_pixels']})
+        report['source_visibility_prepass'] = {
+            'method': 'train-only RGB-inferred Z, same pairing and 64-plane budget',
+            'total_valid_pixels': sum(s['valid_depth_pixels'] for s in first_pass_stats),
+            'per_anchor': first_pass_stats}
+    missing_source_z = 0
     entries = []
     diagnostics = []
     for left, partners in selected:
         if left in HOLDOUT or any(j in HOLDOUT for j in partners):
             raise DataError('Holdout RGB cannot enter plane-sweep reconstruction')
         sources = [(rgb(j), frames[j]['pose']) for j in partners]
+        if source_visibility:
+            missing_source_z += sum(j not in prepass for j in partners)
+            source_z = [prepass.get(j, np.zeros((camera.height, camera.width),
+                                                dtype=np.float32)) for j in partners]
+        else:
+            source_z = None
         depth, stats = infer_plane_sweep(rgb(left), sources, camera,
-                                        frames[left]['pose'], planes=planes, pairing=pairing)
+                                        frames[left]['pose'], planes=planes, pairing=pairing,
+                                        source_depths=source_z)
         diagnostics.append({'left_index': left, 'source_indices': partners, **stats})
         if stats['valid_depth_pixels'] < 100:
             continue
@@ -68,6 +94,9 @@ def build_plane_sweep_recording(frames: list[dict], target: Path, report: dict,
     report['plane_sweep'] = {'candidate_anchors': len(selected),
                              'saved_training_frames': len(entries),
                              'planes': planes, 'max_sources': max_sources, 'pairing': pairing,
+                             'source_visibility': source_visibility,
+                             'source_depth_maps_missing': missing_source_z,
+                             'occluded_photo_samples': sum(x['occluded_photo_samples'] for x in diagnostics),
                              'per_anchor': diagnostics,
                              'no_sensor_depth_pixels': True,
                              'train_only': True}
@@ -109,7 +138,8 @@ def execute(args: argparse.Namespace, report: dict) -> None:
                        'pose_source': 'TUM groundtruth known metric poses'}
     manifest = build_plane_sweep_recording(frames, work / 'mvs', report,
                                            max_anchors=args.max_anchors, planes=args.planes,
-                                           max_sources=args.max_sources, pairing=args.pairing)
+                                           max_sources=args.max_sources, pairing=args.pairing,
+                                           source_visibility=args.source_visibility)
     report['archived_inputs'] = archive_stereo_inputs(
         manifest, frames, root, args.report_dir / 'inputs')
     target = args.report_dir / 'reconstruction'
@@ -140,6 +170,8 @@ def main(argv=None):
     p.add_argument('--max-sources', type=int, default=4)
     p.add_argument('--planes', type=int, default=64)
     p.add_argument('--pairing', choices=('top2', 'diverse'), default='top2')
+    p.add_argument('--source-visibility', action='store_true',
+                   help='Two-pass TRAIN-only RGB depth occlusion test; no measured Z')
     args = p.parse_args(argv)
     args.report_dir.mkdir(parents=True, exist_ok=True)
     report = {'experiment': 'tum-xyz-known-pose-cpu-plane-sweep-no-measured-Z',
@@ -148,6 +180,7 @@ def main(argv=None):
               'inputs_retained': ['original 640x480 RGB', 'known metric poses',
                                   'camera intrinsics', 'depth.txt timestamp selection'],
               'inputs_removed': ['sensor depth PNG pixels', 'prior Mesh'],
+              'source_visibility_enabled': args.source_visibility,
               'evidence_level': 'real data experiment; no independent surface truth or #74 acceptance'}
     start = time.perf_counter()
     try:

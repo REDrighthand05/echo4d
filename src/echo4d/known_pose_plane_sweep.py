@@ -12,14 +12,16 @@ from echo4d.model import Camera, DataError, rigid_matrix
 def infer_plane_sweep(reference: np.ndarray, sources: list[tuple[np.ndarray, np.ndarray]],
                       camera: Camera, pose_ref: np.ndarray, *,
                       near: float = 0.4, far: float = 4.0,
-                      planes: int = 64, pairing: str = 'top2') -> tuple[np.ndarray, dict]:
+                      planes: int = 64, pairing: str = 'top2',
+                      source_depths: list[np.ndarray] | None = None) -> tuple[np.ndarray, dict]:
     """Return metric camera-Z using 2+ known-pose RGB views, not sensor depth.
 
     Inverse-depth planes are fronto-parallel in the reference camera. ZNCC
     uses 5x5 windows, requires two agreeing source views and a nonadjacent
     second-best margin. Optional diverse pairing requires source matches with
-    >=60-degree lateral parallax separation when available; it is NOT a full
-    source-depth visibility test. Occluded/textureless pixels remain unknown.
+    >=60-degree lateral parallax separation when available. Optional inferred
+    source-view Z rejects stable foreground occlusion (not sensor Z or GT).
+    Occluded/textureless pixels remain unknown.
     """
     import cv2
     if (not isinstance(reference, np.ndarray) or reference.dtype != np.uint8
@@ -34,6 +36,14 @@ def infer_plane_sweep(reference: np.ndarray, sources: list[tuple[np.ndarray, np.
     a = rigid_matrix(np.asarray(pose_ref).flatten(order='F'))
     k = np.array([[camera.fx, 0, camera.cx], [0, camera.fy, camera.cy], [0, 0, 1]], np.float64)
     inv_k = np.linalg.inv(k)
+    # Optional source-view Z is RGB-inferred in a separate TRAIN-only pass.
+    # It is not sensor depth or a prior Mesh, and may itself be wrong.
+    if source_depths is not None:
+        if (len(source_depths) != len(sources) or any(
+                not isinstance(d, np.ndarray) or d.shape != reference.shape[:2]
+                or d.dtype != np.float32 or not np.isfinite(d).all()
+                or np.any(d < 0) for d in source_depths)):
+            raise DataError('Source visibility requires aligned finite inferred Z')
     relative = []
     directions = []
     for image, pose in sources:
@@ -60,6 +70,15 @@ def infer_plane_sweep(reference: np.ndarray, sources: list[tuple[np.ndarray, np.
     # When only one baseline direction is observable, preserve old top-two
     # behavior rather than pretending that independent occlusion evidence exists.
     pairs = diverse_pairs if pairing == 'diverse' and diverse_pairs else all_pairs
+    stable_source_depth = []
+    if source_depths is not None:
+        support_kernel = np.ones((3, 3), np.uint8)
+        for d in source_depths:
+            stable = cv2.erode((d > 0).astype(np.uint8), support_kernel) > 0
+            spread = cv2.dilate(d, support_kernel) - cv2.erode(d, support_kernel)
+            stable &= spread <= np.maximum(.12, .08 * d)
+            stable_source_depth.append(stable.astype(np.uint8))
+    occluded_samples = 0
     gray = cv2.cvtColor(reference, cv2.COLOR_RGB2GRAY).astype(np.float32)
     win = (5, 5)
     def smooth(x):
@@ -69,12 +88,15 @@ def infer_plane_sweep(reference: np.ndarray, sources: list[tuple[np.ndarray, np.
     texture = vref >= 64.0
     yy, xx = np.indices(gray.shape, dtype=np.float32)
     xy = np.stack((xx, yy), axis=-1)
+    source_ray_z = [r[2, 0] * (xx - camera.cx) / camera.fx
+                    + r[2, 1] * (yy - camera.cy) / camera.fy + r[2, 2]
+                    for _, r, _ in relative] if source_depths is not None else []
     z_planes = 1.0 / np.linspace(1.0 / far, 1.0 / near, planes)
     volume = np.full((planes, camera.height, camera.width), np.inf, np.float32)
     kernel = np.ones((5, 5), np.uint8)
     for pi, z in enumerate(z_planes):
         candidates = []
-        for src, r, t in relative:
+        for si, (src, r, t) in enumerate(relative):
             h = k @ (r + np.outer(t, [0., 0., 1.]) / z) @ inv_k
             uv = cv2.perspectiveTransform(xy.reshape(-1, 1, 2), h).reshape(gray.shape + (2,))
             u, v = uv[..., 0], uv[..., 1]
@@ -88,6 +110,18 @@ def infer_plane_sweep(reference: np.ndarray, sources: list[tuple[np.ndarray, np.
             corr = cov / np.sqrt(np.maximum(vref * vs, 1e-8))
             cost = np.clip(1.0 - corr, 0, 2).astype(np.float32)
             valid = (cv2.erode(inside.astype(np.uint8), kernel) > 0) & (vs >= 64)
+            if source_depths is not None:
+                # Reject a plane behind a stable, nearer RGB-inferred surface
+                # in this source view. Unknown or discontinuous source Z is
+                # never treated as an occluder; no pixels are inpainted.
+                sampled = cv2.remap(source_depths[si], u, v, cv2.INTER_NEAREST,
+                                    borderMode=cv2.BORDER_CONSTANT, borderValue=0)
+                stable = cv2.remap(stable_source_depth[si], u, v, cv2.INTER_NEAREST,
+                                   borderMode=cv2.BORDER_CONSTANT, borderValue=0) > 0
+                projected_z = z * source_ray_z[si] + t[2]
+                hidden = stable & (projected_z > sampled + np.maximum(.12, .08 * sampled))
+                occluded_samples += int(np.count_nonzero(valid & hidden))
+                valid &= ~hidden
             cost[~valid] = np.inf
             candidates.append(cost)
         stack = np.stack(candidates)
@@ -116,6 +150,8 @@ def infer_plane_sweep(reference: np.ndarray, sources: list[tuple[np.ndarray, np.
         'measured_depth_used': False,
         'source_view_count': len(sources), 'planes': planes,
         'source_pairing': pairing,
+        'source_visibility': source_depths is not None,
+        'occluded_photo_samples': occluded_samples,
         'diverse_pair_count': len(diverse_pairs),
         'candidate_pair_count': len(pairs),
         'used_diverse_pairs': bool(pairing == 'diverse' and diverse_pairs),

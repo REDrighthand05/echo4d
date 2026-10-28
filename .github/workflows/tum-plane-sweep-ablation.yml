@@ -45,7 +45,7 @@ jobs:
           python tools/tum_plane_sweep.py \
             --work "$RUNNER_TEMP/tum-plane-sweep" \
             --report-dir "$GITHUB_WORKSPACE/artifacts/tum-plane-sweep" \
-            --max-anchors 48 --max-sources 4 --planes 64 --pairing diverse
+            --max-anchors 48 --max-sources 4 --planes 64 --pairing top2 --source-visibility
       - name: Preserve Mesh, five views and honest failure receipts
         if: always()
         uses: actions/upload-artifact@v4
