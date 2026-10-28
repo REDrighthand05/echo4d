@@ -1,0 +1,105 @@
+{
+  "experiment": "tum-fr1_xyz-train-only-source-Z-visibility-48train",
+  "date_utc": "2026-10-28",
+  "status": "real_mesh_generated_visual_fail",
+  "implementation_commit": "f1769fb6d0ee04b231e0b562106f0f799a22e19e",
+  "run": "https://github.com/REDrighthand05/echo4d/actions/runs/40660008049",
+  "artifact": "https://github.com/REDrighthand05/echo4d/actions/runs/40660008049/artifacts/12803905035",
+  "artifact_zip_sha256": "915152f94ad486749a39b4dfe7f0d20edab9fdb2d7d0f9c8284e691c43d57dbf",
+  "verify": "https://github.com/REDrighthand05/echo4d/actions/runs/40660008105",
+  "source": {
+    "dataset": "TUM fr1_xyz",
+    "source_rgb_resolution": [
+      640,
+      480
+    ],
+    "algorithm_resolution": [
+      320,
+      240
+    ],
+    "source_archive_sha256": "a0236d97b8c30cd93b653656d2b6c293ff7c982a4130ef2a1a8beecdb124ef98",
+    "depth_png_files_opened": 0,
+    "training_frames": 48,
+    "heldout_frames": 12,
+    "retained": [
+      "original RGB",
+      "TUM known metric camera poses",
+      "camera intrinsics",
+      "depth.txt timestamps for frozen selection"
+    ],
+    "removed": [
+      "sensor depth pixels",
+      "prior Mesh"
+    ],
+    "note": "Prepass source-camera depth is RGB-inferred from the same training frames, not measured or independently ground-truthed."
+  },
+  "algorithm": {
+    "planes": 64,
+    "max_sources": 4,
+    "pairing": "top2",
+    "source_visibility": true,
+    "source_depth_prepass_valid_pixels": 1013210,
+    "final_inferred_valid_pixels": 1010710,
+    "occluded_photo_samples_across_all_planes": 22673996,
+    "visibility_tolerance": "max(0.12m,0.08*source_depth); 3x3 stable source-depth support",
+    "note": "Occluded photo samples count is across source-plane-pixel tests, NOT number of final rejected pixels."
+  },
+  "old": {
+    "run": "https://github.com/REDrighthand05/echo4d/actions/runs/40646588976",
+    "artifact_zip_sha256": "25ff1d90085a1ac7dd10698209b3284f03f64a3be36aad4cddee9072e5c0de1b",
+    "mesh_sha256": "c0d47205fd2b3e11434475d1a79cde46a6187ca3095f6115e747513ded19e2b0",
+    "triangles": 5444,
+    "edge_connected_face_components": 535,
+    "largest_edge_connected_fraction": 0.46546656869948566,
+    "fixed_view_covered_pixels": {
+      "heldout-4": 32177,
+      "heldout-24": 27802,
+      "heldout-55": 22628,
+      "free-a": 22425,
+      "free-b": 20521
+    }
+  },
+  "new": {
+    "mesh_sha256": "73f6171ac35f3b2296e7613a1728e9dd5136848f1e20334ed6bec8a82aee1eed",
+    "triangles": 4576,
+    "edge_connected_face_components": 497,
+    "largest_edge_connected_fraction": 0.4187062937062937,
+    "fixed_view_covered_pixels": {
+      "heldout-4": 32074,
+      "heldout-24": 26892,
+      "heldout-55": 21377,
+      "free-a": 20749,
+      "free-b": 18978
+    }
+  },
+  "high_information_same_scene_reference": {
+    "run": "https://github.com/REDrighthand05/echo4d/actions/runs/40599164123",
+    "mesh_sha256": "008bfec37650bd054d29f2a81b9584c7276fa4c5ee600a4caa8494740b1c352a",
+    "inputs": "original RGB + measured depth + known poses, no prior Mesh",
+    "fixed_view_covered_pixels": {
+      "heldout-4": 76211,
+      "heldout-24": 76024,
+      "heldout-55": 70671,
+      "free-a": 52323,
+      "free-b": 33740
+    }
+  },
+  "comparison": {
+    "same_five_camera_poses": true,
+    "render": "perspective-correct vertex RGB, no hole fill, same 320x240 intrinsics",
+    "montage_sha256": "27947ae79b806e118cf5ba1fecfb3ddd74caa069107f7cd4b913c6808028aeae",
+    "old_glb_sha256": "8099f6e7d642b8594f335fd5ce46053a412cc3cd1f438ec79b57267349f3f359",
+    "new_glb_sha256": "dd08a4bdcb2f04bf73bbd152d4b3fd43444738678095efe282dec9dfc3dbb316",
+    "note": "Local montage/GLBs are SHA-pinned but not committed; original Meshes and five gray renders remain in Actions artifacts."
+  },
+  "conclusion": "FAIL: Edge-connected face components decreased 535 to 497, but largest connected fraction fell 46.55% to 41.87%, and all five fixed-view visible pixel counts fell. Real RGB MVS remains fragmented and cannot reliably recover desk/wall/room. Do not promote source visibility as default or claim #74 PASS.",
+  "limits": [
+    "No independent surface truth",
+    "No human acceptance",
+    "RGB-inferred source Z can contain correlated errors",
+    "Different method compute budgets (two passes vs one) though identical image/pose input",
+    "Current high-information fr1_room work is a different scene; only the older fr1_xyz sensor reference above is same-scene",
+    "Original source RGB not redistributed"
+  ],
+  "next_shortest_work": "Keep 48 anchors/4 sources and 64 planes; replace hard source-Z occlusion veto with bounded confidence-weighted photometric cost, then rerun same frozen five poses; do not change pose or source budget."
+}
