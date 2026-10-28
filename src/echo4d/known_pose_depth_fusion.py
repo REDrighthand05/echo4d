@@ -73,8 +73,6 @@ def fuse_reprojected_depths(depths: list[np.ndarray], poses: list[np.ndarray],
         for j in chosen:
             src = depths[j].reshape(-1)
             valid = (src >= 0.4) & (src <= 4.0)
-            if source_support is not None:
-                valid &= source_support[j]
             if not np.any(valid):
                 projected.append(np.zeros((h, w), np.float32))
                 continue
@@ -99,6 +97,9 @@ def fuse_reprojected_depths(depths: list[np.ndarray], poses: list[np.ndarray],
             np.minimum.at(nearest, uv, zz.astype(np.float32))
             visible = np.abs(zz - nearest[uv]) <= 1e-5
             keep = (color_gap <= color_threshold) & visible
+            if source_support is not None:
+                # An unsupported foreground is uncertain, not transparent.
+                keep &= source_support[j][valid][positive][inside]
             zbuffer = np.full(h * w, np.inf, dtype=np.float32)
             np.minimum.at(zbuffer, uv[keep], zz[keep].astype(np.float32))
             zbuffer[~np.isfinite(zbuffer)] = 0
