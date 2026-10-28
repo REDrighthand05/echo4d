@@ -1,0 +1,105 @@
+{
+  "experiment": "tum-fr1_xyz-known-pose-soft-visibility-48train-20261028",
+  "source": {
+    "dataset": "TUM fr1_xyz",
+    "original_rgb": [
+      640,
+      480
+    ],
+    "algorithm_rgb": [
+      320,
+      240
+    ],
+    "retained": [
+      "RGB frames",
+      "TUM measured metric camera poses",
+      "camera intrinsics",
+      "depth.txt timestamps for frozen selection"
+    ],
+    "removed": [
+      "sensor depth pixels",
+      "prior Mesh"
+    ],
+    "source_archive_sha256": "a0236d97b8c30cd93b653656d2b6c293ff7c982a4130ef2a1a8beecdb124ef98",
+    "train": 48,
+    "holdout": 12,
+    "depth_png_files_opened": 0
+  },
+  "method": {
+    "name": "CPU plane sweep ZNCC with bounded inferred source-Z occlusion penalty",
+    "max_anchors": 48,
+    "max_sources": 4,
+    "planes": 64,
+    "pairing": "top2",
+    "visibility_mode": "soft",
+    "source_depth": "RGB-inferred prepass, not sensor truth",
+    "penalized_photo_samples": 22673996
+  },
+  "implementation_head": "27ff6708331f74bc1f8b950b9893e6fd0978ca9c",
+  "run": "https://github.com/REDrighthand05/echo4d/actions/runs/40668250937",
+  "verify": "https://github.com/REDrighthand05/echo4d/actions/runs/40668250847",
+  "artifact": "https://github.com/REDrighthand05/echo4d/actions/runs/40668250937/artifacts/12807820315",
+  "artifact_zip_sha256": "7b267a768adce720a04fa7a3001230a882972e1e0ab0785090e66c920aa2c1a6",
+  "command": "python tools/tum_plane_sweep.py --work <empty-work> --report-dir <empty-report> --max-anchors 48 --max-sources 4 --planes 64 --pairing top2 --source-visibility --visibility-mode soft",
+  "result": {
+    "mesh_sha256": "ec3388cafe9e5a4fe584fa1031cf7972b95e6a6e720a66219f43cef3834a6705",
+    "vertices": 4581,
+    "triangles": 4719,
+    "edge_connected_components": 490,
+    "largest_edge_connected_fraction": 0.42381860563678747,
+    "covered_pixels": {
+      "heldout-4": 32386,
+      "heldout-24": 27372,
+      "heldout-55": 21633,
+      "free-a": 21863,
+      "free-b": 18441
+    }
+  },
+  "baseline_hard": {
+    "run": "https://github.com/REDrighthand05/echo4d/actions/runs/40660008049",
+    "triangles": 4576,
+    "edge_connected_components": 497,
+    "largest_edge_connected_fraction": 0.4187062937062937,
+    "covered_pixels": {
+      "heldout-4": 32074,
+      "heldout-24": 26892,
+      "heldout-55": 21377,
+      "free-a": 20749,
+      "free-b": 18978
+    }
+  },
+  "baseline_no_visibility": {
+    "run": "https://github.com/REDrighthand05/echo4d/actions/runs/40646588976",
+    "triangles": 5444,
+    "edge_connected_components": 535,
+    "largest_edge_connected_fraction": 0.46546656869948566,
+    "covered_pixels": {
+      "heldout-4": 32177,
+      "heldout-24": 27802,
+      "heldout-55": 22628,
+      "free-a": 22425,
+      "free-b": 20521
+    }
+  },
+  "high_information_same_scene": {
+    "run": "https://github.com/REDrighthand05/echo4d/actions/runs/40599164123",
+    "inputs": "RGB+measured sensor depth+known metric poses, no prior Mesh",
+    "covered_pixels": {
+      "heldout-4": 76211,
+      "heldout-24": 76024,
+      "heldout-55": 70671,
+      "free-a": 52323,
+      "free-b": 33740
+    }
+  },
+  "local_render_sha256": "957697bbca9e970b38382338011ea6d2bb3e18dd4ac11a30c723e9671a9f60b6",
+  "local_glb_sha256": "1dd3d91638a2070ae77755ae62c0a1c378d852e371fea7ed57cbbce9509b1eeb",
+  "assessment": "FAIL: soft source Z improves 4/5 coverage views and slightly improves connectivity vs hard veto, but is worse than unfiltered top2 on 4/5 views and remains highly fragmented; not recognizable complete room or #74 PASS.",
+  "limits": [
+    "No independent surface ground truth",
+    "Original source RGB not redistributed in artifact",
+    "Same-scene high-info reference is fr1_xyz; high-information fr1_room work is different scene",
+    "Local montage and GLB not committed to GitHub, but SHA-pinned; original PLY and five renders in Actions artifact"
+  ],
+  "next": "Prioritize robust multiview textureless depth and better real-scene coverage; no more simple occlusion threshold tuning."
+}
