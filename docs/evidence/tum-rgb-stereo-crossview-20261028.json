@@ -1,0 +1,79 @@
+{
+  "experiment": "tum-fr1-xyz-known-metric-pose-stereo-crossview-20261028",
+  "date_utc": "2026-10-28",
+  "source": {
+    "url": "https://cvg.cit.tum.de/rgbd/dataset/freiburg1/rgbd_dataset_freiburg1_xyz.tgz",
+    "archive_sha256": "a0236d97b8c30cd93b653656d2b6c293ff7c982a4130ef2a1a8beecdb124ef98",
+    "source_rgb_resolution": [
+      640,
+      480
+    ],
+    "stereo_rgb_resolution": [
+      320,
+      240
+    ],
+    "fusion_depth_resolution": [
+      320,
+      240
+    ],
+    "training_frames": 48,
+    "holdout_frames": 12,
+    "stereo_depth_frames": 24,
+    "measured_depth_pixels_used": false,
+    "prior_mesh_used": false,
+    "metric_pose_source": "TUM groundtruth.txt",
+    "depth_txt_use": "frame selection timestamps only"
+  },
+  "command": "python tools/tum_rgb_stereo.py --work <new-work-dir> --report-dir <new-report-dir> --stereo-width 320 --fusion-width 320 --max-anchors 48 --select-best-backup --cross-view-consistency",
+  "algorithm": "Reject RGB-inferred foreground if other nearby train-only inferred view observes farther depth and no train-only view corroborates; preserve occluded/unknown",
+  "code_sha": "19c758f99b5cbcba7b2e03d0580cafc744268a4c",
+  "run_url": "https://github.com/REDrighthand05/echo4d/actions/runs/40629973649",
+  "verify_url": "https://github.com/REDrighthand05/echo4d/actions/runs/40629973654",
+  "run_status": "completed/success",
+  "synthetic_tests": "23 passed (known-pose, archive, crossview)",
+  "artifact_id": 12791187091,
+  "artifact_zip_sha256": "b40a87f9d444a254973ca7823530a6097c5d53c6adc4c7ce818dd54b3e9cbac8",
+  "artifact_crc": "pass",
+  "candidate": {
+    "mesh_sha256": "4e6c4761b5e3449eea916f4c1fdc546ed7ddb6973ae398338a3746c96ee3422a",
+    "vertices": 3336,
+    "faces": 4367,
+    "components": 212,
+    "largest_component_face_fraction": 0.64346,
+    "depth_pixels_before_filter": 313732,
+    "depth_pixels_rejected": 32510,
+    "depth_pixels_after_filter": 281222,
+    "render_covered_pixels": {
+      "heldout-4": 55104,
+      "heldout-24": 49040,
+      "heldout-55": 39391,
+      "free-a": 18815,
+      "free-b": 14964
+    }
+  },
+  "baseline": {
+    "method": "largest contiguous RGB stereo backup, no cross-view filtering",
+    "code_sha": "87f7f70e4c4c42e924cd61279996f4c420426880",
+    "run_url": "https://github.com/REDrighthand05/echo4d/actions/runs/40623998876",
+    "mesh_sha256": "9b1f7159a9eaf65b00afaf69ba49662d70d09542cb43a2caf6681e4a92a7bc54",
+    "faces": 4671,
+    "components": 225,
+    "largest_component_face_fraction": 0.62556,
+    "render_covered_pixels": {
+      "heldout-4": 55942,
+      "heldout-24": 50657,
+      "heldout-55": 39576,
+      "free-a": 19573,
+      "free-b": 15669
+    }
+  },
+  "assessment": "FAIL: 13 fewer islands and slightly higher dominant-component fraction, but all 3 heldout and both free views lose covered pixels; visually remains fragmented. No recognizable complete room.",
+  "evidence_limits": [
+    "Both algorithms use TUM GT metric poses, not RGB-estimated poses",
+    "Only training RGB inferred depth; no sensor Z pixels in reconstruction",
+    "Same-sensor or synthetic tests are not independent surface truth",
+    "Depth-only 3+2 screenshots do not satisfy source-RGB side-by-side or independent human review",
+    "#74 remains FAIL; historical desk V2 16.7779cm versus 15cm FAIL remains unchanged"
+  ],
+  "next_smallest_action": "Replace sparse stereo matching failure at low-texture/disoccluded regions with a different train-only MVS depth method; compare fixed five views against high-information sensor-depth Mesh before any further input removal."
+}
