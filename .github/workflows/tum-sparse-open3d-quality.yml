@@ -7,7 +7,9 @@ on:
     paths:
       - 'tools/sparse_open3d_fusion.py'
       - 'tools/tum_sparse_open3d.py'
+      - 'tools/tum_sparse_training_density.py'
       - 'tests/python/test_sparse_open3d.py'
+      - 'tests/python/test_tum_sparse_training_density.py'
       - '.github/workflows/tum-sparse-open3d-quality.yml'
   workflow_dispatch:
 
@@ -34,32 +36,32 @@ jobs:
           python -m pip install -r requirements.lock
           python -m pip install --no-deps -e .
           python -m pip install 'open3d==0.19.0'
-      - name: Test real sparse engine on synthetic geometry and exclusions
+      - name: Test sparse engine and temporal train-only selection
         env:
           PYTHONPATH: tools
           OPENBLAS_NUM_THREADS: '1'
           OMP_NUM_THREADS: '1'
-        run: python -m pytest -q tests/python/test_sparse_open3d.py tests/python/test_tum_highres_tsdf.py
-      - name: Reconstruct real 320 dense versus 640 sparse color Mesh and render 3+2 views
+        run: python -m pytest -q tests/python/test_sparse_open3d.py tests/python/test_tum_sparse_training_density.py
+      - name: Reconstruct real sparse 640 Mesh at 48 versus expanded training views; render 3+2
         env:
           PYTHONPATH: tools
           OPENBLAS_NUM_THREADS: '1'
           OMP_NUM_THREADS: '1'
         run: |
-          python tools/tum_sparse_open3d.py \
-            --work "$RUNNER_TEMP/tum-sparse-geometry" \
-            --report-dir "$GITHUB_WORKSPACE/artifacts/tum-sparse-geometry"
+          python tools/tum_sparse_training_density.py \
+            --work "$RUNNER_TEMP/tum-sparse-density" \
+            --report-dir "$GITHUB_WORKSPACE/artifacts/tum-sparse-density"
       - name: Summarize actual result or failure
         if: always()
         run: |
-          if [ -f artifacts/tum-sparse-geometry/SUMMARY.md ]; then
-            cat artifacts/tum-sparse-geometry/SUMMARY.md >> "$GITHUB_STEP_SUMMARY"
+          if [ -f artifacts/tum-sparse-density/SUMMARY.md ]; then
+            cat artifacts/tum-sparse-density/SUMMARY.md >> "$GITHUB_STEP_SUMMARY"
           fi
-      - name: Retain actual Meshes and 3+2 RGB comparisons or failure receipt
+      - name: Retain both real colored Meshes and 3+2 comparisons or failure receipt
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: tum-sparse-geometry-${{ github.run_id }}
-          path: artifacts/tum-sparse-geometry/
+          name: tum-sparse-density-${{ github.run_id }}
+          path: artifacts/tum-sparse-density/
           if-no-files-found: warn
           retention-days: 14
