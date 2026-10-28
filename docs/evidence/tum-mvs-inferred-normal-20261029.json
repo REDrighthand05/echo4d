@@ -1,0 +1,85 @@
+{
+  "experiment": "tum-fr1_xyz-fixed48-rgb-inferred-local-normal-20261029",
+  "status": "FAIL_visual_and_continuity",
+  "tested_head": "b99633cd189c5ec1a2a8c7faa4110ad95e5088fb",
+  "real_run_url": "https://github.com/REDrighthand05/echo4d/actions/runs/40750838424",
+  "artifact_url": "https://github.com/REDrighthand05/echo4d/actions/runs/40750838424/artifacts/12843976446",
+  "source": {
+    "dataset": "TUM RGB-D fr1_xyz CC BY 4.0",
+    "archive_sha256": "a0236d97b8c30cd93b653656d2b6c293ff7c982a4130ef2a1a8beecdb124ef98",
+    "original_rgb": [
+      640,
+      480
+    ],
+    "fusion_rgb": [
+      320,
+      240
+    ],
+    "training_frames": 48,
+    "pose": "provided metric camera poses",
+    "depth": "frozen RGB-inferred Plane-Sweep depth from run 40692184301",
+    "removed": [
+      "sensor depth pixels during reconstruction",
+      "external prior Mesh"
+    ],
+    "sensor_depth_posthoc_only": true
+  },
+  "algorithm": "PR91 frozen short-bridge mesh plus local inferred-Z tangent-plane normals from +/-2-pixel cross; require two >=4cm-separated camera centres, |normal dot|>=0.57, centroid inferred Z agreement; original 8419 same-volume TSDF faces preserved",
+  "prior": {
+    "mesh_sha256": "e868d829e27584e88ded280ad813e1400702798814c427c3dcbac13fe03765b6",
+    "faces": 9462,
+    "edge_connected_components": 619,
+    "largest_edge_component_faces": 3985
+  },
+  "new": {
+    "mesh_sha256": "0bd6634ecc554afa92273f42e2a32e9534537abd8bcb932fdf6eaa5e53af1165",
+    "faces": 8530,
+    "edge_connected_components": 696,
+    "largest_edge_component_faces": 3635,
+    "original_faces_preserved": 8419,
+    "extra_faces_retained": 111,
+    "prior_extra_faces": 1043,
+    "observation_counts": "unavailable from source PLY; exporter placeholders not confidence"
+  },
+  "five_view_coverage": [
+    {
+      "view": "heldout-4",
+      "old": 46781,
+      "new": 45788
+    },
+    {
+      "view": "heldout-24",
+      "old": 41388,
+      "new": 40312
+    },
+    {
+      "view": "heldout-55",
+      "old": 31305,
+      "new": 30444
+    },
+    {
+      "view": "free-a",
+      "old": 32898,
+      "new": 32103
+    },
+    {
+      "view": "free-b",
+      "old": 27322,
+      "new": 26201
+    }
+  ],
+  "posthoc_sensor_diagnostic": {
+    "removed_sensor_valid_pixels": 1987,
+    "removed_over_30cm_pixels": 281,
+    "removed_over_30cm_fraction": 0.1414,
+    "note": "The majority of removed sensor-valid pixels were not >30cm wrong; orientation filter is over-restrictive. This is not independent 3D ground truth."
+  },
+  "visual_verdict": "FAIL: desk and monitor identifiable from source RGB, but both Meshes have major holes and free views are fragmented. The new method removes some wrong surfaces but loses too much visible and connected geometry. TUM fr1_xyz is desk-focused, not a full-room survey.",
+  "repeatability_note": "Two successful runs produced identical vertex coordinates, face indices and five-view coverage; byte SHA differed in a few exported vertex-normal float bytes. Do not claim byte-identical Mesh reproducibility.",
+  "tests": "4 new orientation tests plus previous geometry regression; real workflow SUCCESS",
+  "historical_fail": [
+    "PR91 short bridge added 60.26% >30cm wrong new-only sensor-valid pixels",
+    "This experiment rejects 932 of 1043 prior extra faces, but worsens connectivity and coverage"
+  ],
+  "next_shortest_unblock": "Do not add another hard face filter. First inspect inferred depth-map consistency and geometry gaps against a high-information same-scene baseline; then use a true room-view RGB-D scene to test room/wall/floor visibility before the next depth-removal ablation."
+}
