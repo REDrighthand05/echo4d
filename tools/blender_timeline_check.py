@@ -5,6 +5,7 @@ import math
 import sys
 from pathlib import Path
 from mathutils import Vector
+from bpy_extras.object_utils import world_to_camera_view
 
 root = Path(sys.argv[sys.argv.index('--')+1])
 bpy.ops.wm.open_mainfile(filepath=str(root/'scene.blend'), load_ui=False)
@@ -21,5 +22,8 @@ for entry in timeline['frames']:
     x,y,z = matrix[12:15]
     assert (scene.camera.location-Vector((x,-z,y))).length < 1e-5
     assert (scene.camera.matrix_world.to_quaternion() @ Vector((0,0,-1))-Vector((0,-1,0))).length < 1e-5
+    projected=world_to_camera_view(scene,scene.camera,Vector((x+.1,-z-1,y+.05)))
+    assert abs(projected.x-(319.5+525*.1)/640)<1e-4
+    assert abs(projected.y-(1-(239.5+525*.05)/480))<1e-4
 assert any(m.use_nodes for m in bpy.data.materials)
 (root/'timeline-check.json').write_text(json.dumps({'status':'PASS', 'frames':3, 'units':'unknown', 'reopened':True}))

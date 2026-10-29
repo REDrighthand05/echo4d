@@ -34,7 +34,7 @@ jobs:
               frames.append({'name':str(t),'t_s':t,'camera_id':1,'camera_to_sfm_world':pose})
           Path('native-check/timeline.json').write_text(json.dumps({'frames':frames,'cameras':{'1':[640,480,525,525,319.5,239.5]}}))
           PY
-      - run: blender -b --python-exit-code 1 --python tools/export_blender_scene.py -- --input native-check/input.glb --output native-check/scene.blend --units unknown --trajectory native-check/timeline.json --provenance 'SYNTHETIC integration fixture, not real room reconstruction'
+      - run: blender -b --python-exit-code 1 --python tools/export_blender_scene.py -- --input native-check/input.glb --output native-check/scene.blend --units unknown --trajectory native-check/timeline.json --render-views --provenance 'SYNTHETIC integration fixture, not real room reconstruction'
       - run: blender -b --python-exit-code 1 --python tools/blender_timeline_check.py -- native-check
       - uses: actions/upload-artifact@v4
         if: always()
