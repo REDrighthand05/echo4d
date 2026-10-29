@@ -162,7 +162,7 @@ def run(args):
                'config':{'max_frames':args.max_frames, 'resolution_level':args.resolution_level,
                          'min_registration':args.min_registration, 'threads':args.threads,
                          'camera_model':args.camera_model, 'camera_params':args.camera_params},
-               'executable_sha256':{n:file_sha256(p) for n,p in programs.items()}}
+               'executable_sha256':{n:file_sha256(Path(p)) for n,p in programs.items()}}
     write_json(output/'scene-report.json', receipt)
     started = time.monotonic()
     try:
