@@ -1,0 +1,80 @@
+{
+  "date_utc": "2026-10-29",
+  "experiment": "TUM fr1_room 96 RGB-D, one known metric pose, robust sparse PnP global graph",
+  "status": "VISUAL_FAIL",
+  "input_boundary": {
+    "retained": [
+      "96 original real 640x480 RGB frames, downsampled to 320x240 for fusion",
+      "96 real measured metric depth maps",
+      "camera calibration",
+      "one real metric camera pose"
+    ],
+    "removed": [
+      "95 withheld GT camera poses",
+      "prior Mesh reconstruction input"
+    ],
+    "metric_scale": "measured depth, not RGB-only",
+    "withheld_gt_and_old_mesh": "used after candidate fusion only"
+  },
+  "git": {
+    "tested_commit": "23eb9c00ac9e3d81f7450d5dfa040fb6b2eaa3c7",
+    "pull_request": "https://github.com/REDrighthand05/echo4d/pull/115",
+    "workflow": "https://github.com/REDrighthand05/echo4d/actions/runs/40869603248",
+    "artifact": "https://github.com/REDrighthand05/echo4d/actions/runs/40869603248/artifacts/12894893999",
+    "workflow_conclusion": "SUCCESS",
+    "tests": "passed"
+  },
+  "real_results": {
+    "old_pose_error_m": {
+      "median": 0.06336638960304723,
+      "max": 0.4997515357341806,
+      "p90": 0.3943665132085923
+    },
+    "new_pose_error_m": {
+      "median": 0.0806065699060255,
+      "max": 0.508062112752754,
+      "p90": 0.36975526231331873
+    },
+    "old_faces": 274230,
+    "new_faces": 282157,
+    "new_components": 1432,
+    "largest_component_face_fraction": 0.8295594296792211,
+    "graph_edges": 282,
+    "iterations": 5,
+    "observed_edge_residual_l2": {
+      "old": 0.5324320951003312,
+      "new": 0.2886678163677571
+    },
+    "covered_pixels_3_recorded_2_free": {
+      "old": [
+        75291,
+        66426,
+        76157,
+        72697,
+        74386
+      ],
+      "new": [
+        74712,
+        65902,
+        75759,
+        71784,
+        74327
+      ]
+    }
+  },
+  "artifact_sha256": {
+    "zip": "bf7a73dd2290bcfc6251ace2b097019f93fcfcb2f4ca5b424bd3382bed675588",
+    "new_mesh_ply": "1b5cc2777b8b15d1414acf154bce2346351a73eea11a182765308910f2e7ce3e",
+    "new_mesh_glb": "a049a9b8a55db09a2efb49707a34c7494688c7946526409be48b88eae9b41701",
+    "five_view_board": "91de66600a5ca854b1df22fbee886ad2c1008a6416528a51075f0ff280daa0cb"
+  },
+  "visual_inspection": "Compared actual 3 recorded source-camera views and 2 free views: monitor and desk recognizable in both. New and old geometry look almost identical; slightly altered blur/edges and missing surfaces remain. All five new views have fewer visible mesh pixels. No continuous walls/floor or reliable free orbit. Improvement in edge-residual optimization is NOT a geometry improvement.",
+  "limits": [
+    "No new independent surface accuracy validation",
+    "Not RGB-only",
+    "Browser interactive rotation not tested",
+    "No #74 PASS",
+    "Previous one-anchor model still has large pose outliers"
+  ],
+  "next_shortest": "Stop local pose-graph tweaks after two negative results (#113 ICP, #115 robust graph). Wait for complete upstream Open3D reconstruction system #114 to produce actual Stanford mesh, then use that complete pipeline to ablate known poses/depth on the same fixed room; compare same 3+2 views."
+}
