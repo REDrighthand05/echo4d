@@ -1,0 +1,83 @@
+name: Stanford real measured objects plus existing scan room shell
+on:
+  push:
+    branches: [research/stanford-observed-prior-shell-20261029]
+    paths:
+      - tools/stanford_observed_prior_shell.py
+      - tools/stanford_hybrid_real_views.py
+      - tests/python/test_stanford_observed_prior_shell.py
+      - .github/workflows/stanford-observed-prior-shell.yml
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  real-stanford-hybrid:
+    runs-on: ubuntu-latest
+    timeout-minutes: 110
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install existing real-scene geometry stack
+        run: |
+          pip install -r requirements.lock
+          pip install --no-deps -e .
+          pip install 'open3d==0.19.0' 'trimesh>=4,<5'
+      - name: Verify furniture protection and room shell geometry
+        env:
+          PYTHONPATH: tools
+        run: python -m pytest -q tests/python/test_stanford_observed_prior_shell.py
+      - name: Fuse existing scan shell with original 426789-face observed geometry
+        env:
+          PYTHONPATH: tools
+          OPENBLAS_NUM_THREADS: '1'
+          OMP_NUM_THREADS: '1'
+        run: |
+          python tools/stanford_observed_prior_shell.py \
+            --observed docs/real-room-review/stanford-lounge-native-planar/OBSERVED-plus-INFERRED.glb \
+            --prior docs/real-room-review/stanford-lounge-second-room/PREEXISTING-PRIOR-RGB.glb \
+            --observed-report docs/real-room-review/stanford-lounge-native-planar/result.json \
+            --prior-report docs/real-room-review/stanford-lounge-second-room/result.json \
+            --output artifacts/stanford-hybrid
+      - name: Preserve geometry before any download or rendering failure
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: stanford-hybrid-geometry-${{ github.run_id }}
+          path: artifacts/stanford-hybrid/
+          retention-days: 14
+      - name: Actual 3 recorded RGB cameras and 2 ROOM-SCALE free views
+        env:
+          PYTHONPATH: tools
+          OPENBLAS_NUM_THREADS: '1'
+          OMP_NUM_THREADS: '1'
+        run: |
+          python tools/stanford_hybrid_real_views.py \
+            --observed docs/real-room-review/stanford-lounge-native-planar/OBSERVED-plus-INFERRED.glb \
+            --observed-report docs/real-room-review/stanford-lounge-native-planar/result.json \
+            --output artifacts/stanford-hybrid \
+            --cache "$RUNNER_TEMP/stanford-lounge"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: stanford-hybrid-real-3plus2-${{ github.run_id }}
+          path: artifacts/stanford-hybrid/
+          retention-days: 14
+      - name: Publish actual GLB and 3+2 review on THIS research branch only
+        run: |
+          set -e
+          branch=research/stanford-observed-prior-shell-20261029
+          dest=docs/real-room-review/stanford-lounge-hybrid
+          mkdir -p "$dest"
+          cp artifacts/stanford-hybrid/*.glb artifacts/stanford-hybrid/result.json "$dest/"
+          cp -r artifacts/stanford-hybrid/three-real-two-free "$dest/"
+          git config user.name "echo4d-real-room-ci"
+          git config user.email "echo4d-real-room-ci@users.noreply.github.com"
+          git add "$dest"
+          if ! git diff --cached --quiet; then
+            git commit -m "results(real-room): Stanford measured objects and labeled existing scan shell"
+            git fetch origin "$branch"
+            git rebase "origin/$branch"
+            git push origin "HEAD:refs/heads/$branch"
+          fi
