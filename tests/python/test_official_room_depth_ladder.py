@@ -20,13 +20,14 @@ class TestOfficialLoungeDepthLadder(unittest.TestCase):
             (root/'depth').mkdir()
             records = []
             for i in range(3):
-                (root/'color'/f'{i:06d}.png').touch()
-                (root/'depth'/f'{i:06d}.png').touch()
+                (root/'color'/f'{i+1:06d}.png').touch()
+                (root/'depth'/f'{i+1:06d}.png').touch()
                 records.extend([f'{i} {i} {i+1}', *(' '.join(map(str, row)) for row in np.eye(4))])
             (root/'trajectory.log').write_text('\n'.join(records)+'\n')
             poses = mod.load_trajectory(root/'trajectory.log')
             pairs = mod.native_pairs(root/'color', root/'depth', poses)
             self.assertEqual([p[0] for p in pairs], [0, 1, 2])
+            self.assertEqual(pairs[0][1].name, '000001.png')
             self.assertEqual(len(mod.even_indices(3000, 600)), 600)
             self.assertEqual(len(mod.even_indices(3000, 150)), 150)
 
