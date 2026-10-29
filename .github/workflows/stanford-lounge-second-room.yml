@@ -1,0 +1,76 @@
+name: Second REAL room Stanford Lounge (measured vs PRIOR)
+on:
+  push:
+    branches: [research/stanford-lounge-second-real-room-20261029]
+    paths:
+      - tools/stanford_lounge_second_room.py
+      - tests/python/test_stanford_lounge_second_room.py
+      - .github/workflows/stanford-lounge-second-room.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  reconstruct-second-real-room:
+    runs-on: ubuntu-latest
+    timeout-minutes: 110
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install mature Open3D
+        run: |
+          pip install -r requirements.lock
+          pip install --no-deps -e .
+          pip install 'open3d==0.19.0' 'trimesh>=4,<5'
+      - name: Check frame and geometry guards
+        env:
+          PYTHONPATH: tools
+        run: python -m pytest -q tests/python/test_stanford_lounge_second_room.py
+      - name: Real Stanford Lounge 360-frame TSDF and optional existing PRIOR
+        env:
+          PYTHONPATH: tools
+          OPENBLAS_NUM_THREADS: '1'
+          OMP_NUM_THREADS: '1'
+        run: |
+          python tools/stanford_lounge_second_room.py \
+            --frames 360 --voxel .025 \
+            --cache "$RUNNER_TEMP/lounge-data" \
+            --output "$GITHUB_WORKSPACE/artifacts/loungeroom"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: real-stanford-lounge-${{ github.run_id }}
+          path: artifacts/loungeroom/
+          retention-days: 14
+  publish-viewable-mesh:
+    needs: reconstruct-second-real-room
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: real-stanford-lounge-${{ github.run_id }}
+          path: review
+      - name: Commit real GLB and 3+2 visual images
+        run: |
+          set -e
+          dest=docs/real-room-review/stanford-lounge-second-room
+          mkdir -p "$dest"
+          cp review/OBSERVED-viewable.glb review/result.json "$dest/"
+          cp -r review/observed "$dest/"
+          if test -d review/ab; then cp -r review/ab "$dest/"; fi
+          if test -f review/PREEXISTING-PRIOR-RGB.glb; then
+            cp review/PREEXISTING-PRIOR-RGB.glb review/PREEXISTING-PRIOR-provenance.glb "$dest/"
+          fi
+          git config user.name "echo4d-real-room-ci"
+          git config user.email "echo4d-real-room-ci@users.noreply.github.com"
+          git add "$dest"
+          git diff --cached --quiet && exit 0
+          git commit -m "results(real-room): real Stanford Lounge observed and labeled prior"
+          git fetch origin research/stanford-lounge-second-real-room-20261029
+          git rebase origin/research/stanford-lounge-second-real-room-20261029
+          git push origin HEAD:refs/heads/research/stanford-lounge-second-real-room-20261029
