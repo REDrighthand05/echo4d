@@ -1,7 +1,7 @@
-name: Redwood real measured-depth edge guard A/B
+name: Redwood real occlusion-aware far-side TSDF A/B
 on:
   push:
-    branches: [research/redwood-depth-edge-guard-20261030]
+    branches: [research/redwood-occlusion-aware-depth-20261030]
     paths:
       - tools/redwood_depth_edge_guard.py
       - tests/python/test_redwood_depth_edge_guard.py
@@ -24,7 +24,7 @@ jobs:
           python -m pip install -r requirements.lock
           python -m pip install --no-deps -e .
           python -m pip install 'open3d==0.19.0' 'trimesh>=4,<5'
-      - name: Unit test discontinuity handling
+      - name: Unit test foreground-preserving occlusion guard
         env:
           PYTHONPATH: tools
         run: python -m pytest -q tests/python/test_redwood_depth_edge_guard.py
@@ -45,14 +45,14 @@ jobs:
           python tools/redwood_depth_edge_guard.py \
             --source-ply source/recorded-rgbd-full.ply \
             --cache "$RUNNER_TEMP/redwood-edge-guard" \
-            --output "$GITHUB_WORKSPACE/artifacts/redwood-depth-edge" \
+            --output "$GITHUB_WORKSPACE/artifacts/redwood-farside" \
             --threshold-mm 90 \
             --budget 600
       - name: Upload actual colored GLB, original-camera and free-camera A/B
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: real-redwood-depth-edge-${{ github.run_id }}
-          path: artifacts/redwood-depth-edge/
+          name: real-redwood-farside-${{ github.run_id }}
+          path: artifacts/redwood-farside/
           retention-days: 14
           if-no-files-found: warn
