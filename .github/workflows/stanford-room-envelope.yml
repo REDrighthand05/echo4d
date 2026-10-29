@@ -1,0 +1,58 @@
+name: Stanford measured room-shell extrapolation and five real views
+on:
+  push:
+    branches: [research/stanford-room-envelope-20261029]
+    paths:
+      - tools/stanford_room_envelope.py
+      - tests/python/test_stanford_room_envelope.py
+      - .github/workflows/stanford-room-envelope.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  room-shell-real:
+    runs-on: ubuntu-latest
+    timeout-minutes: 110
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install geometry and raycasting libraries
+        run: |
+          pip install -r requirements.lock
+          pip install --no-deps -e .
+          pip install 'open3d==0.19.0' 'trimesh>=4,<5'
+      - name: Unit guards on support and bounded inference
+        env:
+          PYTHONPATH: tools
+          OPENBLAS_NUM_THREADS: '1'
+        run: python -m pytest -q tests/python/test_stanford_room_envelope.py
+      - name: Reconstruct real measured Stanford room shell from frozen 480-frame Mesh
+        env:
+          PYTHONPATH: tools
+          OPENBLAS_NUM_THREADS: '1'
+          OMP_NUM_THREADS: '1'
+        run: |
+          python tools/stanford_room_envelope.py \
+            --source docs/real-room-review/stanford-measured-gap/OBSERVED-gap-guided-full.glb \
+            --output artifacts/stanford-envelope
+          cp artifacts/stanford-envelope/OBSERVED-plus-INFERRED-room-envelope.glb \
+             artifacts/stanford-envelope/OBSERVED-plus-INFERRED.glb
+      - name: Render original 640x480 RGB camera views and room-scale free views
+        env:
+          PYTHONPATH: tools
+          OPENBLAS_NUM_THREADS: '1'
+          OMP_NUM_THREADS: '1'
+        run: |
+          python tools/stanford_planar_real_views.py \
+            --output artifacts/stanford-envelope \
+            --cache "$RUNNER_TEMP/stanford-lounge-rgbd"
+      - name: Retain all actual Mesh files and five views, even on visual failure
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: stanford-room-envelope-${{ github.run_id }}
+          path: artifacts/stanford-envelope/
+          retention-days: 14
+          if-no-files-found: warn
