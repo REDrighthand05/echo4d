@@ -1,0 +1,66 @@
+{
+  "experiment": "TUM fr1_room known-pose RGB SIFT local geometry",
+  "date_utc": "2026-10-29",
+  "status": "VISUAL_FAIL_no_material_room_recovery",
+  "issue_74": "FAIL_NOT_ACCEPTED",
+  "tested_checkout": "5d9b09964af12ed60a3f69e6d8932dd82bf4101c",
+  "workflow_run": "https://github.com/REDrighthand05/echo4d/actions/runs/40803472016",
+  "artifact": "https://github.com/REDrighthand05/echo4d/actions/runs/40803472016/artifacts/12867172343",
+  "control_run": "https://github.com/REDrighthand05/echo4d/actions/runs/40797864880",
+  "source_run": "https://github.com/REDrighthand05/echo4d/actions/runs/40790769632",
+  "kept": [
+    "real 640x480 TUM RGB (320x240 RGB for depth)",
+    "30 DA2 Small RGB-predicted depth maps",
+    "known metric camera poses",
+    "intrinsics"
+  ],
+  "removed": [
+    "measured sensor depth pixels",
+    "prior existing Mesh"
+  ],
+  "sensor_depth_used": false,
+  "prior_mesh_used_in_candidate": false,
+  "metric_scale": "known metric poses + prior RGB-only anchor calibration; NOT monocular absolute scale",
+  "algorithm": "OpenCV SIFT RGB features + RANSAC + calibrated triangulation + bounded regularized local depth deformation; no GPU; no new DA2 inference",
+  "real_result": {
+    "cpu_tests_passed": 4,
+    "rgb_triangulated_pairs": 33,
+    "frames_locally_corrected": 15,
+    "frames_total": 30,
+    "withheld_unique_rgb_anchors_on_accepted_frames": 457,
+    "withheld_anchor_mae_before_m": 0.060619393906430064,
+    "withheld_anchor_mae_after_m": 0.049914663024533464,
+    "old_mesh_sha256": "20b156dd18d63aa62190bcacc02a50c563b77ca144e739875892028197c0f2dd",
+    "new_mesh_sha256": "bf27e654b5b743ee3ac9fd2295fee01f1da04f9c8a93a84e403b02ea806ce120",
+    "old_faces": 83431,
+    "new_faces": 83306,
+    "old_components": 775,
+    "new_components": 769,
+    "old_largest_component_fraction": 0.5432752813702341,
+    "new_largest_component_fraction": 0.5719275922502581,
+    "frozen_view_names": [
+      "heldout-7.png",
+      "heldout-92.png",
+      "heldout-162.png",
+      "free-3.png",
+      "free-4.png"
+    ],
+    "old_covered_pixels": [
+      69047,
+      55716,
+      73196,
+      45601,
+      68423
+    ],
+    "new_covered_pixels": [
+      69792,
+      55855,
+      73287,
+      45462,
+      68643
+    ]
+  },
+  "visual_assessment": "The source-camera desk and displays remain recognizable, but old and new images are nearly indistinguishable; free-view room structure is still severely warped and incomplete. Better sparse RGB anchor agreement and largest-component share are not room recovery.",
+  "limitations": "Held-out sparse triangulated anchors are same-scene feature points, not independent surface truth. Five-view coverage is not geometric accuracy. Echo4D native browser rotation not tested. Original TUM is 640x480, not HD.",
+  "next": "Use mature calibrated dense multi-view depth/geometry provider or RGB feature-track bundle geometry to address unsupported areas; preserve this failed control, stop tuning sparse local correction."
+}
