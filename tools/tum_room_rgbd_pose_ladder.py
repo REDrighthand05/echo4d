@@ -280,7 +280,8 @@ if __name__ == "__main__":
     parser.add_argument("--output", required=True)
     parser.add_argument("--work", required=True)
     parser.add_argument("--archive", default=None)
-    parser.add_argument("--levels", type=int, nargs="+", default=[13, 5, 1])\n    parser.add_argument("--max-gap", type=int, default=6)
+    parser.add_argument("--levels", type=int, nargs="+", default=[13, 5, 1])
+    parser.add_argument("--max-gap", type=int, default=6)
     args = parser.parse_args()
     result = run(args.source, args.room96, args.output, args.work, args.archive, args.levels, args.max_gap)
     print(json.dumps({"pose_graph": result["pose_graph"],
