@@ -31,6 +31,23 @@ class TestOfficialLoungeDepthLadder(unittest.TestCase):
             self.assertEqual(len(mod.even_indices(3000, 600)), 600)
             self.assertEqual(len(mod.even_indices(3000, 150)), 150)
 
+    def test_montage_has_photo_plus_all_three_models(self):
+        from PIL import Image
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            for name, rgb in [('full', (0, 255, 0)), ('600', (0, 0, 255)), ('150', (255, 255, 0))]:
+                (root/name/'views').mkdir(parents=True)
+                for frame in (0, 1500, 2999):
+                    im = Image.new('RGB', (640, 268), rgb)
+                    im.paste((255, 0, 0), (0, 28, 320, 268))
+                    im.save(root/name/'views'/f'recorded-{frame:05d}.png')
+                for frame in (1, 2):
+                    Image.new('RGB', (320, 268), rgb).save(root/name/'views'/f'free-{frame}.png')
+            result = Image.open(mod.comparison_image(root, ['full', '600', '150']))
+            self.assertEqual(result.size, (1280, 1398))
+            self.assertEqual([result.getpixel((x, 100)) for x in (160, 480, 800, 1120)],
+                             [(255, 0, 0), (0, 255, 0), (0, 0, 255), (255, 255, 0)])
+
     def test_reject_missing_depth_or_pose(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
