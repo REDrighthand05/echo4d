@@ -1,0 +1,59 @@
+{
+  "experiment": "TUM fr1_room 96-view occlusion-aware predicted depth before TSDF",
+  "date_utc": "2026-10-29",
+  "tested_checkout": "4b4656fc9e08c6dd1ff8bdeadc0c06de9c8c0344",
+  "run_id": 40832708084,
+  "run_url": "https://github.com/REDrighthand05/echo4d/actions/runs/40832708084",
+  "artifact_id": 12879288794,
+  "artifact_url": "https://github.com/REDrighthand05/echo4d/actions/runs/40832708084/artifacts/12879288794",
+  "artifact_zip_sha256": "c847f9870eef5971e3c3ce487bd8b83672db49da88434f4abc3f0f8bc22e5c47",
+  "input": "TUM fr1_room 96 original 640x480 RGB, 96 known metric poses and calibration; fusion 320x240",
+  "removed": "0 measured sensor depth in pure RGB candidate, no prior Mesh; 32/64/96 measured depth rungs are separate controls",
+  "prediction_source": "Frozen CPU DA2 Small known-pose RGB metric-calibrated 96 maps from #105 run 40826766484, 92 nonempty; no model inference in this run",
+  "algorithm": "Reject pixels with zero depth agreements and >=2 independent farther-visible predicted depth contradictions, treating nearer depths as occlusions",
+  "prediction_filter": {
+    "valid_pixels_before": 5674182,
+    "valid_pixels_after": 5472868,
+    "removed": 201314,
+    "removed_fraction": 0.03547894656886226,
+    "nonempty_frames": 92
+  },
+  "zero_sensor_old": {
+    "faces": 185796,
+    "components": 1709,
+    "mesh_sha256": "eae89399da53cc34a3c61a85daada404a7959fda935ea3dc0b592a3090dc62cb",
+    "covered_pixels_3plus2": [
+      72545,
+      70600,
+      75468,
+      64143,
+      71520
+    ]
+  },
+  "zero_sensor_new": {
+    "faces": 185725,
+    "components": 1710,
+    "mesh_sha256": "499dab43130d6612e119ae86dd1f94513523103e34bf6a3915cfad9e46ca8eb7",
+    "covered_pixels_3plus2": [
+      72520,
+      70553,
+      75469,
+      64123,
+      71473
+    ],
+    "largest_component_fraction": 0.5470668999865392
+  },
+  "other_rungs": {
+    "sensor32_faces": 193324,
+    "sensor64_faces": 195497,
+    "sensor96_faces": 137255,
+    "sensor96_mesh_sha256": "357531cda51a6627b574270198d24de9d430589fa2dc054400bf7daf9b6eee31"
+  },
+  "visual_sha256": "beb30f48832c51ef60dd18789350644bc7528f96f77bbab3737639bd2e3794b2",
+  "visual_review": "FAIL: old and new Mesh visually almost identical at three original cameras and two free views. Desk and monitor recognizable only partially; false warped surfaces, missing walls/floor, holes and discontinuous room remain. More filtering is not an improvement.",
+  "tests": "7 local synthetic CPU tests passed; GitHub workflow CPU tests, actual four Open3D Meshes and five-view render succeeded; Verify succeeded",
+  "independent_surface_truth": false,
+  "browser_rotation_verified": false,
+  "issue_74": "FAIL / NOT ACCEPTED",
+  "next_shortest_unblock": "Stop local DA2 depth filtering. Test a mature multi-view dense reconstruction with known metric camera poses on same original RGB, compare against 96-sensor reference and frozen old 3+2 camera views."
+}
