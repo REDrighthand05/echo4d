@@ -227,7 +227,28 @@ def run(source, room96, output, work, archive_override=None, levels=(13, 5, 1), 
               "sensor_depth_pngs_sha256": {str(k): v for k, v in hashes.items()},
               "pose_graph": {**graph_report, "max_temporal_pair_gap": max_gap}, "variants": {},
               "visual_acceptance": "UNREVIEWED; no #74 PASS"}
-    old_mesh = room96 / "mesh-sensor-96/mesh.ply"
+    # Fair visual A/B: rebuild the 96-known-pose control at the EXACT same
+    # voxel, truncation, frame selection and RGB-D samples as each candidate.
+    # The frozen #106 Mesh has a different voxel/truncation and is not a fair
+    # single-variable pose ablation control.
+    baseline_input = output / "input-poses-96"
+    prepare_candidate(source96, manifest, depths, known,
+                      [{"kind": "known_metric_anchor"} for _ in known], baseline_input)
+    baseline_dir = output / "mesh-poses-96"
+    baseline_fusion = fuse_sparse(baseline_input / "recording.json", baseline_dir,
+                                  voxel_m=0.03, truncation_m=0.09,
+                                  max_depth_m=4.0, pixel_stride=2)
+    old_mesh = baseline_dir / "mesh.ply"
+    mesh_glb(old_mesh, output / "measured-rgbd-poses-96.glb")
+    baseline_vertices, baseline_faces = read_echo_ply(old_mesh)
+    report["reference"] = {
+        "known_metric_poses": 96, "measured_sensor_depth_frames": 96,
+        "same_fusion_settings_as_candidates": True,
+        "faces": len(baseline_faces),
+        "components": face_components(len(baseline_vertices), baseline_faces),
+        "mesh_sha256": file_sha256(old_mesh),
+        "fusion": baseline_fusion,
+        "frozen_older_mesh_only_posthoc": str(room96 / "mesh-sensor-96/mesh.ply")}
     for count in levels:
         anchors = anchor_indices(count, 96)
         poses, provenance = estimate_poses(graph, known, anchors)
