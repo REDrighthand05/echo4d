@@ -32,6 +32,24 @@ def run(source, output, provenance):
     output.parent.mkdir(parents=True, exist_ok=True)
     bpy.ops.wm.read_factory_settings(use_empty=True)
     bpy.ops.import_scene.gltf(filepath=str(source))
+    # Vertex-colored GLBs may legally omit materials.
+    for obj in bpy.context.scene.objects:
+        if obj.type != "MESH":
+            continue
+        attributes = obj.data.color_attributes
+        if len(attributes) and not len(obj.data.materials):
+            material = bpy.data.materials.new(name="Recorded vertex colors")
+            material.use_nodes = True
+            nodes = material.node_tree.nodes
+            shader = nodes.get("Principled BSDF")
+            color = nodes.new("ShaderNodeVertexColor")
+            color.layer_name = attributes[0].name
+            material.node_tree.links.new(color.outputs["Color"], shader.inputs["Base Color"])
+            obj.data.materials.append(material)
+    for screen in bpy.data.screens:
+        for area in screen.areas:
+            if area.type == "VIEW_3D":
+                area.spaces.active.shading.color_type = "VERTEX"
     before = geometry()
     bpy.context.scene.unit_settings.system = "METRIC"
     bpy.context.scene.unit_settings.scale_length = 1.0
