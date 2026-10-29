@@ -1,0 +1,99 @@
+{
+  "experiment": "TUM fr1_room 96 fixed RGB/metric poses: 0/32/64/96 measured sensor-depth frames",
+  "run_id": 40820208498,
+  "tested_checkout": "b797c16c387f1a48bbde34ab22f02d077f5677bc",
+  "run_url": "https://github.com/REDrighthand05/echo4d/actions/runs/40820208498",
+  "artifact_url": "https://github.com/REDrighthand05/echo4d/actions/runs/40820208498/artifacts/12873604108",
+  "status": "real_CPU_meshes_generated_visual_FAIL",
+  "retained": "96 original TUM fr1_room 640x480 RGB, 96 measured metric camera poses and calibration; 320x240 candidate depth and TSDF",
+  "removed": "Existing Mesh prior always removed; 0/32/64/96 measured sensor Z per rung; remaining Z from DA2 Small RGB plus known-pose RGB metric calibration",
+  "sensor_isolation": "0-sensor candidate fused before official TUM sensor-depth archive was downloaded/read",
+  "model": {
+    "id": "depth-anything/Depth-Anything-V2-Small-hf",
+    "license": "Apache-2.0 Small",
+    "checkpoint_sha256": "3152477ce0d8d6978d76b995120de97cb5b928701fd0f817769f59e249a16b70",
+    "inference": "CPU"
+  },
+  "prediction": {
+    "frozen_CPU_predictions": 30,
+    "new_CPU_predictions": 66,
+    "calibrated_new_frames": 41,
+    "no_two_RGB_neighbors": 22,
+    "metric_fit_failed": 3,
+    "nonempty_depth_frames_total": 71,
+    "zero_depth_frames_total": 25
+  },
+  "fusion": {
+    "voxel_m": 0.04,
+    "truncation_m": 0.12,
+    "max_depth_m": 4,
+    "pixel_stride": 2
+  },
+  "levels": [
+    {
+      "sensor": 0,
+      "predicted": 96,
+      "faces": 147270,
+      "components": 1680,
+      "largest_component_fraction": 0.5371426631,
+      "mesh_sha256": "c1315d06dc6263af2647b0006d21ad740efbd8c998908e5f329cbe21b7b78a96",
+      "covered_pixels": [
+        69026,
+        67559,
+        73341,
+        53911,
+        69079
+      ]
+    },
+    {
+      "sensor": 32,
+      "predicted": 64,
+      "faces": 176426,
+      "components": 1658,
+      "largest_component_fraction": 0.5759241835,
+      "mesh_sha256": "fe4f3622c39e898fea9e25e4cdfb2bdfd530251ef4c216ef46c7ff209430d446",
+      "covered_pixels": [
+        71809,
+        72699,
+        75416,
+        65657,
+        72010
+      ]
+    },
+    {
+      "sensor": 64,
+      "predicted": 32,
+      "faces": 184514,
+      "components": 1373,
+      "largest_component_fraction": 0.6655321547,
+      "mesh_sha256": "30b5eb4dd8d2dcc0ef72d3ddf71d1a2a289cd63671f76ae1f52d947076fdacdb",
+      "covered_pixels": [
+        75197,
+        72236,
+        76458,
+        68140,
+        73303
+      ]
+    },
+    {
+      "sensor": 96,
+      "predicted": 0,
+      "faces": 137255,
+      "components": 614,
+      "largest_component_fraction": 0.6400713999,
+      "mesh_sha256": "357531cda51a6627b574270198d24de9d430589fa2dc054400bf7daf9b6eee31",
+      "covered_pixels": [
+        75187,
+        68748,
+        76614,
+        71121,
+        74290
+      ]
+    }
+  ],
+  "five_views": "3 original heldout RGB camera views and 2 fixed free views; full PNG boards and four GLBs in artifact",
+  "visual_review": "FAIL. 0-sensor DA2 recognizes a desk/display in some original views but has severe false walls/fragmented surfaces and missing regions; 32/64 sensor rungs restore more desk/display silhouette but still show holes, bent surfaces and implausible free-camera geometry. 96-sensor control is itself smeared/incomplete. Pixel coverage and triangle counts are not surface accuracy.",
+  "independent_surface_truth": false,
+  "issue_74": "FAIL / NOT ACCEPTED",
+  "next_shortest_unblock": "Fix the 22 real RGB frames with no two overlapping pose neighbors and 3 failed metric calibrations; rerun the same 96-view 0-sensor rung, preserving the measured 96-view control and 3+2 cameras."
+}
