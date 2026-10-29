@@ -1,0 +1,69 @@
+name: Publish actual Stanford measured-gap GLB and five views
+on:
+  push:
+    branches: [research/stanford-gap-guided-depth-20261029]
+    paths:
+      - .github/workflows/stanford-gap-guided-publish.yml
+  workflow_dispatch:
+permissions:
+  contents: write
+  actions: read
+jobs:
+  publish-reviewed-real-output:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - name: Retrieve the actual completed 640x480 real run
+        uses: actions/download-artifact@v4
+        with:
+          name: stanford-measured-gap-40839801229
+          repository: REDrighthand05/echo4d
+          run-id: 40839801229
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: actual
+      - name: Publish only actual GLB, measured result and five real A/B images
+        run: |
+          set -eu
+          test -s actual/OBSERVED-gap-guided-full.glb
+          test -s actual/result.json
+          test "$(find actual/visual -maxdepth 1 -name '*.png' | wc -l)" -eq 5
+          dest=docs/real-room-review/stanford-measured-gap
+          mkdir -p "$dest/visual"
+          cp actual/OBSERVED-gap-guided-full.glb actual/result.json "$dest/"
+          cp actual/visual/*.png "$dest/visual/"
+          cat > "$dest/README.md" <<'EOF'
+          # Stanford Lounge — real measured depth gap-guided refusion
+
+          Source: Open3D LoungeRGBDImages, original 640x480 real RGB-D and logged poses.
+          Frozen baseline: 360 evenly spaced recorded frames, 426,789 observed-only faces.
+          Experiment: inspect 301 unused recorded views against frozen observed Mesh;
+          choose 120 views with distinct measured missing surface cells; re-fuse 480
+          measured frames with Open3D TSDF at 0.025m voxel.
+          Result: 454,009 observed-only faces. No pre-existing scan, generated
+          surface or inferred plane was fused. The old Mesh was only used for
+          selecting additional frames and for before/after rendering.
+          
+          Actual A/B: three real RGB / before / after views and two room-scale
+          free before / after views. Furniture and relative positions remain
+          recognizable, but in recorded views the differences are tiny. Free
+          view hit pixels change 23,223 -> 24,276 (+4.53%) and 12,813 ->
+          13,326 (+4.00%); these are *render coverage*, not geometry accuracy.
+          Human review: slight local fill, persistent large missing outer surfaces,
+          no meaningful free-walk improvement. NOT ACCEPTED as stable free orbit.
+          No changes to Issue #74 FAIL or old Desk 16.7779cm > 15cm FAIL.
+
+          Full native PLY and per-candidate selection stats remain in:
+          https://github.com/REDrighthand05/echo4d/actions/runs/40839801229/artifacts/12881634221
+          Source run: https://github.com/REDrighthand05/echo4d/actions/runs/40839801229
+          EOF
+          git config user.name "echo4d-real-room-ci"
+          git config user.email "echo4d-real-room-ci@users.noreply.github.com"
+          git add "$dest"
+          git diff --cached --quiet && exit 0
+          git commit -m "results(real-room): measured Stanford gap refusion, 454009 faces and five actual views"
+          git fetch origin research/stanford-gap-guided-depth-20261029
+          test "$(git rev-parse origin/research/stanford-gap-guided-depth-20261029)" = "$GITHUB_SHA"
+          git push origin HEAD:refs/heads/research/stanford-gap-guided-depth-20261029
