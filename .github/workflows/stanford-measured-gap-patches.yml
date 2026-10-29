@@ -31,7 +31,7 @@ jobs:
           python -m py_compile tools/stanford_full_observed_speck_cleanup.py
       - name: Fetch original full observed RGB-D reconstruction (no prior scan)
         env:
-          GH_TOKEN: \${{ github.token }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           gh run download 40877823227 --repo "$GITHUB_REPOSITORY" --name official-room-recovered-40877823227 --dir "$RUNNER_TEMP/full-room"
           test -s "$RUNNER_TEMP/full-room/scene/integrated.ply"
@@ -50,7 +50,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: stanford-measured-gap-patches-\${{ github.run_id }}
+          name: stanford-measured-gap-patches-${{ github.run_id }}
           path: artifacts/stanford-measured-gap-patches/
           retention-days: 30
           if-no-files-found: warn
