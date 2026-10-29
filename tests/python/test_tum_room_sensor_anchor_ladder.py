@@ -11,6 +11,9 @@ import numpy as np
 from PIL import Image
 import pytest
 
+pytest.importorskip("cv2")
+pytest.importorskip("trimesh")
+
 from echo4d.model import DataError
 from tum_room_sensor_anchor_ladder import (
     ROOT, anchor_indices, make_candidate, verified_sensor_depths)
