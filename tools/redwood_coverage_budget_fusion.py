@@ -12,7 +12,7 @@ import json
 from pathlib import Path
 
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageDraw
 
 from open3d_official_room_baseline import read_poses, spaced_real_frames
 from redwood_dense_native_review import export_full
@@ -156,8 +156,18 @@ def run(source, cache, out, budget):
     views = compare(o3d, data, poses, k, baseline, candidate, out)
     board = Image.new("RGB", (960, 268*len(views)), (26, 26, 26))
     for j, entry in enumerate(views):
-        with Image.open(out/entry["file"]) as picture:
-            board.paste(picture.convert("RGB"), (0, 268*j))
+        # Reuse the mature raycast/comparison code, but never mislabel the
+        # fixed-budget coverage candidate as the older gap-guided experiment.
+        with Image.open(out/entry["file"]) as source_image:
+            picture = source_image.convert("RGB")
+        draw = ImageDraw.Draw(picture)
+        draw.rectangle((0, 0, picture.width, 27), fill=(26, 26, 26))
+        title = ("REAL RGB / UNIFORM 600 / COVERAGE 600"
+                 if entry["kind"] == "recorded"
+                 else "FREE CAMERA / UNIFORM 600 / COVERAGE 600")
+        draw.text((8, 8), title, fill="white")
+        picture.save(out/entry["file"])
+        board.paste(picture, (0, 268*j))
     board.save(out/"five-view-coverage-ab.png")
     report = {
         "scene": "REAL Redwood Bedroom",
