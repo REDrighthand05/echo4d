@@ -190,7 +190,7 @@ def prepare_candidate(source, manifest, depths, poses, provenance, output):
     return len(frames)
 
 
-def run(source, room96, output, work, archive_override=None, levels=(13, 1)):
+def run(source, room96, output, work, archive_override=None, levels=(13, 5, 1), max_gap=6):
     source, room96, output, work = map(Path, (source, room96, output, work))
     frozen, replay, _ = checked_replay(source)
     source96 = room96 / "replay/predicted-96"
@@ -217,7 +217,7 @@ def run(source, room96, output, work, archive_override=None, levels=(13, 1)):
     if any(im is None or im.shape[:2] != (240, 320) for im in colors):
         raise DataError("Missing or unexpected frozen real RGB")
     known = [camera_to_world(f) for f in manifest["frames"]]
-    graph, graph_report = build_pose_graph(colors, depths, camera_matrix(manifest["intrinsics"]))
+    graph, graph_report = build_pose_graph(colors, depths, camera_matrix(manifest["intrinsics"]), max_gap=max_gap)
     report = {"experiment": "TUM fr1_room 96 real measured RGB-D / sparse pose anchors",
               "date_utc": "2026-10-29",
               "retained": ["96 real RGB", "96 measured sensor depth maps",
@@ -225,7 +225,7 @@ def run(source, room96, output, work, archive_override=None, levels=(13, 1)):
               "removed": ["all other ground-truth poses", "prior Mesh"],
               "source_archive_sha256": FROZEN_ARCHIVE_SHA256,
               "sensor_depth_pngs_sha256": {str(k): v for k, v in hashes.items()},
-              "pose_graph": graph_report, "variants": {},
+              "pose_graph": {**graph_report, "max_temporal_pair_gap": max_gap}, "variants": {},
               "visual_acceptance": "UNREVIEWED; no #74 PASS"}
     old_mesh = room96 / "mesh-sensor-96/mesh.ply"
     for count in levels:
@@ -280,9 +280,9 @@ if __name__ == "__main__":
     parser.add_argument("--output", required=True)
     parser.add_argument("--work", required=True)
     parser.add_argument("--archive", default=None)
-    parser.add_argument("--levels", type=int, nargs="+", default=[13, 1])
+    parser.add_argument("--levels", type=int, nargs="+", default=[13, 5, 1])\n    parser.add_argument("--max-gap", type=int, default=6)
     args = parser.parse_args()
-    result = run(args.source, args.room96, args.output, args.work, args.archive, args.levels)
+    result = run(args.source, args.room96, args.output, args.work, args.archive, args.levels, args.max_gap)
     print(json.dumps({"pose_graph": result["pose_graph"],
                       "variants": {k: {"faces": v["faces"],
                                        "estimated": v["estimated_pose_frames"],
