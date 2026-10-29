@@ -19,7 +19,7 @@ jobs:
           python-version: '3.12'
       - run: sudo apt-get update && sudo apt-get install -y colmap ffmpeg blender python3-numpy cmake ninja-build libboost-iostreams-dev libboost-program-options-dev libboost-system-dev libboost-serialization-dev libboost-math-dev libeigen3-dev libopencv-dev libcgal-dev libnanoflann-dev libjxl-dev
       - run: python -m pip install -e . open3d==0.19.0 trimesh==4.11.1
-      - uses: actions/cache@v4
+      - uses: actions/cache/restore@v4
         id: mvs-cache
         with:
           path: /tmp/mvs-bin
@@ -39,23 +39,30 @@ jobs:
           find /tmp/openmvs-build -type f -executable -name ReconstructMesh -exec cp '{}' /tmp/mvs-bin/ \;
           find /tmp/openmvs-build -type f -executable -name RefineMesh -exec cp '{}' /tmp/mvs-bin/ \;
           find /tmp/openmvs-build -type f -executable -name TextureMesh -exec cp '{}' /tmp/mvs-bin/ \;
+      - uses: actions/cache/save@v4
+        if: steps.mvs-cache.outputs.cache-hit != 'true'
+        with:
+          path: /tmp/mvs-bin
+          key: openmvs-cpu-ce03889e-vcg5cae2abc-ubuntu24-v1
       - name: Package actual public RGB pixels as an MP4 input, no depth or GT pose consumed
         run: |
           mkdir -p trial-source/frames
           python - <<'PY'
           import open3d as o3d
-          import hashlib,json,shutil
+          import hashlib,json
+          from PIL import Image
           from pathlib import Path
           source=o3d.data.LoungeRGBDImages()
           colors=source.color_paths[:540:3]
           manifest=[]
           for i,p in enumerate(colors):
-              target=Path('trial-source/frames')/f'{i:05d}.jpg'
-              shutil.copyfile(p,target)
-              manifest.append({'input':Path(p).name,'output':target.name,'sha256':hashlib.sha256(target.read_bytes()).hexdigest()})
+              target=Path('trial-source/frames')/f'{i:05d}.png'
+              with Image.open(p) as image:
+                  image.convert('RGB').save(target)
+              manifest.append({'input':Path(p).name,'source_sha256':hashlib.sha256(Path(p).read_bytes()).hexdigest(),'output':target.name,'sha256':hashlib.sha256(target.read_bytes()).hexdigest()})
           Path('trial-source/input.json').write_text(json.dumps({'source':'Open3D public Stanford Lounge RGB', 'kind':'real RGB image sequence repackaged as MP4, not original camera video', 'time':'authored 10fps clip; source acquisition times unavailable', 'depth_or_gt_pose_read':False,'frames':manifest},indent=2))
           PY
-          ffmpeg -hide_banner -loglevel error -framerate 10 -i trial-source/frames/%05d.jpg -c:v libx264 -crf 15 -pix_fmt yuv420p trial-source/input.mp4
+          ffmpeg -hide_banner -loglevel error -framerate 10 -i trial-source/frames/%05d.png -c:v libx264 -crf 15 -pix_fmt yuv420p trial-source/input.mp4
       - name: Execute the real video CLI end to end
         env:
           OMP_NUM_THREADS: '2'
