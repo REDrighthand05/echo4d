@@ -1,0 +1,71 @@
+{
+  "scene": "REAL Redwood Bedroom original 640x480 RGB-D",
+  "input": "720 measured depth frames with recorded poses",
+  "source_run": "https://github.com/REDrighthand05/echo4d/actions/runs/40798646737",
+  "method": "stock Open3D Poisson; original observed Mesh preserved",
+  "measured_faces": 561887,
+  "inferred_faces": 1051,
+  "combined_faces": 562938,
+  "raw_poisson_faces": 435915,
+  "poisson_depth": 8,
+  "sampled_points": 150000,
+  "minimum_gap_m": 0.035,
+  "max_nearest_measured_vertex_m": 0.16,
+  "preexisting_scan_used": false,
+  "inferred_surface_colors": "nearest observed vertex approximation",
+  "provenance": "orange triangles inferred; all others observed",
+  "visuals": [
+    {
+      "kind": "recorded",
+      "frame": 0,
+      "image": "visual/photo-vs-mesh-00000.png",
+      "covered_pixels": [
+        76793,
+        76793,
+        76793
+      ]
+    },
+    {
+      "kind": "recorded",
+      "frame": 10995,
+      "image": "visual/photo-vs-mesh-10995.png",
+      "covered_pixels": [
+        76531,
+        76531,
+        76531
+      ]
+    },
+    {
+      "kind": "recorded",
+      "frame": 21929,
+      "image": "visual/photo-vs-mesh-21929.png",
+      "covered_pixels": [
+        76781,
+        76781,
+        76781
+      ]
+    },
+    {
+      "kind": "free",
+      "image": "visual/free-view-1.png",
+      "covered_pixels": [
+        75260,
+        75260,
+        75260
+      ]
+    },
+    {
+      "kind": "free",
+      "image": "visual/free-view-2.png",
+      "covered_pixels": [
+        72074,
+        72084,
+        72084
+      ]
+    }
+  ],
+  "human_visual_acceptance": "NOT REVIEWED",
+  "independent_surface_accuracy": "NOT MEASURED",
+  "issue_74": "FAIL unchanged",
+  "old_desk_v2": "FAIL 16.7779cm > 15cm unchanged"
+}
