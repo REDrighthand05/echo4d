@@ -238,6 +238,20 @@ def run(source, room96, output, work, archive_override=None, levels=(13, 1)):
                              voxel_m=0.03, truncation_m=0.09,
                              max_depth_m=4.0, pixel_stride=2)
         mesh = destination / "mesh.ply"
+        # The reused TSDF exporter has a fixed "known poses" PLY comment.
+        # Correct that provenance before hashing or handing the GLB to users.
+        original_label = b"comment Open3D sparse TSDF; measured RGB-D; known poses; no inferred depth"
+        label = (f"comment Open3D sparse TSDF; measured sensor Z; {count}/96 known "
+                 "pose anchors; other poses RGB-D SIFT PnP; no prior Mesh").encode()
+        raw_mesh = mesh.read_bytes()
+        if raw_mesh.count(original_label) != 1:
+            raise DataError("Unexpected PLY pose provenance label")
+        mesh.write_bytes(raw_mesh.replace(original_label, label, 1))
+        fusion["mesh_sha256"] = file_sha256(mesh)
+        fusion["geometry_source"] = (f"96 real sensor-depth frames; {count} known "
+                                     "metric pose anchors; remaining camera poses estimated from RGB-D")
+        (destination / "report.json").write_text(
+            json.dumps(fusion, indent=2, allow_nan=False) + "\n")
         mesh_glb(mesh, output / f"measured-rgbd-poses-{count}.glb")
         v, f = read_echo_ply(mesh)
         # Independent diagnostic AFTER fusion: never feeds withheld GT back to estimator.
