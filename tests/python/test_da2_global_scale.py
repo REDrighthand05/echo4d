@@ -1,6 +1,7 @@
 """Synthetic geometry regressions; real TUM RGB replay runs in Actions."""
 import numpy as np
 import pytest
+pytest.importorskip('cv2', reason='OpenCV is installed in dedicated real-room workflow')
 from da2_global_scale import synchronize_scales
 
 
