@@ -1,0 +1,100 @@
+{
+  "experiment": "TUM fr1_room 96 real RGB-D, global appearance retrieval / one known metric pose",
+  "date_utc": "2026-10-29",
+  "source": "Official TUM fr1_room 96 original 640x480 RGB frames (320x240 fusion) and 96 independently measured metric sensor-depth maps",
+  "source_archive_sha256": "5ace47a1d2e53696bc939a84999293a04a7226958e848a609666691fd3cc38da",
+  "kept": [
+    "96 original RGB images",
+    "96 measured metric depth maps",
+    "calibrated camera intrinsics",
+    "one or five declared known metric camera pose anchors"
+  ],
+  "removed": [
+    "all other ground-truth camera poses from candidate reconstruction",
+    "existing Mesh as reconstruction prior"
+  ],
+  "metric_scale_source": "real sensor Z and declared metric anchor; not RGB-only",
+  "method": "OpenCV SIFT bag-of-visual-words TF-IDF image retrieval + bidirectional cycle-gated metric RGB-D PnP; existing Open3D TSDF; CPU only",
+  "tested_run": {
+    "status": "SUCCESS",
+    "url": "https://github.com/REDrighthand05/echo4d/actions/runs/40853386631",
+    "artifact_url": "https://github.com/REDrighthand05/echo4d/actions/runs/40853386631/artifacts/12889005170",
+    "tested_checkout": "84f40865fc20c1aedc2f3b66fc07fd10d4fb1a98",
+    "artifact_sha256": "be0736b700d93b80ce8b577e7bf19bdc842462d9552b58b4deae963578d25433",
+    "cpu_regressions_passed": 6,
+    "actual_meshes": true,
+    "three_recorded_and_two_free_views": true,
+    "newer_label_fix": "c55613b27566ca5c6cfbb92f6a2518123394db7d; not the tested checkout of this run"
+  },
+  "graph": {
+    "local_pair_attempts": 555,
+    "local_accepted": 200,
+    "global_retrieval_candidates": 798,
+    "verified_new_loop_edges": 82,
+    "connected_component_sizes_before": [
+      48,
+      27,
+      13,
+      8
+    ],
+    "connected_component_sizes_after": [
+      96
+    ]
+  },
+  "fair_reference": {
+    "known_metric_poses": 96,
+    "measured_depth_frames": 96,
+    "faces": 264275
+  },
+  "variants": {
+    "1_anchor": {
+      "old_solved": 12,
+      "old_unresolved": 83,
+      "new_solved": 95,
+      "new_unresolved": 0,
+      "new_median_heldout_camera_translation_error_m": 0.06336638960304723,
+      "new_max_heldout_camera_translation_error_m": 0.4997515357341806,
+      "old_faces": 27609,
+      "new_faces": 274230,
+      "new_mesh_components": 1315,
+      "new_mesh_sha256": "d612d5f36b4fa89485fe10b1bedda6b789f2e1a0b70a06adea7b9087c0a96251",
+      "new_glb_sha256": "1d4b2e573e0ba695343b04ce358a2296e420e4478f0232afcfe0854fb524d759",
+      "old_five_view_covered_pixels": [
+        68002,
+        0,
+        60643,
+        38677,
+        50883
+      ],
+      "new_five_view_covered_pixels": [
+        75291,
+        66426,
+        76157,
+        72697,
+        74386
+      ]
+    },
+    "5_anchors": {
+      "old_solved": 91,
+      "old_unresolved": 0,
+      "new_solved": 91,
+      "new_unresolved": 0,
+      "old_median_heldout_camera_translation_error_m": 0.046619273798505514,
+      "new_median_heldout_camera_translation_error_m": 0.050188384952383674,
+      "old_faces": 282229,
+      "new_faces": 280905,
+      "new_mesh_components": 1501,
+      "new_mesh_sha256": "3313d3a76c4bd040966ffd793e030adbc0bcaa89829fb9825a3a940978c4bd7a",
+      "new_glb_sha256": "0fac432830c5dd4c062dad2b343b9b8e9baeaf42f21f4223af9aa4efaf0a4687"
+    }
+  },
+  "visual_review": "ONE ANCHOR: clear large improvement from nearly empty old second recorded view and partial free views to identifiable desk, monitor, furniture and broader room structure. Still blurred, incomplete, incorrect/fragmented surfaces, no stable full-room orbit; #74 remains FAIL. FIVE ANCHORS: old and new visually almost identical, no reliable improvement; camera median translation error slightly worse.",
+  "limitations": [
+    "Depth and metric scale still measured sensor, not RGB-only",
+    "Camera pose median error is not independent Mesh surface accuracy",
+    "Old one-anchor 2.97cm error evaluated only on 12 recovered frames, not comparable to new 95 recovered",
+    "Fixed old/new board in tested artifact inherited misleading generic labels; local corrected captions and subsequent code fix are separate from tested checkout",
+    "Historical DA2 and SGBM failures remain; no complete life replay or Echo4D browser rotation acceptance"
+  ],
+  "next_shortest_unblock": "Protect 5-anchor working rung, improve 1-anchor loop graph geometric consistency / global pose optimization to reduce 0.50m worst-case drift and free-view false surfaces; compare actual same-camera and free-view Mesh; avoid new planner or frontend."
+}
