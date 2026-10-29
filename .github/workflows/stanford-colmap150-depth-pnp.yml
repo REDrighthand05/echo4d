@@ -1,0 +1,47 @@
+name: Stanford 150 RGB-D depth-verified PnP pose recovery
+on:
+  push:
+    branches: [research/stanford-colmap150-depth-pnp-20261030]
+    paths:
+      - tools/stanford_colmap150_depth_pnp.py
+      - .github/workflows/stanford-colmap150-depth-pnp.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  recover-poses-and-refuse-unsupported-geometry:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install pinned geometry and RGB PnP providers
+        run: |
+          python -m pip install 'open3d==0.19.0' 'trimesh==4.11.1' 'pillow' 'scipy' 'opencv-python-headless==4.12.0.88'
+          python -m py_compile tools/stanford_colmap150_depth_pnp.py
+      - name: Fetch completed independent COLMAP result
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/colmap150"
+          gh run download 40936161910 --repo "$GITHUB_REPOSITORY" \
+            --name stanford-colmap150-exhaustive-40936161910 --dir "$RUNNER_TEMP/colmap150"
+      - name: Recover independently depth-verified missing poses and fuse real RGB-D
+        env:
+          OMP_NUM_THREADS: '2'
+          OPENBLAS_NUM_THREADS: '1'
+          OPEN3D_CPU_RENDERING: 'true'
+        run: |
+          python tools/stanford_colmap150_depth_pnp.py \
+            --source "$RUNNER_TEMP/colmap150" --output artifacts/stanford-colmap150-depth-pnp
+      - name: Preserve actual before/after Mesh and fixed-camera 3+2 comparison
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stanford-colmap150-depth-pnp-${{ github.run_id }}
+          path: artifacts/stanford-colmap150-depth-pnp/
+          retention-days: 30
+          if-no-files-found: warn
