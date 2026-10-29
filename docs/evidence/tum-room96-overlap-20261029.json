@@ -1,0 +1,82 @@
+{
+  "experiment": "TUM fr1_room 96 fixed real RGB and known metric poses, projected-frustum neighbor recovery",
+  "date_utc": "2026-10-29",
+  "run_id": 40826766484,
+  "tested_checkout": "131df893a7bb9b332e7d140d89c68b37bf169249",
+  "run_url": "https://github.com/REDrighthand05/echo4d/actions/runs/40826766484",
+  "artifact_url": "https://github.com/REDrighthand05/echo4d/actions/runs/40826766484/artifacts/12876478679",
+  "artifact_zip_sha256": "dc1a852b0a4349e5fc968c31843a4f4927a0b9c7d9be30a40facf03db930e7e0",
+  "status": "real_CPU_Meshes_generated_visual_FAIL",
+  "retained": "96 original TUM 640x480 RGB, 96 known metric camera poses, camera calibration; 320x240 fusion",
+  "removed": "prior Mesh for all candidates; 0/32/64/96 sensor depth frame ladder, remaining depth from DA2 Small plus known-pose RGB calibration",
+  "sensor_isolation": "0-sensor Mesh fused before official measured sensor-depth archive is downloaded/opened",
+  "baseline_run": 40820208498,
+  "baseline_0_sensor": {
+    "nonempty_predictions": 71,
+    "missing_neighbor_frames": 22,
+    "failed_metric_calibration": 3,
+    "faces": 147270,
+    "components": 1680,
+    "largest_component_fraction": 0.5371426631,
+    "covered_pixels_3plus2": [
+      69026,
+      67559,
+      73341,
+      53911,
+      69079
+    ]
+  },
+  "new_prediction": {
+    "nonempty_predictions": 92,
+    "new_prediction_slots": 66,
+    "actual_new_cpu_inferences": 63,
+    "calibrated_new_frames": 62,
+    "missing_neighbor_frames": 3,
+    "failed_metric_calibration": 1,
+    "unresolved_training_positions": [
+      43,
+      59,
+      60
+    ],
+    "model": "depth-anything/Depth-Anything-V2-Small-hf",
+    "inference": "CPU",
+    "checkpoint_sha256": "3152477ce0d8d6978d76b995120de97cb5b928701fd0f817769f59e249a16b70"
+  },
+  "levels": {
+    "0": {
+      "faces": 185796,
+      "components": 1709,
+      "largest_component_fraction": 0.5463411483562617,
+      "covered_pixels_3plus2": [
+        72545,
+        70600,
+        75468,
+        64143,
+        71520
+      ],
+      "mesh_sha256": "eae89399da53cc34a3c61a85daada404a7959fda935ea3dc0b592a3090dc62cb",
+      "glb_sha256": "21aa993c878344e161fafa67dd8825f114d24e19408a7fcfc6a634971b648de8",
+      "visual_sha256": "865ce3f2b7d57dc2fe442ee47948663c2a19c658aa5506dd4c8af7081bb49def"
+    },
+    "32": {
+      "faces": 193437,
+      "components": 1705,
+      "mesh_sha256": "8927a1efba03a5ee39487047e0f7026623f6359a565b1ee1f8ca707009e8aaa5"
+    },
+    "64": {
+      "faces": 197072,
+      "components": 1391,
+      "mesh_sha256": "12f134edaa341c48b63db6a97d19beacb7131a400a65e9484ccde2d67102c032"
+    },
+    "96": {
+      "faces": 137255,
+      "components": 614,
+      "mesh_sha256": "357531cda51a6627b574270198d24de9d430589fa2dc054400bf7daf9b6eee31"
+    }
+  },
+  "actual_execution": "9 CPU tests PASS, real TUM 96-pose preflight old 22 missing / new 3 missing, actual CPU DA2 inference and four Open3D Meshes, three original RGB views plus two free views. Artifact includes all 96 predicted NPY depth arrays, color PNGs, manifest, SHA receipts, GLBs, PLYs, and 3+2 boards.",
+  "visual_review": "FAIL: the screen and desk are recognizable in source camera views, and new 0-sensor Mesh fills some missing areas; new unsupported false surfaces, holes and spatial distortion remain. Two free views do not show a reliable continuous room. Increased coverage and faces are NOT geometry accuracy.",
+  "independent_surface_truth": false,
+  "issue_74": "FAIL / NOT ACCEPTED",
+  "next_shortest_unblock": "Use frozen 96 predicted depth maps to test cross-camera reprojection support and reject false surfaces before TSDF; do not claim success from additional coverage alone."
+}
