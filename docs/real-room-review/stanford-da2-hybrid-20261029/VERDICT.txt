@@ -1,0 +1,7 @@
+VISUAL FAIL — inspected 2026-10-29.
+150 measured Z: recognizable furniture and room layout.
+30 measured Z: furniture still recognizable, more holes.
+30 measured + 120 DA2 predicted Z: broken chair/wall surfaces, floating fragments and worse free views.
+Pose prior was learned using ALL 3000 original measured RGB-D frames; NOT independent sparse capture or RGB-only.
+Source run: https://github.com/REDrighthand05/echo4d/actions/runs/40886944100
+Source GLBs: https://github.com/REDrighthand05/echo4d/actions/runs/40886944100/artifacts/12904345001
