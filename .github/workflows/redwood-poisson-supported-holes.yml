@@ -1,0 +1,99 @@
+name: Redwood real room measured TSDF vs supported Poisson geometry
+on:
+  push:
+    branches: [research/redwood-poisson-supported-holes-20261029]
+    paths:
+      - tools/redwood_poisson_supported_holes.py
+      - tests/python/test_redwood_poisson_supported_holes.py
+      - .github/workflows/redwood-poisson-supported-holes.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  real-poisson:
+    runs-on: ubuntu-latest
+    timeout-minutes: 110
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install mature Open3D engine
+        run: |
+          pip install -r requirements.lock
+          pip install --no-deps -e .
+          pip install 'open3d==0.19.0' 'trimesh>=4,<5'
+      - name: Test inferred surface constraints
+        env:
+          PYTHONPATH: tools
+        run: python -m pytest -q tests/python/test_redwood_poisson_supported_holes.py
+      - name: Get real 720-frame measured-only Redwood Bedroom Mesh
+        uses: actions/download-artifact@v4
+        with:
+          name: real-redwood-gap-guided-40798646737
+          repository: REDrighthand05/echo4d
+          run-id: 40798646737
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: source
+      - name: Poisson inferred-gap candidate vs original measured TSDF
+        env:
+          PYTHONPATH: tools
+          OPENBLAS_NUM_THREADS: '1'
+          OMP_NUM_THREADS: '2'
+        run: |
+          python tools/redwood_poisson_supported_holes.py \
+            --source-ply source/gap-guided-full.ply \
+            --cache "$RUNNER_TEMP/redwood" \
+            --output "$GITHUB_WORKSPACE/artifacts/redwood-poisson" \
+            --depth 8 --points 150000
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: redwood-poisson-real-${{ github.run_id }}
+          path: artifacts/redwood-poisson/
+          retention-days: 14
+  publish-real-room:
+    needs: real-poisson
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: redwood-poisson-real-${{ github.run_id }}
+          path: result
+      - name: Publish actual five-view comparison and observed/inferred models
+        run: |
+          set -eu
+          dir=docs/real-room-review/redwood-bedroom-poisson
+          mkdir -p "$dir/visual"
+          cp result/visual/*.png "$dir/visual/"
+          cp result/combined-colored.glb "$dir/"
+          cp result/combined-provenance.glb "$dir/"
+          cp result/result.json "$dir/"
+          cat > "$dir/README.md" <<'EOF'
+          # Real Redwood Bedroom: supported Poisson surface hypothesis
+          Source: 720 frames of original 640x480 RGB-D, measured depth and
+          recorded camera poses. Mature Open3D Poisson on the observed Mesh.
+          The 561,887 measured TSDF faces are preserved; new faces are
+          INFERRED, not measured. Orange in provenance GLB means inferred.
+          Colored GLB uses nearest observed vertex colors for inferred
+          patches (not actual measured color there). No existing laser
+          reference Mesh was used. Three recorded and two free-view images
+          compare observed TSDF with Poisson candidate. Visual recognition
+          and true surface accuracy have NOT automatically passed.
+          #74 and Desk V2 16.7779cm > 15cm remain FAIL.
+          Source experiment: https://github.com/REDrighthand05/echo4d/actions/runs/40798646737
+          EOF
+          git config user.name "echo4d-real-room-ci"
+          git config user.email "echo4d-real-room-ci@users.noreply.github.com"
+          git add "$dir"
+          git diff --cached --quiet && exit 0
+          git commit -m "results(real-room): measured vs supported Poisson five-view Mesh"
+          git fetch origin research/redwood-poisson-supported-holes-20261029
+          git rebase origin/research/redwood-poisson-supported-holes-20261029
+          git push origin HEAD:refs/heads/research/redwood-poisson-supported-holes-20261029
