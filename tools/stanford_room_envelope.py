@@ -120,7 +120,54 @@ def extend_plane(vertices, colors, plane, tree, *,
     return verts, faces, rgb, len(candidate)
 
 
-def reconstruct(source: Path, output: Path):
+
+def depth_conflict_mask(vertices, faces, samples, k, *, tolerance=.10, votes=2):
+    """Reject inferred faces that occlude real depth in recorded cameras.
+
+    samples: iterable of (world_to_camera_4x4, uint16_depth_mm).
+    Invalid sensor pixels do not vote; one noisy frame cannot veto.
+    """
+    w, h, fx, fy, cx, cy = k
+    centers = vertices[faces].mean(axis=1)
+    conflicts = np.zeros(len(faces), dtype=np.uint16)
+    tested = 0
+    for pose, raw in samples:
+        if raw.shape != (h, w) or raw.dtype != np.uint16:
+            raise ValueError("Recorded depth must be native uint16")
+        camera = centers @ pose[:3, :3].T + pose[:3, 3]
+        z = camera[:, 2]
+        good = (z > .35) & (z < 3.95)
+        safe = np.where(good, z, 1.)
+        u = np.rint(fx * camera[:, 0] / safe + cx).astype(int)
+        v = np.rint(fy * camera[:, 1] / safe + cy).astype(int)
+        good &= (u >= 2) & (u < w-2) & (v >= 2) & (v < h-2)
+        u = np.clip(u, 0, w-1)
+        v = np.clip(v, 0, h-1)
+        observed = raw[v, u].astype(float) / 1000.
+        good &= (observed > .35) & (observed < 3.95)
+        conflicts += (good & (z + tolerance < observed)).astype(np.uint16)
+        tested += 1
+    return conflicts >= votes, {
+        "tested_recorded_frames": tested,
+        "vetoed_faces": int(np.sum(conflicts >= votes))}
+
+
+def recorded_depth_samples(cache):
+    import open3d as o3d
+    from stanford_lounge_second_room import lounge_recorded_poses
+    from open3d_official_room_baseline import spaced_real_frames
+    data = o3d.data.LoungeRGBDImages(data_root=str(cache))
+    trajectory = o3d.io.read_pinhole_camera_trajectory(data.trajectory_log_path)
+    k, poses, _ = lounge_recorded_poses(
+        trajectory, list(data.color_paths), data.trajectory_log_path)
+    indices = spaced_real_frames(
+        len(data.color_paths), min(100, len(data.color_paths)))
+    return k, [
+        (np.asarray(poses[i], dtype=float),
+         np.asarray(o3d.io.read_image(data.depth_paths[i])))
+        for i in indices]
+
+def reconstruct(source: Path, output: Path, cache: Path | None = None):
     import trimesh
     if output.exists():
         raise FileExistsError("Fresh output folder required")
@@ -149,6 +196,13 @@ def reconstruct(source: Path, output: Path):
     v = np.concatenate(verts)
     f = np.concatenate(faces)
     c = np.concatenate(colors)
+    depth_veto = {"state": "NOT RUN"}
+    if cache is not None:
+        k, samples = recorded_depth_samples(cache)
+        rejected, depth_veto = depth_conflict_mask(v, f, samples, k)
+        f = f[~rejected]
+        if not len(f):
+            raise RuntimeError("All inferred faces conflict with recorded depth")
     rgba_patch = np.column_stack((
         np.rint(np.clip(c, 0, 1) * 255).astype(np.uint8),
         np.full(len(v), 255, dtype=np.uint8)))
@@ -175,6 +229,7 @@ def reconstruct(source: Path, output: Path):
         "inferred_faces": int(len(f)),
         "combined_faces": int(len(combined.faces)),
         "planes": records,
+        "recorded_depth_conflict_veto": depth_veto,
         "preexisting_mesh_prior_used": False,
         "inferred_surfaces_are_not_measured": True,
         "visual_acceptance": "NOT REVIEWED",
@@ -189,8 +244,9 @@ def main():
     p = argparse.ArgumentParser()
     p.add_argument("--source", type=Path, required=True)
     p.add_argument("--output", type=Path, required=True)
+    p.add_argument("--cache", type=Path)
     a = p.parse_args()
-    reconstruct(a.source, a.output)
+    reconstruct(a.source, a.output, a.cache)
 
 
 if __name__ == "__main__":
