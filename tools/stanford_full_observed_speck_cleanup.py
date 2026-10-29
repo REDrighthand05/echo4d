@@ -1,4 +1,4 @@
-"""Real Stanford Lounge 2999-frame observed Mesh: conservative disconnected speck cleanup.
+"""Real Stanford Lounge 3000-frame observed Mesh: conservative disconnected speck cleanup.
 
 No RGB/depth/pose substitution and no pre-existing scan. The input is the
 actual Open3D full reconstruction (estimated poses) from run 40877823227.
@@ -101,8 +101,8 @@ def run(source, output):
     if not mesh.has_triangles() or not mesh.has_vertex_colors():
         raise ValueError("Recovered full room has no observed colored Mesh")
     poses = load_poses(source/"scene"/"trajectory.log")
-    if len(poses) != 2999:
-        raise ValueError(f"Expected 2999 upstream registered frames, got {len(poses)}")
+    if len(poses) != 3000:
+        raise ValueError(f"Expected 3000 upstream registered frames, got {len(poses)}")
     original_faces = len(mesh.triangles)
     labels, counts, areas = mesh.cluster_connected_triangles()
     labels = np.asarray(labels, dtype=np.int32)
@@ -120,9 +120,9 @@ def run(source, output):
     if not mesh.has_triangles() or not mesh.has_vertex_colors():
         raise RuntimeError("Cleanup destroyed real observed geometry")
     after, cov_after = render(o3d,mesh,rays)
-    export_glb(mesh,output/"observed-2999-speck-filtered.glb")
+    export_glb(mesh,output/"observed-3000-speck-filtered.glb")
     preview = mesh.simplify_quadric_decimation(300000) if len(mesh.triangles)>300000 else mesh
-    export_glb(preview,output/"observed-2999-speck-filtered-preview.glb")
+    export_glb(preview,output/"observed-3000-speck-filtered-preview.glb")
     names = [name for name,_ in rays]
     canvas = Image.new("RGB",(960,34+5*268),(19,19,19))
     draw = ImageDraw.Draw(canvas)
@@ -137,8 +137,8 @@ def run(source, output):
         canvas.paste(before[name],(320,y+28))
         canvas.paste(after[name],(640,y+28))
     draw.text((5,10),"REAL RGB / free view",fill="white")
-    draw.text((325,10),"2999 observed: BEFORE",fill="white")
-    draw.text((645,10),"2999 observed: AFTER speck filter",fill="white")
+    draw.text((325,10),"3000 observed: BEFORE",fill="white")
+    draw.text((645,10),"3000 observed: AFTER speck filter",fill="white")
     canvas.save(output/"five-view-observed-ab.png")
     receipt = {
         "source":"Stanford Lounge original 640x480 RGB-D",
