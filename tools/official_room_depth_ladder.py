@@ -165,7 +165,8 @@ def comparison_image(output: Path, labels: list[str]):
         draw.text((col * 320 + 8, 12), title, fill="white")
     for row, name in enumerate(names):
         y = 38 + row * 272
-        for col, folder in enumerate(folders):
+        for col in range(4):
+            folder = folders[0 if col == 0 else col - 1]
             with Image.open(folder / name) as img:
                 img = img.convert("RGB")
                 if row < 3:
