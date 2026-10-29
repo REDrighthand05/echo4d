@@ -1,0 +1,44 @@
+name: Preserve real Stanford DA2 visual FAIL
+on:
+  push:
+    branches: [research/stanford-da2-metric-anchors-20261029]
+    paths:
+      - .github/workflows/preserve-stanford-da2-visual.yml
+  workflow_dispatch:
+permissions:
+  contents: write
+  actions: read
+jobs:
+  publish-actual-failure:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/stanford-da2-metric-anchors-20261029
+      - uses: actions/download-artifact@v4
+        with:
+          name: stanford-da2-hybrid-40886944100
+          run-id: 40886944100
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: /tmp/real-stanford-da2
+      - name: Permanently preserve the actual three-Mesh five-view image and input receipt
+        run: |
+          set -eu
+          target=docs/real-room-review/stanford-da2-hybrid-20261029
+          mkdir -p "$target"
+          cp /tmp/real-stanford-da2/source-measured150-measured30-da2hybrid-3plus2.png "$target/source-measured150-measured30-da2hybrid-3plus2.png"
+          cp /tmp/real-stanford-da2/report.json "$target/report.json"
+          printf '%s\n' \
+            'VISUAL FAIL — inspected 2026-10-29.' \
+            '150 measured Z: recognizable furniture and room layout.' \
+            '30 measured Z: furniture still recognizable, more holes.' \
+            '30 measured + 120 DA2 predicted Z: broken chair/wall surfaces, floating fragments and worse free views.' \
+            'Pose prior was learned using ALL 3000 original measured RGB-D frames; NOT independent sparse capture or RGB-only.' \
+            'Source run: https://github.com/REDrighthand05/echo4d/actions/runs/40886944100' \
+            'Source GLBs: https://github.com/REDrighthand05/echo4d/actions/runs/40886944100/artifacts/12904345001' \
+            > "$target/VERDICT.txt"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "$target"
+          git commit -m "evidence(room): preserve real DA2 hybrid visual FAIL; sparse sensor Z wins"
+          git push origin HEAD:research/stanford-da2-metric-anchors-20261029
