@@ -45,18 +45,22 @@ def load_trajectory(path: Path) -> dict[int, np.ndarray]:
 
 
 def native_pairs(color_dir: Path, depth_dir: Path, poses: dict[int, np.ndarray]):
-    """Include native frame 000000 even if data.color_paths starts at 000001."""
+    """Upstream trajectory headers are ordinal indices, NOT image filename IDs."""
     colors = {int(p.stem): p for p in color_dir.iterdir()
               if p.is_file() and p.suffix.lower() in (".png", ".jpg", ".jpeg")
               and p.stem.isdecimal()}
     depths = {int(p.stem): p for p in depth_dir.iterdir()
               if p.is_file() and p.suffix.lower() == ".png" and p.stem.isdecimal()}
-    if not colors or colors.keys() != depths.keys() or colors.keys() != poses.keys():
+    ids = sorted(colors)
+    if (not ids or colors.keys() != depths.keys() or
+            len(ids) != len(poses) or sorted(poses) != list(range(len(ids))) or
+            ids != list(range(ids[0], ids[0] + len(ids)))):
         raise ValueError(f"RGB/depth/pose identity mismatch: "
                          f"RGB={len(colors)}, depth={len(depths)}, pose={len(poses)}, "
-                         f"RGB-only={sorted(colors.keys()-depths.keys())[:5]}, "
-                         f"pose-only={sorted(poses.keys()-colors.keys())[:5]}")
-    return [(idx, colors[idx], depths[idx], poses[idx]) for idx in sorted(colors)]
+                         f"first/last RGB IDs={ids[:2]}/{ids[-2:]}, "
+                         f"pose indices={sorted(poses)[:2]}/{sorted(poses)[-2:]}")
+    return [(ordinal, colors[frame_id], depths[frame_id], poses[ordinal])
+            for ordinal, frame_id in enumerate(ids)]
 
 
 def even_indices(length: int, count: int) -> list[int]:
@@ -93,7 +97,8 @@ def integrate_subset(o3d, trimesh, pairs, count, output: Path, voxel: float):
     trimesh.Trimesh(vertices=xyz, faces=faces, vertex_colors=colors,
                     process=False).export(output / f"measured-{count}.glb")
     return mesh, {"measured_depth_frames": count, "triangles": len(faces),
-                  "vertices": len(xyz), "sample_frame_ids": [pairs[i][0] for i in chosen],
+                  "vertices": len(xyz), "sample_pose_ordinals": [pairs[i][0] for i in chosen],
+                  "sample_native_color_files": [pairs[i][1].name for i in chosen],
                   "glb_sha256": sha256(output / f"measured-{count}.glb")}
 
 
@@ -174,8 +179,9 @@ def run(official: Path, output: Path, counts=(600, 150)):
         "source_upstream_sha": UPSTREAM_SHA, "open3d_version": o3d.__version__,
         "input_real_rgb_frames": len(pairs),
         "original_input_ledger_count": receipt["real_frames"],
-        "ledger_correction": "Original data.color_paths omitted native frame 000000; "
-                             "upstream system integrated 3000, not 2999, RGB-D frames.",
+        "ledger_correction": "Open3D data.color_paths exposed 2999 files while the native "
+                             "directories contain 3000. Trajectory indices are ordinals, "
+                             "not numeric filename stems; all 3000 are paired by verified order.",
         "pose_source": "Estimated from ALL 3000 measured RGB-D frames by official upstream; "
                        "frozen prior in sparse-depth integration (not RGB-only).",
         "mesh_prior_in_sparse_runs": False,
