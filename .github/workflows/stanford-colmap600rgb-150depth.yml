@@ -1,0 +1,48 @@
+name: Stanford COLMAP 600 RGB with only 150 measured depth maps
+on:
+  push:
+    branches: [research/stanford-colmap600rgb-150depth-20261030]
+    paths:
+      - tools/stanford_colmap600rgb_150depth.py
+      - .github/workflows/stanford-colmap600rgb-150depth.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  sparse-measured-depth-independent-rgb-poses:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install mature pinned CPU geometry
+        run: |
+          python -m pip install 'open3d==0.19.0' 'trimesh==4.11.1' pillow scipy
+          python -m py_compile tools/stanford_colmap600rgb_150depth.py
+      - name: Download 600-frame RGB-only COLMAP poses and original selected-image manifest
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/colmap600"
+          gh run download 40917183649 --repo "$GITHUB_REPOSITORY" \
+            --name stanford-colmap600-40917183649 --dir "$RUNNER_TEMP/colmap600"
+      - name: Independently calibrate metric scale with only 150 real depth maps and fuse
+        env:
+          OPENBLAS_NUM_THREADS: '1'
+          OMP_NUM_THREADS: '2'
+          OPEN3D_CPU_RENDERING: 'true'
+        run: |
+          python tools/stanford_colmap600rgb_150depth.py \
+            --source "$RUNNER_TEMP/colmap600" \
+            --output artifacts/stanford-colmap600rgb-150depth
+      - name: Preserve real full and sparse models plus identical 3+2 camera views
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stanford-colmap600rgb-150depth-${{ github.run_id }}
+          path: artifacts/stanford-colmap600rgb-150depth/
+          retention-days: 30
+          if-no-files-found: warn
