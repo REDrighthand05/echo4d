@@ -74,3 +74,19 @@ def test_refuse_existing_output(tmp_path):
     args = build_parser().parse_args(['--video','input.mp4','--output',str(tmp_path)])
     with pytest.raises(DataError, match='fresh output'):
         run(args)
+
+
+def test_registration_failure_stops_before_meshing(tmp_path, monkeypatch):
+    video=tmp_path/'video.mp4'
+    video.write_bytes(b'fixture')
+    args=build_parser().parse_args(['--video',str(video),'--output',str(tmp_path/'out')])
+    args.blender_script=Path(__file__)
+    monkeypatch.setattr('echo4d.video_scene.shutil.which',lambda _:sys.executable)
+    monkeypatch.setattr('echo4d.video_scene.run_sfm',lambda _: {'status':'passed_fixture','result':{'registration_fraction':.1}})
+    with pytest.raises(DataError,match='Insufficient registered'):
+        run(args)
+    report=json.loads((args.output/'scene-report.json').read_text())
+    assert report['status']=='failed'
+    assert report['stages']==[]
+    assert report['config']['min_registration']==.8
+    assert not (args.output/'scene.blend').exists()

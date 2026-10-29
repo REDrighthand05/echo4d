@@ -1,10 +1,13 @@
 name: RGB video dense scene real trial
 on:
   push:
-    paths: ['.github/workflows/video-scene-real.yml']
+    paths: ['.github/workflows/video-scene-real.yml', 'src/echo4d/video_scene.py']
   workflow_dispatch:
 permissions:
   contents: read
+concurrency:
+  group: rgb-video-real-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   rgb-only:
     runs-on: ubuntu-24.04
@@ -16,7 +19,13 @@ jobs:
           python-version: '3.12'
       - run: sudo apt-get update && sudo apt-get install -y colmap ffmpeg blender python3-numpy cmake ninja-build libboost-iostreams-dev libboost-program-options-dev libboost-system-dev libboost-serialization-dev libeigen3-dev libopencv-dev libcgal-dev
       - run: python -m pip install -e . open3d==0.19.0 trimesh==4.11.1
+      - uses: actions/cache@v4
+        id: mvs-cache
+        with:
+          path: /tmp/mvs-bin
+          key: openmvs-cpu-58117204-vcg5cae2abc-ubuntu24-v1
       - name: Build pinned CPU OpenMVS, no GPU claim
+        if: steps.mvs-cache.outputs.cache-hit != 'true'
         run: |
           git clone https://github.com/cdcseacave/openMVS.git /tmp/openmvs
           git -C /tmp/openmvs checkout 58117204c86bbb11a0b25b26a8987676cf11274d

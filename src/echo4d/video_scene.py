@@ -158,7 +158,10 @@ def run(args):
     receipt = {'schema':'echo-video-scene-1', 'status':'running', 'stages':[],
                'source_video_sha256':file_sha256(args.video), 'scale':'unknown',
                'geometry':'estimated multi-view RGB geometry', 'appearance':'observed RGB projected onto estimated geometry',
-               'generated_surfaces':False, 'visual_accepted':False,
+               'generated_model_used':False, 'surface_support':'not independently classified; meshing is an estimate', 'visual_accepted':False,
+               'config':{'max_frames':args.max_frames, 'resolution_level':args.resolution_level,
+                         'min_registration':args.min_registration, 'threads':args.threads,
+                         'camera_model':args.camera_model, 'camera_params':args.camera_params},
                'executable_sha256':{n:file_sha256(p) for n,p in programs.items()}}
     write_json(output/'scene-report.json', receipt)
     started = time.monotonic()
@@ -199,11 +202,13 @@ def run(args):
                 command += ['--resolution-level', args.resolution_level]
             if label == 'texture':
                 command += ['--export-type','glb']
+            if label in ['mesh', 'refine']:
+                command += ['--close-holes','0']
             run_stage(label, command, output, receipt)
             required_file(target)
         glb = output/'scene_textured.glb'
         receipt['mesh'] = verify_textured_glb(glb)
-        run_stage('blender', [programs['blender'], '-b', '--python', args.blender_script.resolve(), '--', '--input', glb, '--output', output/'scene.blend', '--units', 'unknown', '--trajectory', output/'camera-timeline.json', '--provenance', 'RGB-only COLMAP/OpenMVS; scale unknown; estimated geometry'], output, receipt)
+        run_stage('blender', [programs['blender'], '-b', '--python-exit-code', '1', '--python', args.blender_script.resolve(), '--', '--input', glb, '--output', output/'scene.blend', '--units', 'unknown', '--trajectory', output/'camera-timeline.json', '--provenance', 'RGB-only COLMAP/OpenMVS; scale unknown; estimated geometry'], output, receipt)
         required_file(output/'scene.blend')
         receipt['outputs'] = {p.name:file_sha256(p) for p in [glb,output/'scene.blend',output/'camera-timeline.json',output/'scene.json']}
         receipt['status'] = 'completed_not_quality_accepted'
