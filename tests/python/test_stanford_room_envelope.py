@@ -143,3 +143,18 @@ def test_invalid_depth_cannot_validate_inferred_surface():
         (320, 240, 100, 100, 160, 120), min_valid_views=2)
     assert rejected.tolist() == [True]
     assert report["vetoed_unobserved_faces"] == 1
+
+
+def test_occluded_inferred_surface_cannot_claim_recorded_visibility():
+    vertices = np.array([[0., 0., 2.], [.1, 0., 2.],
+                         [0., .1, 2.]])
+    faces = np.array([[0, 1, 2]])
+    depth = np.full((240, 320), 1000, dtype=np.uint16)
+    poses = [np.eye(4), np.eye(4)]
+    poses[1][0, 3] = .02
+    rejected, report = depth_conflict_mask(
+        vertices, faces, [(i, p, depth) for i, p in enumerate(poses)],
+        (320, 240, 100, 100, 160, 120), min_valid_views=2)
+    assert rejected.tolist() == [True]
+    assert report["vetoed_conflicting_faces"] == 0
+    assert report["vetoed_unobserved_faces"] == 1

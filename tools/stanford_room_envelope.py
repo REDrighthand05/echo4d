@@ -182,7 +182,8 @@ def depth_conflict_mask(vertices, faces, samples, k, *, tolerance=.10,
         v = np.clip(v, 0, h-1)
         observed = raw[v, u].astype(float) / 1000.
         good &= (observed > .35) & (observed < 3.95)
-        valid_views += np.any(good.reshape(face_count, sample_count), axis=1).astype(np.uint16)
+        visible = good & (z <= observed + tolerance)
+        valid_views += np.any(visible.reshape(face_count, sample_count), axis=1).astype(np.uint16)
         conflicts += (good & (z + tolerance < observed)).reshape(
             face_count, sample_count).astype(np.uint16)
         tested += 1
