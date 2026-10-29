@@ -1,7 +1,7 @@
 name: Stanford measured room-shell extrapolation and five real views
 on:
   push:
-    branches: [research/stanford-room-envelope-20261029]
+    branches: [research/stanford-depth-surface-visibility-20261029]
     paths:
       - tools/stanford_room_envelope.py
       - tests/python/test_stanford_room_envelope.py

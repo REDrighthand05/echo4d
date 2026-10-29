@@ -85,3 +85,61 @@ def test_same_source_identity_with_different_depth_is_rejected():
             vertices, faces, [(7, np.eye(4), depth), (7, np.eye(4), depth + 1)],
             (640, 480, 500, 500, 320, 240))
 
+
+
+def test_offcenter_false_wall_is_rejected_by_spatial_depth_samples():
+    # The old centroid-only veto misses this false surface in front of a
+    # measured chair: only one triangle corner projects into the 2m patch.
+    from stanford_room_envelope import depth_conflict_mask
+    vertices = np.array([[-.3, -.3, 1.], [.3, -.3, 1.],
+                         [-.3, .3, 1.]], dtype=float)
+    faces = np.array([[0, 1, 2]])
+    depth = np.full((240, 320), 1000, dtype=np.uint16)
+    depth[92:104, 132:144] = 2000
+    poses = [np.eye(4), np.eye(4)]
+    poses[0][0, 3] = -.01
+    poses[1][0, 3] = .01
+    rejected, receipt = depth_conflict_mask(
+        vertices, faces, [(i, p, depth) for i, p in enumerate(poses)],
+        (320, 240, 100, 100, 160, 120))
+    assert rejected.tolist() == [True]
+    assert receipt["triangle_depth_samples"] == 7
+    assert receipt["vetoed_conflicting_faces"] == 1
+
+
+def test_inferred_surface_needs_distinct_recorded_visibility():
+    from stanford_room_envelope import depth_conflict_mask
+    vertices = np.array([[0., 0., 1.], [.1, 0., 1.],
+                         [0., .1, 1.]], dtype=float)
+    faces = np.array([[0, 1, 2]])
+    depth = np.full((240, 320), 1000, dtype=np.uint16)
+    k = (320, 240, 100, 100, 160, 120)
+    pose = np.eye(4)
+    rejected, report = depth_conflict_mask(
+        vertices, faces, [(7, pose, depth), (8, pose, depth)],
+        k, min_valid_views=2)
+    assert rejected.tolist() == [True]
+    assert report["tested_recorded_frames"] == 1
+    assert report["vetoed_unobserved_faces"] == 1
+    pose2 = np.eye(4)
+    pose2[0, 3] = .02
+    rejected, report = depth_conflict_mask(
+        vertices, faces, [(7, pose, depth), (8, pose2, depth)],
+        k, min_valid_views=2)
+    assert rejected.tolist() == [False]
+    assert report["tested_recorded_frames"] == 2
+
+
+def test_invalid_depth_cannot_validate_inferred_surface():
+    from stanford_room_envelope import depth_conflict_mask
+    vertices = np.array([[0., 0., 1.], [.1, 0., 1.],
+                         [0., .1, 1.]], dtype=float)
+    faces = np.array([[0, 1, 2]])
+    depth = np.zeros((240, 320), dtype=np.uint16)
+    poses = [np.eye(4), np.eye(4)]
+    poses[1][0, 3] = .02
+    rejected, report = depth_conflict_mask(
+        vertices, faces, [(i, p, depth) for i, p in enumerate(poses)],
+        (320, 240, 100, 100, 160, 120), min_valid_views=2)
+    assert rejected.tolist() == [True]
+    assert report["vetoed_unobserved_faces"] == 1

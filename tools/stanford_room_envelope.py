@@ -122,15 +122,35 @@ def extend_plane(vertices, colors, plane, tree, *,
 
 
 
-def depth_conflict_mask(vertices, faces, samples, k, *, tolerance=.10, votes=2):
-    """Reject inferred faces that occlude real depth in recorded cameras.
+def depth_conflict_mask(vertices, faces, samples, k, *, tolerance=.10,
+                        votes=2, min_valid_views=0):
+    """Carve inferred triangles against distinct measured-depth camera views.
 
-    samples: iterable of (source_frame_id, world_to_camera_4x4, uint16_depth_mm).
-    Invalid sensor pixels do not vote; one noisy frame cannot veto.
+    Check seven spatial locations per triangle, not only its centroid: a thin
+    foreground false wall may cover a chair at its corner while its centroid
+    happens to project onto the correct background. A contradiction must be
+    repeated in independent recorded frames. Optionally reject triangles
+    without two recorded views with usable depth (unknown is not safe).
     """
     w, h, fx, fy, cx, cy = k
-    centers = vertices[faces].mean(axis=1)
-    conflicts = np.zeros(len(faces), dtype=np.uint16)
+    vertices = np.asarray(vertices, dtype=np.float64)
+    faces = np.asarray(faces, dtype=np.int64)
+    if (vertices.ndim != 2 or vertices.shape[1] != 3 or
+            faces.ndim != 2 or faces.shape[1] != 3 or
+            not np.isfinite(vertices).all() or
+            np.any(faces < 0) or np.any(faces >= len(vertices))):
+        raise ValueError("Expected finite triangle geometry")
+    if votes < 1 or min_valid_views < 0:
+        raise ValueError("Invalid recorded-view thresholds")
+    weights = np.array([
+        [1/3, 1/3, 1/3],
+        [.75, .125, .125], [.125, .75, .125], [.125, .125, .75],
+        [.5, .5, 0], [0, .5, .5], [.5, 0, .5]], dtype=np.float64)
+    points = np.einsum("fvc,sv->fsc", vertices[faces], weights)
+    face_count, sample_count = points.shape[:2]
+    points = points.reshape(-1, 3)
+    conflicts = np.zeros((face_count, sample_count), dtype=np.uint16)
+    valid_views = np.zeros(face_count, dtype=np.uint16)
     tested = 0
     duplicates = 0
     identities = {}
@@ -151,7 +171,7 @@ def depth_conflict_mask(vertices, faces, samples, k, *, tolerance=.10, votes=2):
             duplicates += 1
             continue
         observations.add(digest)
-        camera = centers @ pose[:3, :3].T + pose[:3, 3]
+        camera = points @ pose[:3, :3].T + pose[:3, 3]
         z = camera[:, 2]
         good = (z > .35) & (z < 3.95)
         safe = np.where(good, z, 1.)
@@ -162,12 +182,21 @@ def depth_conflict_mask(vertices, faces, samples, k, *, tolerance=.10, votes=2):
         v = np.clip(v, 0, h-1)
         observed = raw[v, u].astype(float) / 1000.
         good &= (observed > .35) & (observed < 3.95)
-        conflicts += (good & (z + tolerance < observed)).astype(np.uint16)
+        valid_views += np.any(good.reshape(face_count, sample_count), axis=1).astype(np.uint16)
+        conflicts += (good & (z + tolerance < observed)).reshape(
+            face_count, sample_count).astype(np.uint16)
         tested += 1
-    return conflicts >= votes, {
+    contradicts_depth = np.any(conflicts >= votes, axis=1)
+    lacks_visibility = valid_views < min_valid_views
+    rejected = contradicts_depth | lacks_visibility
+    return rejected, {
         "tested_recorded_frames": tested,
         "duplicate_recorded_frames": duplicates,
-        "vetoed_faces": int(np.sum(conflicts >= votes))}
+        "triangle_depth_samples": sample_count,
+        "min_valid_recorded_views": min_valid_views,
+        "vetoed_conflicting_faces": int(contradicts_depth.sum()),
+        "vetoed_unobserved_faces": int(lacks_visibility.sum()),
+        "vetoed_faces": int(rejected.sum())}
 
 
 def recorded_depth_samples(cache):
@@ -179,7 +208,7 @@ def recorded_depth_samples(cache):
     k, poses, _ = lounge_recorded_poses(
         trajectory, list(data.color_paths), data.trajectory_log_path)
     indices = spaced_real_frames(
-        len(data.color_paths), min(100, len(data.color_paths)))
+        len(data.color_paths), min(240, len(data.color_paths)))
     return k, [
         (f"stanford-lounge-depth:{i}", np.asarray(poses[i], dtype=float),
          np.asarray(o3d.io.read_image(data.depth_paths[i])))
@@ -217,7 +246,7 @@ def reconstruct(source: Path, output: Path, cache: Path | None = None):
     depth_veto = {"state": "NOT RUN"}
     if cache is not None:
         k, samples = recorded_depth_samples(cache)
-        rejected, depth_veto = depth_conflict_mask(v, f, samples, k)
+        rejected, depth_veto = depth_conflict_mask(v, f, samples, k, min_valid_views=2)
         f = f[~rejected]
         if not len(f):
             raise RuntimeError("All inferred faces conflict with recorded depth")
