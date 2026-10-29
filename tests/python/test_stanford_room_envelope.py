@@ -2,7 +2,7 @@
 import numpy as np
 import pytest
 from scipy.spatial import cKDTree
-from stanford_room_envelope import fit_room_planes, extend_plane
+from stanford_room_envelope import fit_room_planes, extend_plane, depth_conflict_mask
 
 
 def grid_points(n=100):
@@ -45,3 +45,16 @@ def test_invalid_measured_geometry_rejected():
     vertices[0, 0] = np.nan
     with pytest.raises(ValueError):
         fit_room_planes(vertices, normals)
+
+
+def test_recorded_sensor_depth_veto_rejects_false_foreground_wall():
+    vertices = np.array([
+        [0, 0, 1], [.1, 0, 1], [0, .1, 1],
+        [0, 0, 2], [.1, 0, 2], [0, .1, 2]], dtype=float)
+    faces = np.array([[0, 1, 2], [3, 4, 5]])
+    depth_mm = np.full((480, 640), 2000, dtype=np.uint16)
+    k = (640, 480, 500, 500, 320, 240)
+    reject, record = depth_conflict_mask(
+        vertices, faces, [(np.eye(4), depth_mm)] * 3, k)
+    assert reject.tolist() == [True, False]
+    assert record["vetoed_faces"] == 1
