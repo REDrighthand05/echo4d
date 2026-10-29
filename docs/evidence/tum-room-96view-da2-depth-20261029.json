@@ -1,0 +1,86 @@
+{
+  "experiment": "TUM fr1_room 96-view measured-to-DA2 fixed-cohort depth ablation",
+  "date_utc": "2026-10-29",
+  "tested_checkout": "7bc00c9410e99d82960ae0dfe37dcffe14b4204b",
+  "run": "https://github.com/REDrighthand05/echo4d/actions/runs/40815340319",
+  "artifact": "https://github.com/REDrighthand05/echo4d/actions/runs/40815340319/artifacts/12871494415",
+  "source_run": 40790769632,
+  "source_archive_sha256": "5ace47a1d2e53696bc939a84999293a04a7226958e848a609666691fd3cc38da",
+  "retained": "96 original 640x480 RGB and 96 known metric camera poses; all candidate RGB resized 320x240; Open3D TSDF 40mm voxel, 120mm truncation, stride2",
+  "removed": "0/8/16/30 measured sensor depth frames replaced with preexisting DA2 Small RGB-predicted depth; no prior Mesh in fusion",
+  "not_removed": "66 measured sensor-depth frames still remain in the most ablated 30/96 condition",
+  "levels": {
+    "0": {
+      "sensor": 96,
+      "predicted": 0,
+      "faces": 137255,
+      "fragments": 614,
+      "largest_component_fraction": 0.6400714
+    },
+    "8": {
+      "sensor": 88,
+      "predicted": 8,
+      "faces": 150832,
+      "fragments": 822,
+      "largest_component_fraction": 0.6424499,
+      "covered_pixels": [
+        75355,
+        68473,
+        76599,
+        71105,
+        74077
+      ]
+    },
+    "16": {
+      "sensor": 80,
+      "predicted": 16,
+      "faces": 170507,
+      "fragments": 1022,
+      "largest_component_fraction": 0.663398,
+      "covered_pixels": [
+        75201,
+        69958,
+        76414,
+        71252,
+        74122
+      ]
+    },
+    "30": {
+      "sensor": 66,
+      "predicted": 30,
+      "faces": 180792,
+      "fragments": 1163,
+      "largest_component_fraction": 0.6786805,
+      "covered_pixels": [
+        74933,
+        71477,
+        76330,
+        71015,
+        73632
+      ]
+    }
+  },
+  "control_covered_pixels": [
+    75187,
+    68748,
+    76614,
+    71121,
+    74290
+  ],
+  "views": [
+    "heldout-7.png",
+    "heldout-92.png",
+    "heldout-162.png",
+    "free-3.png",
+    "free-4.png"
+  ],
+  "human_visual_review": "FAIL. Measured 96-view Mesh has recognizable desk and display but smeared surfaces and holes. Replacing 30 of 96 measured depths with DA2 adds visible black gaps and warping near the desk/display and more fragments. Free views remain incomplete; some coverage increases are not geometric improvements.",
+  "limitations": [
+    "This is 96->66 measured depth substitution, not 96-view RGB-only reconstruction",
+    "Source 96 measured Mesh here re-fused at 40mm/stride2 for fair A/B; earlier high-information 25mm/stride1 baseline is not the same voxel control",
+    "No independent surface truth; 12 sensor holdouts were excluded from fusion",
+    "DA2 model was not rerun; frozen prior CPU predictions and metric known-pose RGB calibration reused"
+  ],
+  "issue_74": "FAIL / NOT ACCEPTED",
+  "next": "Infer metric-calibrated RGB depth for the other 66 fixed 96-view frames, then run same-cohort 96/64/32/0 sensor ladder; keep 96-view measured baseline."
+}
