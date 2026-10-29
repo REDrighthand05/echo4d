@@ -1,0 +1,49 @@
+name: Stanford COLMAP independent 300 RGB-D room
+on:
+  push:
+    branches: [research/stanford-colmap-metric300-20261029]
+    paths:
+      - tools/stanford_colmap_metric300.py
+      - .github/workflows/stanford-colmap-metric300.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  colmap-independent-300:
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install mature CPU SfM and measured RGB-D fusion engines
+        run: |
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y colmap
+          python -m pip install 'open3d==0.19.0' 'trimesh==4.11.1' 'pillow' 'scipy'
+          colmap -h | head -n 5
+      - name: Independently reconstruct from only 300 real Stanford RGB-D frames
+        env:
+          QT_QPA_PLATFORM: offscreen
+          OMP_NUM_THREADS: '2'
+          OPENBLAS_NUM_THREADS: '1'
+        run: |
+          python tools/stanford_colmap_metric300.py \
+            --output artifacts/stanford-colmap300 --samples 300
+      - name: Publish real GLB, three source-camera and two free-camera views
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stanford-colmap300-${{ github.run_id }}
+          path: |
+            artifacts/stanford-colmap300/receipt.json
+            artifacts/stanford-colmap300/inputs.json
+            artifacts/stanford-colmap300/*.log
+            artifacts/stanford-colmap300/room-colmap300.glb
+            artifacts/stanford-colmap300/room-colmap300-preview.glb
+            artifacts/stanford-colmap300/source-colmap300-3plus2.png
+            artifacts/stanford-colmap300/views/
+            artifacts/stanford-colmap300/model-txt-*/
+          retention-days: 30
+          if-no-files-found: warn
