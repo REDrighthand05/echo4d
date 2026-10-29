@@ -1,0 +1,71 @@
+{
+  "experiment": "TUM fr1_room 96 real RGB + 96 measured metric depth + one known pose; dense Open3D ICP graph correction",
+  "date_utc": "2026-10-29",
+  "input_boundary": {
+    "retained": [
+      "96 original real RGB frames",
+      "96 real measured depth frames",
+      "camera intrinsics",
+      "one real metric pose anchor"
+    ],
+    "removed": [
+      "95 withheld ground-truth camera poses",
+      "prior Mesh as reconstruction prior"
+    ],
+    "metric_scale": "measured sensor depth; not RGB-only"
+  },
+  "tested_checkout": "e901313ff82f4d5875a727d42518e1eadff37abc",
+  "workflow_url": "https://github.com/REDrighthand05/echo4d/actions/runs/40862234170",
+  "artifact_url": "https://github.com/REDrighthand05/echo4d/actions/runs/40862234170/artifacts/12891164994",
+  "artifact_zip_sha256": "b62b3cb870bd5472558fe37fd6ffe809b2344521e350a4806fd970d4b6c0dd48",
+  "five_view_board_sha256": "c60a074a79e26f8e46e600dffa95e7248b02699a4677a725f2ed87550f2ceeae",
+  "old_mesh_sha256": "d612d5f36b4fa89485fe10b1bedda6b789f2e1a0b70a06adea7b9087c0a96251",
+  "new_mesh_sha256": "80bd88e2fb4c3198de297cf49e7740685ce4204386ba162df70440cfd1c7f4d0",
+  "new_glb_sha256": "3b7fd6a00cdd9fad59a7b53b68cb0749d156662e547d5fede2031b5ac45e4532",
+  "real_run": {
+    "status": "SUCCESS",
+    "cpu_tests": "dedicated test step passed",
+    "verify_at_tested_checkout": "SUCCESS",
+    "old_camera_translation_error_m": {
+      "median": 0.06336638960304723,
+      "max": 0.4997515357341806,
+      "p90": 0.39436651320859223
+    },
+    "new_camera_translation_error_m": {
+      "median": 0.13396694728884925,
+      "max": 0.5651245418296181,
+      "p90": 0.5008318597831218
+    },
+    "pnp_edges": 282,
+    "dense_icp_accepted": 267,
+    "pnp_fallback": 15,
+    "old_mesh_faces": 274230,
+    "new_mesh_faces": 256254,
+    "new_mesh_components": 993,
+    "five_view_covered_pixels": {
+      "old": [
+        75291,
+        66426,
+        76157,
+        72697,
+        74386
+      ],
+      "new": [
+        75454,
+        73774,
+        76379,
+        67407,
+        74630
+      ]
+    }
+  },
+  "visual_verdict": "FAIL. Desk and monitor recognizable in both; second recorded view is more smeared in new ICP result, free view 1 loses visible geometry and both still have holes, warped furniture and missing continuous room shell. More covered pixels in one recorded view is not geometry truth.",
+  "limitations": [
+    "Withheld GT used only after fusion to diagnose error",
+    "One metric pose anchor remains",
+    "Measured depth is required; not RGB-only",
+    "Echo4D browser GLB loading not tested",
+    "No #74 visual acceptance"
+  ],
+  "next_shortest": "Reject dense ICP edges that conflict with independent depth-supported PnP and add robust per-edge weighting before global graph optimization; rerun same 96-frame Mesh and five views; do not merge this failed candidate as a quality improvement."
+}
