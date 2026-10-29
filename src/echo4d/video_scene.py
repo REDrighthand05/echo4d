@@ -149,6 +149,7 @@ def build_parser():
     parser.add_argument('--resolution-level', type=int, choices=[0, 1, 2], default=1)
     parser.add_argument('--min-registration', type=float, default=.8)
     parser.add_argument('--threads', type=int, default=2)
+    parser.add_argument('--matching-mode',choices=['sequential','exhaustive'],default='exhaustive')
     return parser
 
 
@@ -186,6 +187,7 @@ def run(args):
                'generated_model_used':False, 'surface_support':'not independently classified; meshing is an estimate', 'visual_accepted':False,
                'config':{'max_frames':args.max_frames, 'resolution_level':args.resolution_level,
                          'min_registration':args.min_registration, 'threads':args.threads,
+                         'matching_mode':args.matching_mode,
                          'camera_model':args.camera_model, 'camera_params':args.camera_params},
                'executable_sha256':{n:file_sha256(Path(p)) for n,p in programs.items()}}
     write_json(output/'scene-report.json', receipt)
@@ -193,7 +195,8 @@ def run(args):
     try:
         sfm = run_sfm(argparse.Namespace(video=args.video.resolve(), images=None,
             timestamps=None, output=output/'sfm', fps=4., timestamp_mode='source-pts',
-            max_frames=args.max_frames, camera_model=args.camera_model, camera_params=args.camera_params))
+            max_frames=args.max_frames, camera_model=args.camera_model, camera_params=args.camera_params,
+            matching_mode=args.matching_mode))
         if not sfm['status'].startswith('passed'):
             raise DataError('SfM failed; see sfm/report.json')
         result = sfm['result']

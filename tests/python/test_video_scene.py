@@ -68,6 +68,7 @@ def test_cli_exposes_same_pipeline():
     args = cli_parser().parse_args(['video-scene','--video','clip.mp4','--output','out'])
     assert args.command == 'video-scene'
     assert args.min_registration == .8
+    assert args.matching_mode == 'exhaustive'
 
 
 def test_refuse_existing_output(tmp_path):

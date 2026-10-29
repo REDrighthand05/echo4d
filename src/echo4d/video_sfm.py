@@ -282,11 +282,16 @@ def run_pipeline(args: argparse.Namespace) -> dict:
                   '--SiftExtraction.num_threads','2',
                   '--SiftExtraction.max_num_features','4096'],
                  receipt,'colmap-features',600)
-        run_step(['colmap','sequential_matcher','--database_path',str(database),
-                  '--SequentialMatching.overlap','10',
-                  '--SiftMatching.use_gpu','0',
+        matching = getattr(args, 'matching_mode', 'sequential')
+        if matching not in ['sequential', 'exhaustive']:
+            raise DataError('Unknown COLMAP matching mode')
+        matcher = ['colmap', matching+'_matcher', '--database_path', str(database)]
+        if matching == 'sequential':
+            matcher += ['--SequentialMatching.overlap','10']
+        receipt['matching_mode'] = matching
+        run_step([*matcher,'--SiftMatching.use_gpu','0',
                   '--SiftMatching.num_threads','2'],
-                 receipt,'colmap-sequential-matching',600)
+                 receipt,'colmap-'+matching+'-matching',1200)
         run_step(['colmap','mapper','--database_path',str(database),
                   '--image_path',str(images),'--output_path',str(sparse)],
                  receipt,'colmap-sparse-mapper',1000)
@@ -339,6 +344,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument('--timestamp-mode',choices=['resampled','source-pts'],default='resampled',
                         help='Video only: legacy fps resampling or decoded source PTS sampling')
     parser.add_argument('--max-frames',type=int,default=120)
+    parser.add_argument('--matching-mode',choices=['sequential','exhaustive'],default='sequential')
     parser.add_argument('--camera-model',choices=['PINHOLE','SIMPLE_PINHOLE','SIMPLE_RADIAL'],default='SIMPLE_RADIAL')
     parser.add_argument('--camera-params',help='Optional real source intrinsics, comma-delimited in selected model order')
     args=parser.parse_args(argv)
