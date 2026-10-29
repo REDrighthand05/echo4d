@@ -1,0 +1,70 @@
+name: Stanford bounded measured-pose ICP real 480-frame Mesh A/B
+on:
+  push:
+    branches: [research/stanford-constrained-icp-20261029]
+    paths:
+      - tools/stanford_bounded_icp.py
+      - tests/python/test_stanford_bounded_icp.py
+      - .github/workflows/stanford-bounded-icp.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: stanford-bounded-icp-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  measured-icp-real-room:
+    runs-on: ubuntu-latest
+    timeout-minutes: 110
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install Open3D 0.19 measured-depth TSDF and render dependencies
+        run: |
+          python -m pip install -r requirements.lock
+          python -m pip install --no-deps -e .
+          python -m pip install 'open3d==0.19.0' 'trimesh>=4,<5'
+      - name: Verify bounded SE3 correction and logged camera convention
+        env:
+          PYTHONPATH: tools
+        run: python -m pytest -q tests/python/test_stanford_bounded_icp.py tests/python/test_stanford_sparse_15mm.py
+      - name: Run real Stanford 480-frame native 640x480 bounded ICP and 25mm TSDF
+        env:
+          PYTHONPATH: tools
+          OPENBLAS_NUM_THREADS: '1'
+          OMP_NUM_THREADS: '2'
+        run: |
+          python tools/stanford_bounded_icp.py \
+            --cache "$RUNNER_TEMP/stanford-lounge-rgbd" \
+            --source docs/real-room-review/stanford-measured-gap/OBSERVED-gap-guided-full.glb \
+            --source-report docs/real-room-review/stanford-measured-gap/result.json \
+            --output "$GITHUB_WORKSPACE/artifacts/stanford-bounded-icp"
+      - name: Show actual real Mesh changes, not an automatic visual PASS
+        if: always()
+        run: |
+          if [ -f artifacts/stanford-bounded-icp/result.json ]; then
+            python - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import json
+          from pathlib import Path
+          r=json.loads(Path("artifacts/stanford-bounded-icp/result.json").read_text())
+          print("# Stanford Lounge bounded ICP: measured RGB-D, no scan prior")
+          print("Observed baseline faces:",r["original_observed_faces"])
+          print("Refined observed faces:",r["bounded_icp_observed_faces"])
+          print("Accepted bounded corrections:",r["accepted_pose_corrections"])
+          for v in r["five_comparison_views"]:
+              print(v["kind"],v["file"],v["before_hit_pixels"],"->",v["after_hit_pixels"])
+          print("Human visual acceptance: NOT REVIEWED; #74 FAIL unchanged")
+          PY
+          elif [ -f artifacts/stanford-bounded-icp/FAILED.txt ]; then
+            cat artifacts/stanford-bounded-icp/FAILED.txt >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Preserve full real colored GLB PLY five images and failures
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stanford-bounded-icp-${{ github.run_id }}
+          path: artifacts/stanford-bounded-icp/
+          retention-days: 14
+          if-no-files-found: warn
