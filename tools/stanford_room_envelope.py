@@ -71,8 +71,9 @@ def extend_plane(vertices, colors, plane, tree, *,
     """Small external strips + interior holes, constrained to measured support."""
     center, normal, basis, ids, span = plane
     uv = (vertices[ids] - center) @ basis.T
-    lo = uv.min(axis=0) - grid * 2
-    shape = np.ceil((uv.max(axis=0) - lo + grid * 2) / grid).astype(int) + 1
+    pad = edge_m + grid * 2
+    lo = uv.min(axis=0) - pad
+    shape = np.ceil((uv.max(axis=0) - uv.min(axis=0) + 2 * pad) / grid).astype(int) + 1
     if np.prod(shape) > 350000:
         raise ValueError("Room grid budget exceeded")
     cell = np.floor((uv - lo) / grid).astype(int)
