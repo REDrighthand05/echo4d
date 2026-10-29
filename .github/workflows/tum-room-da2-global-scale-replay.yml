@@ -1,0 +1,66 @@
+name: TUM room DA2 known-pose RGB global scale replay
+
+on:
+  push:
+    branches:
+      - research/room-da2-global-scale-replay-20261029
+    paths:
+      - 'tools/da2_global_scale.py'
+      - 'tools/tum_room_da2_global_scale_replay.py'
+      - 'tests/python/test_da2_global_scale.py'
+      - '.github/workflows/tum-room-da2-global-scale-replay.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  real-room-global-scale:
+    runs-on: ubuntu-latest
+    timeout-minutes: 65
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: requirements.lock
+      - name: Install existing CPU Mesh provider
+        run: |
+          python -m pip install -r requirements.lock
+          python -m pip install --no-deps -e .
+          python -m pip install 'open3d==0.19.0' 'opencv-python-headless==4.12.0.88' 'trimesh==4.11.1'
+      - name: Run synthetic known-pose geometry regressions
+        env:
+          PYTHONPATH: tools
+          OPENBLAS_NUM_THREADS: '1'
+        run: |
+          python -m py_compile tools/da2_global_scale.py tools/tum_room_da2_global_scale_replay.py
+          python -m pytest -q tests/python/test_da2_global_scale.py
+      - name: Download frozen real DA2 inferred RGB depths (no sensor Z)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/room-da2-prior"
+          gh run download 40790769632 --repo "$GITHUB_REPOSITORY" \
+            --name tum-room-da2-consensus-40790769632 --dir "$RUNNER_TEMP/room-da2-prior"
+          test -s "$RUNNER_TEMP/room-da2-prior/replay-inputs/ledger.json"
+          test -s "$RUNNER_TEMP/room-da2-prior/multiview-mesh/mesh.ply"
+      - name: Real-room global-scale replay with existing Open3D TSDF and frozen 3+2 cameras
+        env:
+          PYTHONPATH: tools
+          OPENBLAS_NUM_THREADS: '1'
+          OMP_NUM_THREADS: '2'
+        run: |
+          python tools/tum_room_da2_global_scale_replay.py \
+            --previous "$RUNNER_TEMP/room-da2-prior" \
+            --output "$GITHUB_WORKSPACE/artifacts/room-da2-global-scale"
+      - name: Preserve real old/new GLB, 3+2 original RGB and raw failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tum-room-da2-global-scale-${{ github.run_id }}
+          path: artifacts/room-da2-global-scale/
+          if-no-files-found: warn
+          retention-days: 14
