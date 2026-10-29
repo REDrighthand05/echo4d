@@ -1,0 +1,46 @@
+{
+  "native_faces": 553208,
+  "native_vertices": 287882,
+  "glb_faces": 553208,
+  "glb": "observed-full-600frames.glb",
+  "glb_bytes": 11245620,
+  "decimated": false,
+  "scene": "Real Redwood Bedroom, 600 frames of 640x480 RGB-D",
+  "source_run": "https://github.com/REDrighthand05/echo4d/actions/runs/40778686280",
+  "preexisting_prior_used": false,
+  "geometry_changed": false,
+  "previous_glb_faces": 85000,
+  "previous_render_faces": 30000,
+  "visual_acceptance": "not yet reviewed",
+  "issue_74": "FAIL unchanged",
+  "views": [
+    {
+      "view": "real",
+      "frame": 0,
+      "file": "visual/photo-vs-mesh-00000.png",
+      "native_hit_pixels": 76788
+    },
+    {
+      "view": "real",
+      "frame": 10995,
+      "file": "visual/photo-vs-mesh-10995.png",
+      "native_hit_pixels": 76491
+    },
+    {
+      "view": "real",
+      "frame": 21929,
+      "file": "visual/photo-vs-mesh-21929.png",
+      "native_hit_pixels": 76770
+    },
+    {
+      "view": "free",
+      "file": "visual/free-view-1.png",
+      "native_hit_pixels": 74840
+    },
+    {
+      "view": "free",
+      "file": "visual/free-view-2.png",
+      "native_hit_pixels": 71828
+    }
+  ]
+}
