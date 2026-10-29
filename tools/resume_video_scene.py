@@ -48,6 +48,21 @@ try:
     if stage in ['texture','blender']:
         receipt.update(densify_rerun=False, mesh_rerun=False, refine_rerun=False, texture_rerun=False,
                        source_textured_glb_sha256=file_sha256(output/'scene_textured.glb'))
+        if presentation_only:
+            # Curated artifacts retain exact source pixels in the left comparison panel.
+            from PIL import Image
+            image_dir=output/'dense/images'
+            image_dir.mkdir(parents=True,exist_ok=True)
+            for index in sorted({0,len(frames)//2,len(frames)-1}):
+                relative=f'review/recorded-{index:05d}.png'
+                pair=output/relative
+                if file_sha256(pair)!=original['outputs'][relative]:
+                    raise ValueError('Frozen source comparison changed')
+                with Image.open(pair) as photo:
+                    if photo.width % 2 or photo.height <= 28:
+                        raise ValueError('Invalid source comparison dimensions')
+                    photo.crop((0,28,photo.width//2,photo.height)).save(image_dir/frames[index]['name'])
+            receipt['source_rgb_recovered_from_verified_comparison']=True
         for name in ['scene.blend','scene.json','views','review','scene-delivery.zip']:
             path=output/name
             if path.exists():
