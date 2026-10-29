@@ -74,7 +74,7 @@ def package_scene(output, frames):
     for p in (output/'views').glob('free-*.png'):
         shutil.copyfile(p,review/p.name)
     (output/'README.txt').write_text('Open scene.blend in Blender. Camera view follows the recorded source timeline; leave camera view to orbit the same mesh.\nScale is UNKNOWN. Geometry is estimated from RGB, with observed image texture.\nMissing surfaces and remaining reconstruction errors are not verified historical geometry.\nreview/ contains 3 source/render comparisons and 2 actual free-camera renders.\n')
-    paths=[output/'scene_textured.glb',output/'scene.blend',output/'scene.json',output/'camera-timeline.json',output/'README.txt',*sorted(review.glob('*.png'))]
+    paths=[output/'scene_textured.glb',output/'scene.blend',output/'scene.json',output/'camera-timeline.json',output/'camera-views.json',output/'README.txt',*sorted(review.glob('*.png'))]
     with zipfile.ZipFile(output/'scene-delivery.zip','w',compression=zipfile.ZIP_DEFLATED) as archive:
         for p in paths:
             archive.write(p,p.relative_to(output))
@@ -156,7 +156,9 @@ def build_parser():
 
 def dense_and_export(output, receipt, programs, args, frames, start='densify', mesh_file=None):
     """Shared downstream execution, also used to resume a frozen SfM result."""
-    mvs = required_file(output/'scene.mvs')
+    mvs = output/'scene.mvs'
+    if start != 'export':
+        required_file(mvs)
     stages = [('densify','DensifyPointCloud',mvs,output/'scene_dense.mvs'),
               ('mesh','ReconstructMesh',output/'scene_dense.mvs',output/'scene_mesh.mvs'),
               ('refine','RefineMesh',output/'scene_mesh.mvs',output/'scene_refined.mvs'),

@@ -22,12 +22,13 @@ jobs:
       - run: python -m pip install -e . trimesh==4.11.1
       - uses: actions/download-artifact@v4
         with:
-          name: recovered-rgb-video-scene-aa30a1e8bc5d614cefc0b0405a40205c12641015
-          run-id: 40968846555
+          name: exported-rgb-video-scene-fe5ec54816c4ffbd5652d634cb11c2d8c0412cd0
+          run-id: 40970315676
           github-token: ${{ github.token }}
       - name: Pack existing textures, export Blender and five views; no geometry rerun
         env:
-          ECHO_SOURCE_RUN: '40968846555'
+          ECHO_SOURCE_RUN: '40970315676'
+          ECHO_PRESENTATION_ONLY: '1'
           OMP_NUM_THREADS: '2'
           OPENBLAS_NUM_THREADS: '2'
         run: python tools/resume_video_scene.py
@@ -42,6 +43,9 @@ jobs:
             video-result/scene_textured*.glb
             video-result/scene-report*.json
             video-result/camera-timeline.json
+            video-result/camera-views.json
+            video-result/views.before-40970315676
+            video-result/review.before-40970315676
             video-result/views
             video-result/review
             video-result/*.log

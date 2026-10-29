@@ -78,6 +78,7 @@ def add_timeline(path):
 
 def render_views(output, trajectory):
     from mathutils import Vector
+    import numpy as np
     scene = bpy.context.scene
     scene.render.engine = 'CYCLES'
     scene.cycles.device = 'CPU'
@@ -96,24 +97,46 @@ def render_views(output, trajectory):
     views = output.parent/'views'
     views.mkdir()
     original_camera = scene.camera
+    specifications=[]
+    def record(name,kind,**extra):
+        specifications.append({'name':name,'kind':kind,
+            'camera_to_blender_world':[list(row) for row in scene.camera.matrix_world],
+            'resolution':[scene.render.resolution_x,scene.render.resolution_y],
+            'lens_mm':scene.camera.data.lens,'sensor_width_mm':scene.camera.data.sensor_width,
+            'sensor_fit':scene.camera.data.sensor_fit,
+            'shift':[scene.camera.data.shift_x,scene.camera.data.shift_y],
+            'pixel_aspect':[scene.render.pixel_aspect_x,scene.render.pixel_aspect_y],**extra})
     for index in sorted({0,len(frames)//2,len(frames)-1}):
         frame = 1+30*frames[index]['t_s']
         scene.frame_set(int(frame),subframe=frame-int(frame))
         scene.render.filepath = str(views/f'recorded-{index:05d}.png')
         bpy.ops.render.render(write_still=True)
-    points=[obj.matrix_world @ Vector(p) for obj in scene.objects if obj.type=='MESH' for p in obj.bound_box]
-    center=sum(points,Vector())/len(points)
-    radius=max((p-center).length for p in points)
+        record(f'recorded-{index:05d}.png','recorded',source_name=frames[index]['name'],source_seconds=frames[index]['t_s'])
+    points=np.array([list(obj.matrix_world @ vertex.co) for obj in scene.objects if obj.type=='MESH' for vertex in obj.data.vertices])
+    center=Vector(np.median(points,axis=0))
+    radius=float(np.linalg.norm(np.quantile(points,.95,axis=0)-np.quantile(points,.05,axis=0))*.5)
+    scene.frame_set(1)
+    first_pose=original_camera.matrix_world.copy()
+    up_reference=first_pose.col[1].xyz.normalized()
+    right_reference=first_pose.col[0].xyz.normalized()
+    forward_reference=-first_pose.col[2].xyz.normalized()
     free=bpy.data.objects.new('Free review camera',bpy.data.cameras.new('Free review camera'))
     scene.collection.objects.link(free)
     scene.camera=free
     free.data.lens=28
+    free.data.sensor_fit='HORIZONTAL'
     free.data.clip_end=max(1000,radius*20)
-    for index,offset in enumerate([(1,-1,.65),(-1,-.5,.8)],1):
-        free.location=center+Vector(offset).normalized()*radius*2.2
-        free.rotation_euler=(center-free.location).to_track_quat('-Z','Y').to_euler()
+    free.rotation_mode='QUATERNION'
+    for index,offset in enumerate([(-.45,.25,-.2),(.45,.2,-.15)],1):
+        free.location=first_pose.translation+radius*(right_reference*offset[0]+up_reference*offset[1]+forward_reference*offset[2])
+        direction=(center-free.location).normalized()
+        right=direction.cross(up_reference).normalized()
+        up=right.cross(direction).normalized()
+        free.rotation_quaternion=Matrix((right,up,-direction)).transposed().to_quaternion()
         scene.render.filepath=str(views/f'free-{index}.png')
         bpy.ops.render.render(write_still=True)
+        record(f'free-{index}.png','free',up_reference='first estimated recorded camera, not measured gravity')
+    (output.parent/'camera-views.json').write_text(json.dumps(specifications,indent=2))
     scene.camera=original_camera
     scene.frame_set(1)
 
