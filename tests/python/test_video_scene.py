@@ -90,3 +90,46 @@ def test_registration_failure_stops_before_meshing(tmp_path, monkeypatch):
     assert report['stages']==[]
     assert report['config']['min_registration']==.8
     assert not (args.output/'scene.blend').exists()
+
+
+def test_orchestration_contract_with_explicit_fake_backends(tmp_path, monkeypatch):
+    """E2 only: assert handoff filenames/calibration/order, not MVS quality."""
+    video=tmp_path/'video.mp4'
+    video.write_bytes(b'fixture')
+    args=build_parser().parse_args(['--video',str(video),'--output',str(tmp_path/'out')])
+    args.blender_script=Path(__file__)
+    monkeypatch.setattr('echo4d.video_scene.shutil.which',lambda _:sys.executable)
+    def sfm(namespace):
+        namespace.output.mkdir()
+        frames=[{'name':f'frame_{i:05d}.png','t_s':i,'camera_id':1,'camera_to_sfm_world':[1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1]} for i in range(3)]
+        (namespace.output/'trajectory-scale-unknown.json').write_text(json.dumps({'frames':frames}))
+        return {'status':'passed_fixture','result':{'registration_fraction':1,'sfm_model_dir':'text-model-0'}}
+    monkeypatch.setattr('echo4d.video_scene.run_sfm',sfm)
+    commands=[]
+    def stage(name, command, output, receipt):
+        commands.append((name,list(map(str,command))))
+        receipt['stages'].append({'stage':name,'status':'FAKE_FOR_UNIT_TEST'})
+        if name=='camera-model':
+            model=output/'undistorted-model'
+            (model/'cameras.txt').write_text('1 PINHOLE 640 480 525 525 319.5 239.5\n')
+            (model/'images.txt').write_text(''.join(f'{i+1} 1 0 0 0 0 0 0 1 frame_{i:05d}.png\n\n' for i in range(3)))
+        if name in ['interface','densify','mesh','refine','texture']:
+            target=Path(command[command.index('-o')+1])
+            target.write_bytes(b'FAKE_BACKEND_TEST_ONLY')
+        if name=='texture':
+            glb(output/'scene_textured.glb')
+        if name=='blender':
+            (output/'scene.blend').write_bytes(b'FAKE_BACKEND_TEST_ONLY')
+            (output/'scene.json').write_text('{}')
+    monkeypatch.setattr('echo4d.video_scene.run_stage',stage)
+    monkeypatch.setattr('echo4d.video_scene.package_scene',lambda output,frames: (output/'scene-delivery.zip').write_bytes(b'FAKE_EXPORT') and {'fixture':'E2 only'})
+    receipt=run(args)
+    assert receipt['status']=='completed_not_quality_accepted'
+    assert not receipt['visual_accepted']
+    assert [n for n,_ in commands]==['undistort','camera-model','interface','densify','mesh','refine','texture','blender']
+    for n,command in commands:
+        if n in ['mesh','refine']:
+            assert command[command.index('--close-holes')+1]=='0'
+    timeline=json.loads((args.output/'camera-timeline.json').read_text())
+    assert timeline['cameras']['1']==[640,480,525,525,319.5,239.5]
+    assert [f['t_s'] for f in timeline['frames']]==[0,1,2]

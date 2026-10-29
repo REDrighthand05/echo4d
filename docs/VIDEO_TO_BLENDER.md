@@ -18,7 +18,8 @@ Python 环境另安装项目依赖和 trimesh；OpenMVS 独立程序采用 AGPL-
 选择有效模型、核查注册比例后，COLMAP 去畸变，OpenMVS InterfaceCOLMAP →
 DensifyPointCloud → ReconstructMesh → RefineMesh → TextureMesh。
 使用输入 RGB 投影生成嵌入纹理的 GLB，再用 Blender 实际导入、保存和重开。
-输出 scene_textured.glb、scene.blend、camera-timeline.json、scene-report.json。
+输出 scene_textured.glb、scene.blend、camera-timeline.json、scene-report.json，
+以及带3张原图/渲染对照与2张自由视角的 scene-delivery.zip。
 Blender 内含录制相机动画；时间帧=1+源相对秒×30，精确时间 JSON 同时嵌入工程。
 去畸变相机内参与世界位姿用于回放，允许切换自由轨道观察同一网格。
 

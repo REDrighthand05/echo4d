@@ -13,6 +13,7 @@ import shutil
 import subprocess
 import sys
 import time
+import zipfile
 
 from .model import DataError, file_sha256
 from .video_sfm import run_pipeline as run_sfm
@@ -53,6 +54,30 @@ def required_file(path):
     if not path.is_file() or path.stat().st_size == 0:
         raise DataError(f'Backend did not produce {path.name}')
     return path
+
+
+def package_scene(output, frames):
+    from PIL import Image, ImageDraw
+    review = output/'review'
+    review.mkdir()
+    for index in sorted({0,len(frames)//2,len(frames)-1}):
+        with Image.open(output/'dense/images'/frames[index]['name']) as photo, Image.open(output/'views'/f'recorded-{index:05d}.png') as rendered:
+            photo, rendered = photo.convert('RGB'), rendered.convert('RGB')
+            if photo.size != rendered.size:
+                raise DataError('Recorded camera render dimensions differ from undistorted RGB')
+            canvas = Image.new('RGB',(photo.width*2,photo.height+28),(24,24,24))
+            ImageDraw.Draw(canvas).text((8,8),'UNDISTORTED SOURCE RGB / ESTIMATED MESH',fill='white')
+            canvas.paste(photo,(0,28))
+            canvas.paste(rendered,(photo.width,28))
+            canvas.save(review/f'recorded-{index:05d}.png')
+    for p in (output/'views').glob('free-*.png'):
+        shutil.copyfile(p,review/p.name)
+    (output/'README.txt').write_text('Open scene.blend in Blender. Camera view follows the recorded source timeline; leave camera view to orbit the same mesh.\nScale is UNKNOWN. Geometry is estimated from RGB, with observed image texture.\nMissing surfaces and remaining reconstruction errors are not verified historical geometry.\nreview/ contains 3 source/render comparisons and 2 actual free-camera renders.\n')
+    paths=[output/'scene_textured.glb',output/'scene.blend',output/'scene.json',output/'camera-timeline.json',output/'README.txt',*sorted(review.glob('*.png'))]
+    with zipfile.ZipFile(output/'scene-delivery.zip','w',compression=zipfile.ZIP_DEFLATED) as archive:
+        for p in paths:
+            archive.write(p,p.relative_to(output))
+    return {str(p.relative_to(output)):file_sha256(p) for p in paths}
 
 
 def verify_textured_glb(path):
@@ -208,9 +233,10 @@ def run(args):
             required_file(target)
         glb = output/'scene_textured.glb'
         receipt['mesh'] = verify_textured_glb(glb)
-        run_stage('blender', [programs['blender'], '-b', '--python-exit-code', '1', '--python', args.blender_script.resolve(), '--', '--input', glb, '--output', output/'scene.blend', '--units', 'unknown', '--trajectory', output/'camera-timeline.json', '--provenance', 'RGB-only COLMAP/OpenMVS; scale unknown; estimated geometry'], output, receipt)
+        run_stage('blender', [programs['blender'], '-b', '--python-exit-code', '1', '--python', args.blender_script.resolve(), '--', '--input', glb, '--output', output/'scene.blend', '--units', 'unknown', '--trajectory', output/'camera-timeline.json', '--render-views', '--provenance', 'RGB-only COLMAP/OpenMVS; scale unknown; estimated geometry'], output, receipt)
         required_file(output/'scene.blend')
-        receipt['outputs'] = {p.name:file_sha256(p) for p in [glb,output/'scene.blend',output/'camera-timeline.json',output/'scene.json']}
+        receipt['outputs'] = package_scene(output, frames)
+        receipt['delivery_zip_sha256'] = file_sha256(output/'scene-delivery.zip')
         receipt['status'] = 'completed_not_quality_accepted'
     except Exception as error:
         receipt.update(status='failed', error=f'{type(error).__name__}: {error}')

@@ -76,7 +76,44 @@ def add_timeline(path):
     return len(frames)
 
 
-def run(source, output, provenance, units='metric', trajectory=None):
+def render_views(output, trajectory):
+    from mathutils import Vector
+    scene = bpy.context.scene
+    scene.render.engine = 'CYCLES'
+    scene.cycles.device = 'CPU'
+    scene.cycles.samples = 8
+    scene.render.resolution_percentage = 100
+    scene.render.image_settings.file_format = 'PNG'
+    scene.world = bpy.data.worlds.new('Review environment')
+    scene.world.use_nodes = True
+    scene.world.node_tree.nodes['Background'].inputs['Color'].default_value = (.8,.8,.8,1)
+    frames = json.loads(Path(trajectory).read_text())['frames']
+    views = output.parent/'views'
+    views.mkdir()
+    original_camera = scene.camera
+    for index in sorted({0,len(frames)//2,len(frames)-1}):
+        frame = 1+30*frames[index]['t_s']
+        scene.frame_set(int(frame),subframe=frame-int(frame))
+        scene.render.filepath = str(views/f'recorded-{index:05d}.png')
+        bpy.ops.render.render(write_still=True)
+    points=[obj.matrix_world @ Vector(p) for obj in scene.objects if obj.type=='MESH' for p in obj.bound_box]
+    center=sum(points,Vector())/len(points)
+    radius=max((p-center).length for p in points)
+    free=bpy.data.objects.new('Free review camera',bpy.data.cameras.new('Free review camera'))
+    scene.collection.objects.link(free)
+    scene.camera=free
+    free.data.lens=28
+    free.data.clip_end=max(1000,radius*20)
+    for index,offset in enumerate([(1,-1,.65),(-1,-.5,.8)],1):
+        free.location=center+Vector(offset).normalized()*radius*2.2
+        free.rotation_euler=(center-free.location).to_track_quat('-Z','Y').to_euler()
+        scene.render.filepath=str(views/f'free-{index}.png')
+        bpy.ops.render.render(write_still=True)
+    scene.camera=original_camera
+    scene.frame_set(1)
+
+
+def run(source, output, provenance, units='metric', trajectory=None, render=False):
     source, output = Path(source).resolve(), Path(output).resolve()
     if not source.is_file() or source.suffix.lower() != ".glb":
         raise ValueError("A real GLB file is required")
@@ -110,6 +147,9 @@ def run(source, output, provenance, units='metric', trajectory=None):
     bpy.context.scene["echo4d_input_provenance"] = provenance
     bpy.context.scene['echo4d_scale'] = units
     camera_frames = add_timeline(trajectory) if trajectory else 0
+    for picture in bpy.data.images:
+        if picture.type == 'IMAGE' and picture.has_data and not picture.packed_file:
+            picture.pack()
     # Start in material preview, frame the model and retain free orbit controls.
     for screen in bpy.data.screens:
         for area in screen.areas:
@@ -120,6 +160,10 @@ def run(source, output, provenance, units='metric', trajectory=None):
     after = geometry()
     if before != after:
         raise RuntimeError("Geometry/material counts changed after .blend reopening")
+    if render:
+        if not trajectory:
+            raise ValueError('Rendering recorded views requires a camera timeline')
+        render_views(output, trajectory)
     receipt = {
         "blender_version": bpy.app.version_string,
         "input_provenance": provenance,
@@ -142,6 +186,7 @@ if __name__ == "__main__":
     parser.add_argument("--provenance", default="user-provided GLB")
     parser.add_argument('--units', choices=['metric','unknown'], default='metric')
     parser.add_argument('--trajectory', type=Path)
+    parser.add_argument('--render-views', action='store_true')
     args = parser.parse_args(sys.argv[sys.argv.index("--") + 1:])
-    run(args.input, args.output, args.provenance, args.units, args.trajectory)
+    run(args.input, args.output, args.provenance, args.units, args.trajectory, args.render_views)
 
