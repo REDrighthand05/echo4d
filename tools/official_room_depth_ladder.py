@@ -102,6 +102,58 @@ def integrate_subset(o3d, trimesh, pairs, count, output: Path, voxel: float):
                   "glb_sha256": sha256(output / f"measured-{count}.glb")}
 
 
+def render_fixed_views(o3d, mesh, pairs, bounds, output: Path):
+    """Render identical recorded and world-space free rays for every Mesh."""
+    from PIL import Image, ImageDraw
+    faces = np.asarray(mesh.triangles)
+    rgb = np.asarray(mesh.vertex_colors)
+    scene = o3d.t.geometry.RaycastingScene()
+    scene.add_triangles(o3d.t.geometry.TriangleMesh.from_legacy(mesh))
+    k = np.array([[525., 0., 319.5], [0., 525., 239.5], [0., 0., 1.]])
+    k[:2] /= 2
+    k[0, 2] = (319.5 + .5) / 2 - .5
+    k[1, 2] = (239.5 + .5) / 2 - .5
+    center = (bounds[0] + bounds[1]) / 2
+    span = bounds[1] - bounds[0]
+    views = []
+    for i in (0, len(pairs)//2, len(pairs)-1):
+        rays = o3d.t.geometry.RaycastingScene.create_rays_pinhole(
+            o3d.core.Tensor(k.astype(np.float32)),
+            o3d.core.Tensor(np.linalg.inv(pairs[i][3]).astype(np.float32)),
+            320, 240)
+        views.append((f"recorded-{i:05d}.png", rays, pairs[i][1]))
+    for j, offset in enumerate(([-.5, -.9, -.7], [.8, -1.2, .05]), 1):
+        eye = center + span * np.asarray(offset)
+        rays = o3d.t.geometry.RaycastingScene.create_rays_pinhole(
+            78., o3d.core.Tensor(center.astype(np.float32)),
+            o3d.core.Tensor(eye.astype(np.float32)),
+            o3d.core.Tensor(np.array([0., -1., 0.], np.float32)), 320, 240)
+        views.append((f"free-{j}.png", rays, None))
+    folder = output / "views"
+    folder.mkdir()
+    for name, rays, photo in views:
+        hit = scene.cast_rays(rays)
+        ids = hit["primitive_ids"].numpy().reshape(-1)
+        uv = hit["primitive_uvs"].numpy().reshape(-1, 2)
+        dist = hit["t_hit"].numpy().reshape(-1)
+        valid = np.isfinite(dist) & (dist > .15) & (dist < 16.) & (ids < len(faces))
+        pixels = np.zeros((320 * 240, 3), np.uint8)
+        if np.any(valid):
+            w = np.column_stack((1 - uv[valid].sum(axis=1), uv[valid]))
+            pixels[valid] = np.clip(
+                (rgb[faces[ids[valid].astype(int)]] * w[:, :, None]).sum(axis=1) * 255,
+                0, 255).astype(np.uint8)
+        panels = [Image.fromarray(pixels.reshape(240, 320, 3))]
+        if photo is not None:
+            with Image.open(photo) as image:
+                panels.insert(0, image.convert("RGB").resize((320, 240)))
+        canvas = Image.new("RGB", (320 * len(panels), 268), (24, 24, 24))
+        ImageDraw.Draw(canvas).text((8, 8), name, fill="white")
+        for j, panel in enumerate(panels):
+            canvas.paste(panel, (320 * j, 28))
+        canvas.save(folder / name)
+
+
 def comparison_image(output: Path, labels: list[str]):
     from PIL import Image, ImageDraw
     folders = [output / label / "views" for label in labels]
@@ -133,7 +185,6 @@ def comparison_image(output: Path, labels: list[str]):
 def run(official: Path, output: Path, counts=(600, 150)):
     import open3d as o3d
     import trimesh
-    from run_official_room import render_views
 
     official, output = official.resolve(), output.resolve()
     if output.exists():
@@ -165,12 +216,11 @@ def run(official: Path, output: Path, counts=(600, 150)):
         mesh, stat = integrate_subset(o3d, trimesh, pairs, count, output, 3.0 / 512.0)
         models[str(count)] = mesh
         stats[str(count)] = stat
-    color_paths = [color for _, color, _, _ in pairs]
-    ordered_poses = [pose for _, _, _, pose in pairs]
+    fixed_bounds = np.array([baseline.get_min_bound(), baseline.get_max_bound()])
     for key, mesh in models.items():
         target = output / key
         target.mkdir()
-        render_views(o3d, mesh, color_paths, ordered_poses, target)
+        render_fixed_views(o3d, mesh, pairs, fixed_bounds, target)
     labels = ["full", str(counts[0]), str(counts[1])]
     image_path = comparison_image(output, labels)
     report = {
@@ -187,6 +237,7 @@ def run(official: Path, output: Path, counts=(600, 150)):
         "mesh_prior_in_sparse_runs": False,
         "measured_depth_units": "millimeters, converted by depth_scale=1000",
         "predicted_depth_frames": 0,
+        "free_camera_reference": "Fixed from original full official Mesh bounds for all three models",
         "fusion_config": {"voxel_m": 3.0 / 512.0, "sdf_trunc_m": 0.04,
                           "depth_max_m": 3.0, "intrinsic": "PrimeSenseDefault"},
         "models": stats, "visual": image_path.name,
