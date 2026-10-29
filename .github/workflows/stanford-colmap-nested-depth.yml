@@ -1,0 +1,71 @@
+name: Stanford 300 RGB fixed COLMAP 30 15 10 measured depth meshes
+on:
+  push:
+    branches: [research/stanford-colmap300-depth10-nested-20261030]
+    paths:
+      - tools/stanford_colmap_nested_depth.py
+      - .github/workflows/stanford-colmap-nested-depth.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: stanford-colmap300-nested-depth
+  cancel-in-progress: true
+jobs:
+  measured-depth-ablation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Fetch actual independently estimated 300 RGB COLMAP model
+        uses: actions/download-artifact@v4
+        with:
+          name: stanford-300rgb-early-overlap-30depth-40970565394
+          run-id: 40970565394
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: REDrighthand05/echo4d
+          path: artifacts/early-colmap
+      - name: Install real CPU measured-depth fusion dependencies
+        run: |
+          python -m pip install 'open3d==0.19.0' 'trimesh==4.11.1' 'pillow==11.3.0' 'scipy==1.16.2'
+          python -m py_compile tools/stanford_colmap_nested_depth.py
+      - name: Re-fuse actual original Stanford measured RGB-D under frozen RGB poses
+        env:
+          QT_QPA_PLATFORM: offscreen
+          OMP_NUM_THREADS: '2'
+          OPENBLAS_NUM_THREADS: '1'
+        run: |
+          python tools/stanford_colmap_nested_depth.py \
+            --upstream artifacts/early-colmap \
+            --output artifacts/stanford-300rgb-depth30-15-10
+      - name: Require all three real GLBs and fixed-ray five-view image
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p = Path('artifacts/stanford-300rgb-depth30-15-10')
+          r = json.loads((p/'receipt.json').read_text())
+          print(json.dumps({k:r.get(k) for k in ('status','selected_rgb','registered_rgb','metric_scale_witnesses','same_ray_hit_percent')},indent=2))
+          assert r['status'] == 'REAL_MESH_GENERATED_VISUAL_REVIEW_REQUIRED'
+          assert len(r['measured_depth_samples']['10']) == 10
+          assert set(r['measured_depth_samples']['10']).issubset(r['measured_depth_samples']['15'])
+          assert set(r['measured_depth_samples']['15']).issubset(r['measured_depth_samples']['30'])
+          for budget in (30, 15, 10):
+              assert (p / f'measured{budget}.glb').stat().st_size > 10000
+          assert (p / 'source-depth30-15-10-3plus2.png').stat().st_size > 10000
+          PY
+      - name: Preserve actual meshes, original camera comparisons and failure receipt
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stanford-300rgb-nested-depth30-15-10-${{ github.run_id }}
+          path: |
+            artifacts/stanford-300rgb-depth30-15-10/receipt.json
+            artifacts/stanford-300rgb-depth30-15-10/*.glb
+            artifacts/stanford-300rgb-depth30-15-10/*.png
+          retention-days: 30
+          if-no-files-found: warn
