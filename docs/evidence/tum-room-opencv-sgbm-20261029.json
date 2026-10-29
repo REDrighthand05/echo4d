@@ -40,7 +40,18 @@
   "source_photo_provenance": "Three 640x480 source RGB frames recovered from prior actual source association manifest; controls loaded from earlier 96-view measured and zero-sensor PLY, never fed to SGBM.",
   "geometric_truth_claim": false,
   "github_workflow_run": "https://github.com/REDrighthand05/echo4d/actions/runs/40838732211",
-  "github_workflow_status_at_write": "in_progress; do not claim GitHub CI success until checked",
+  "github_workflow_status_at_write": "SUCCESS at tested checkout 44f056c1ed8780833a4fcc7990ef6ca97ea73de3, 3 CPU tests PASS, real 48-camera trial and GLB/PLY artifact produced",
   "issue_74": "FAIL / NOT ACCEPTED",
-  "next_shortest_unblock": "Use multi-view dense depth with arbitrary baseline/orientation (e.g. COLMAP PatchMatch MVS on GPU when genuinely available); do not promote two-view SGBM, and keep 96-sensor Mesh as working reference."
+  "next_shortest_unblock": "Use multi-view dense depth with arbitrary baseline/orientation (e.g. COLMAP PatchMatch MVS on GPU when genuinely available); do not promote two-view SGBM, and keep 96-sensor Mesh as working reference.",
+  "github_tested_checkout": "44f056c1ed8780833a4fcc7990ef6ca97ea73de3",
+  "github_artifact_url": "https://github.com/REDrighthand05/echo4d/actions/runs/40838732211/artifacts/12881812234",
+  "github_run_verified": {
+    "status": "completed",
+    "conclusion": "success",
+    "attempted_references": 48,
+    "successful_references": 37,
+    "triangles": 40042,
+    "vertices": 28455,
+    "tests_passed": 3
+  }
 }
