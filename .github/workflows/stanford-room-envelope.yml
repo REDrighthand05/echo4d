@@ -36,6 +36,7 @@ jobs:
         run: |
           python tools/stanford_room_envelope.py \
             --source docs/real-room-review/stanford-measured-gap/OBSERVED-gap-guided-full.glb \
+            --cache "$RUNNER_TEMP/stanford-lounge-rgbd" \
             --output artifacts/stanford-envelope
           cp artifacts/stanford-envelope/OBSERVED-plus-INFERRED-room-envelope.glb \
              artifacts/stanford-envelope/OBSERVED-plus-INFERRED.glb
