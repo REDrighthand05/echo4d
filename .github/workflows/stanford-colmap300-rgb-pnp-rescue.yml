@@ -11,7 +11,7 @@ permissions:
   actions: read
 concurrency:
   group: stanford-colmap300-rgb-pnp-rescue
-  cancel-in-progress: false
+  cancel-in-progress: true
 jobs:
   rgb-only-pnp-rescue:
     runs-on: ubuntu-latest
