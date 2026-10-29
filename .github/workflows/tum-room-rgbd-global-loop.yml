@@ -1,0 +1,89 @@
+name: Real TUM room global RGB-D loop retrieval and one-anchor Mesh
+
+on:
+  push:
+    branches:
+      - research/room96-rgbd-global-loop-20261029
+    paths:
+      - 'tools/tum_room_rgbd_global_loop.py'
+      - 'tests/python/test_tum_room_rgbd_global_loop.py'
+      - '.github/workflows/tum-room-rgbd-global-loop.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: real-room-rgbd-global-loop-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  real-global-loop:
+    runs-on: ubuntu-latest
+    timeout-minutes: 100
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install existing fusion and mature OpenCV CPU geometry
+        run: |
+          python -m pip install -r requirements.lock
+          python -m pip install --no-deps -e .
+          python -m pip install 'open3d==0.19.0' 'opencv-python-headless==4.12.0.88' 'trimesh==4.11.1' 'pytest>=8,<10'
+      - name: Run CPU regressions
+        env:
+          PYTHONPATH: tools:src
+          OPENBLAS_NUM_THREADS: '1'
+        run: |
+          python -m py_compile tools/tum_room_rgbd_global_loop.py
+          python -m pytest -q tests/python/test_tum_room_rgbd_global_loop.py tests/python/test_tum_room_rgbd_pose_ladder.py
+      - name: Retrieve frozen real RGB, measured-depth baseline, old one-anchor Mesh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/room99" "$RUNNER_TEMP/room96" "$RUNNER_TEMP/oldpose"
+          gh run download 40790769632 --repo "$GITHUB_REPOSITORY" --name tum-room-da2-consensus-40790769632 --dir "$RUNNER_TEMP/room99"
+          gh run download 40832708084 --repo "$GITHUB_REPOSITORY" --name tum-room-96-depth-support-40832708084 --dir "$RUNNER_TEMP/room96"
+          gh run download 40847424620 --repo "$GITHUB_REPOSITORY" --name tum-room-rgbd-pose-40847424620 --dir "$RUNNER_TEMP/oldpose"
+          test -s "$RUNNER_TEMP/room99/replay-inputs/source/association.json"
+          test -s "$RUNNER_TEMP/room96/replay/predicted-96/recording.json"
+          test -s "$RUNNER_TEMP/oldpose/mesh-poses-1/mesh.ply"
+          test -s "$RUNNER_TEMP/oldpose/mesh-poses-5/mesh.ply"
+      - name: Estimate global RGB-D loop edges, fuse real 5/1 anchor Mesh, render 3+2 A/B
+        env:
+          PYTHONPATH: tools:src
+          OPENBLAS_NUM_THREADS: '1'
+          OMP_NUM_THREADS: '2'
+        run: |
+          python tools/tum_room_rgbd_global_loop.py \
+            --source "$RUNNER_TEMP/room99" \
+            --room96 "$RUNNER_TEMP/room96" \
+            --old "$RUNNER_TEMP/oldpose" \
+            --work "$RUNNER_TEMP/global-work" \
+            --output "$GITHUB_WORKSPACE/artifacts/room-rgbd-global-loop"
+      - name: Print real run receipt
+        if: always()
+        run: |
+          if [ -f artifacts/room-rgbd-global-loop/report.json ]; then
+            python - <<'PY'
+          import json
+          r=json.load(open('artifacts/room-rgbd-global-loop/report.json'))
+          print('GRAPH',r['pose_graph'])
+          for k,v in r['variants'].items():
+              print('KNOWN_POSES',k,'ESTIMATED',v['estimated_pose_frames'],
+                    'UNRESOLVED',v['unresolved_pose_frames'],
+                    'FACES',v['faces'],
+                    'MEDIAN_CAMERA_ERROR_M',v['withheld_gt_translation_error_median_m'])
+          print('VISUAL',r['visual_acceptance'])
+          PY
+          fi
+      - name: Save real Mesh, source comparison boards and FAIL/PASS evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tum-room-rgbd-global-loop-${{ github.run_id }}
+          path: artifacts/room-rgbd-global-loop/
+          if-no-files-found: warn
+          retention-days: 14
