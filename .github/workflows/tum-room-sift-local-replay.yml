@@ -1,0 +1,70 @@
+name: TUM room RGB SIFT local geometry replay
+
+on:
+  push:
+    branches:
+      - research/room-sift-local-geometry-20261029
+    paths:
+      - 'tools/known_pose_sift_depth.py'
+      - 'tools/tum_room_sift_local_replay.py'
+      - 'tests/python/test_known_pose_sift_depth.py'
+      - '.github/workflows/tum-room-sift-local-replay.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  real-room-sift-local:
+    runs-on: ubuntu-latest
+    timeout-minutes: 65
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: requirements.lock
+      - name: Install existing CPU Mesh and OpenCV providers
+        run: |
+          python -m pip install -r requirements.lock
+          python -m pip install --no-deps -e .
+          python -m pip install 'open3d==0.19.0' 'opencv-python-headless==4.12.0.88' 'trimesh==4.11.1'
+      - name: Compile and test independent RGB local geometry
+        env:
+          PYTHONPATH: tools
+          OPENBLAS_NUM_THREADS: '1'
+        run: |
+          python -m py_compile tools/known_pose_sift_depth.py tools/tum_room_sift_local_replay.py
+          python -m pytest -q tests/python/test_known_pose_sift_depth.py
+      - name: Download pinned #99 source and #100 RGB global-scale control
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/room-source" "$RUNNER_TEMP/room-control"
+          gh run download 40790769632 --repo "$GITHUB_REPOSITORY" \
+            --name tum-room-da2-consensus-40790769632 --dir "$RUNNER_TEMP/room-source"
+          gh run download 40797864880 --repo "$GITHUB_REPOSITORY" \
+            --name tum-room-da2-global-scale-40797864880 --dir "$RUNNER_TEMP/room-control"
+          test -s "$RUNNER_TEMP/room-source/replay-inputs/ledger.json"
+          test -s "$RUNNER_TEMP/room-control/candidate-input/recording.json"
+          test -s "$RUNNER_TEMP/room-control/candidate-mesh/mesh.ply"
+      - name: Real TUM RGB SIFT triangulation and existing Open3D Mesh fusion
+        env:
+          PYTHONPATH: tools:src
+          OPENBLAS_NUM_THREADS: '1'
+          OMP_NUM_THREADS: '2'
+        run: |
+          python tools/tum_room_sift_local_replay.py \
+            --source "$RUNNER_TEMP/room-source" \
+            --control "$RUNNER_TEMP/room-control" \
+            --output "$GITHUB_WORKSPACE/artifacts/room-sift-local"
+      - name: Preserve actual Mesh, GLBs, 3+2 original RGB comparison and failure report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tum-room-sift-local-${{ github.run_id }}
+          path: artifacts/room-sift-local/
+          if-no-files-found: warn
+          retention-days: 14
