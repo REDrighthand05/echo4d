@@ -1,0 +1,137 @@
+name: Stanford Lounge observed planar support (real geometry)
+on:
+  push:
+    branches: [research/stanford-lounge-planar-support-20261029]
+    paths:
+      - tools/stanford_planar_support.py
+      - tools/stanford_planar_real_views.py
+      - tests/python/test_stanford_planar_support.py
+      - .github/workflows/stanford-planar-support.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+
+jobs:
+  measured-geometry:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install existing geometry dependencies
+        run: |
+          pip install -r requirements.lock
+          pip install --no-deps -e .
+          pip install 'trimesh>=4,<5'
+      - name: Plane and hole guards
+        env:
+          PYTHONPATH: tools
+        run: python -m pytest -q tests/python/test_stanford_planar_support.py
+      - name: Actual Stanford Lounge measured Mesh, no prior
+        env:
+          PYTHONPATH: tools
+          OPENBLAS_NUM_THREADS: '1'
+          OMP_NUM_THREADS: '1'
+        run: |
+          python tools/stanford_planar_support.py \
+            --source docs/real-room-review/stanford-lounge-second-room/OBSERVED-viewable.glb \
+            --output artifacts/stanford-planar
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: stanford-observed-planar-geometry-${{ github.run_id }}
+          path: artifacts/stanford-planar/
+          retention-days: 14
+
+  publish-geometry:
+    needs: measured-geometry
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: stanford-observed-planar-geometry-${{ github.run_id }}
+          path: review
+      - name: Publish actual observed and inferred GLBs
+        run: |
+          set -e
+          git fetch origin research/stanford-lounge-planar-support-20261029
+          git reset --hard origin/research/stanford-lounge-planar-support-20261029
+          dest=docs/real-room-review/stanford-lounge-planar
+          mkdir -p "$dest"
+          cp review/*.glb review/result.json "$dest/"
+          git config user.name "echo4d-real-room-ci"
+          git config user.email "echo4d-real-room-ci@users.noreply.github.com"
+          git add "$dest"
+          git diff --cached --quiet && exit 0
+          git commit -m "results(real-room): Stanford observed plane gap reconstruction"
+          git fetch origin research/stanford-lounge-planar-support-20261029
+          git rebase origin/research/stanford-lounge-planar-support-20261029
+          git push origin HEAD:refs/heads/research/stanford-lounge-planar-support-20261029
+
+  actual-recorded-3plus2:
+    needs: measured-geometry
+    runs-on: ubuntu-latest
+    timeout-minutes: 110
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install mature Open3D raycaster
+        run: |
+          pip install -r requirements.lock
+          pip install --no-deps -e .
+          pip install 'open3d==0.19.0' 'trimesh>=4,<5'
+      - uses: actions/download-artifact@v4
+        with:
+          name: stanford-observed-planar-geometry-${{ github.run_id }}
+          path: artifacts/stanford-planar
+      - name: Render 3 real recorded cameras and 2 free cameras
+        env:
+          PYTHONPATH: tools
+          OPENBLAS_NUM_THREADS: '1'
+          OMP_NUM_THREADS: '1'
+        run: |
+          python tools/stanford_planar_real_views.py \
+            --output artifacts/stanford-planar \
+            --cache "$RUNNER_TEMP/stanford-lounge-rgbd"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: stanford-planar-actual-3plus2-${{ github.run_id }}
+          path: artifacts/stanford-planar/
+          retention-days: 14
+
+  publish-real-views:
+    needs: [publish-geometry, actual-recorded-3plus2]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: stanford-planar-actual-3plus2-${{ github.run_id }}
+          path: review
+      - name: Publish real camera A/B with observed and inferred source labels
+        run: |
+          set -e
+          git fetch origin research/stanford-lounge-planar-support-20261029
+          git reset --hard origin/research/stanford-lounge-planar-support-20261029
+          dest=docs/real-room-review/stanford-lounge-planar
+          mkdir -p "$dest"
+          cp review/result.json "$dest/"
+          cp -r review/three-real-two-free "$dest/"
+          git config user.name "echo4d-real-room-ci"
+          git config user.email "echo4d-real-room-ci@users.noreply.github.com"
+          git add "$dest"
+          git diff --cached --quiet && exit 0
+          git commit -m "results(real-room): 3 recorded plus 2 free Stanford plane A/B"
+          git fetch origin research/stanford-lounge-planar-support-20261029
+          git rebase origin/research/stanford-lounge-planar-support-20261029
+          git push origin HEAD:refs/heads/research/stanford-lounge-planar-support-20261029
