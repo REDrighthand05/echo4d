@@ -1,0 +1,81 @@
+{
+  "experiment": "TUM fr1_room DA2 Small cross-view RGB consensus versus frozen DA2",
+  "date_utc": "2026-10-29",
+  "status": "VISUAL_FAIL_no_material_room_improvement",
+  "issue_74": "FAIL_NOT_ACCEPTED",
+  "tested_head": "13c03ec9df303d55710a6d6efdcb27ae2dd92e19",
+  "workflow_run": "https://github.com/REDrighthand05/echo4d/actions/runs/40790769632",
+  "artifact": "https://github.com/REDrighthand05/echo4d/actions/runs/40790769632/artifacts/12862360473",
+  "artifact_digest": "sha256:f5049628b2aad248357a8e79b234aa1984990e700580d6f1bb207a400833666b",
+  "input": {
+    "source": "TUM fr1_room",
+    "rgb_original": "640x480",
+    "rgb_inference": "320x240",
+    "known_metric_training_poses": 96,
+    "da2_predicted_depth_frames": 30,
+    "metric_scale": "known TUM camera translations plus RGB ZNCC anchors",
+    "removed": [
+      "measured sensor depth pixels",
+      "prior Mesh"
+    ],
+    "timestamp_association_uses_sensor_depth_metadata": true,
+    "posthoc_sensor_mesh_only": true
+  },
+  "method": "DA2 Small CPU relative depth; RGB-known-pose metric calibration; independent cross-view camera-Z splatting with nearest Z visibility, RGB match, two-source agreement; TSDF",
+  "depth_changes": {
+    "filled_pixels": 15225,
+    "blended_pixels": 396796
+  },
+  "old_mesh": {
+    "sha256": "c7b2b6357395257354df87978aa685d35496394e6dbfedc03c3e2666923f014e",
+    "faces": 85902,
+    "face_components": 831,
+    "largest_component_fraction": 0.5645386603338688
+  },
+  "new_mesh": {
+    "sha256": "fec078d13b8ca8b7c43f14746621e6b828f00d04a2980bc0802e792bef9e0475",
+    "faces": 86095,
+    "face_components": 840,
+    "largest_component_fraction": 0.5637841918810617
+  },
+  "views": [
+    {
+      "file": "heldout-7.png",
+      "old_covered": 68580,
+      "new_covered": 68623,
+      "sha256": "f9aecc6ee74860f90d66566eccf96e61b238faf82bbf8663692136ce488ba716"
+    },
+    {
+      "file": "heldout-92.png",
+      "old_covered": 56115,
+      "new_covered": 56165,
+      "sha256": "0034afe06f82ab77fac297a06419e5adebec4b7a5c72db092718228100829d9a"
+    },
+    {
+      "file": "heldout-162.png",
+      "old_covered": 72942,
+      "new_covered": 72963,
+      "sha256": "179cfdfffe7714535c64862c16a75aa4bd0d22d935b295544a2828aaaecc9ee7"
+    },
+    {
+      "file": "free-3.png",
+      "old_covered": 45119,
+      "new_covered": 45135,
+      "sha256": "ea2a4d82d37bf1ad0d960bdfbf34ffae508f12e3cf5bc62e838f2565f0b02ca5"
+    },
+    {
+      "file": "free-4.png",
+      "old_covered": 67879,
+      "new_covered": 67871,
+      "sha256": "af92b3ec8032af4a45c0af83dcbde987c9c00ec2de4307a7ef555052026d648d"
+    }
+  ],
+  "visual_assessment": "Real 3+2 old/new RGB Mesh looks nearly unchanged. Desk and monitors partly recognizable from fixed views; free views remain warped, broken and incomplete. More triangles and a few extra covered pixels do not establish accurate room recovery.",
+  "limitations": [
+    "No independent surface geometry truth",
+    "No Echo4D browser load/rotate test",
+    "No life-replay capability claim",
+    "Source RGB redistribution rights not reviewed"
+  ],
+  "next_shortest": "Stop small post-filter tuning. Address per-frame metric inverse-depth calibration drift with shared multi-view RGB constraints or evaluate mature dense MVS producer."
+}
