@@ -1,0 +1,112 @@
+{
+  "experiment": "TUM fr1_room 96-view measured RGB-D camera pose information ablation",
+  "date_utc": "2026-10-29",
+  "source": "TUM fr1_room real 640x480 RGB; 320x240 measured RGB-D reconstruction; 96 selected source frames",
+  "source_archive_sha256": "5ace47a1d2e53696bc939a84999293a04a7226958e848a609666691fd3cc38da",
+  "reconstruction_inputs": [
+    "96 real RGB images",
+    "96 independently measured depth maps in metres",
+    "calibrated intrinsics",
+    "only declared known metric pose anchors"
+  ],
+  "removed": [
+    "all other GT poses from candidate",
+    "any existing Mesh prior"
+  ],
+  "algorithm": "OpenCV SIFT matching + metric depth-supported PnP RANSAC and LM refinement, reliable graph paths; existing Open3D 0.19 sparse TSDF",
+  "execution": {
+    "status": "SUCCESS",
+    "run_url": "https://github.com/REDrighthand05/echo4d/actions/runs/40847424620",
+    "artifact_url": "https://github.com/REDrighthand05/echo4d/actions/runs/40847424620/artifacts/12886021276",
+    "tested_checkout": "b37b3ca42bf80ea3ac7eac06d4375dee818b98bf",
+    "cpu": true,
+    "gpu": false,
+    "synthetic_regression_tests": 3,
+    "tested_candidate_pairs": 555,
+    "accepted_relative_pose_pairs": 200,
+    "metric_scale_source": "measured sensor depth and known metric anchor poses; not RGB-only"
+  },
+  "fair_baseline": {
+    "known_pose_frames": 96,
+    "measured_depth_frames": 96,
+    "faces": 264275,
+    "components": 1230,
+    "largest_component_fraction": 0.6094409232806736,
+    "glb_sha256": "a128022a56587a9197c962cb961dd9f40cf02709200be21d0b03769f2c7a9ee7",
+    "same_fusion_settings": true
+  },
+  "candidates": {
+    "13_anchors": {
+      "known_pose_frames": 13,
+      "estimated_pose_frames": 83,
+      "unresolved_pose_frames": 0,
+      "median_withheld_gt_translation_error_m": 0.03305341616777588,
+      "max_withheld_gt_translation_error_m": 0.420001745212202,
+      "faces": 323588,
+      "components": 1671,
+      "largest_component_fraction": 0.6632353486532258,
+      "glb_sha256": "e619f79d5a44dd1d10a89504f24bc2456a7e885977e01663a594c260987a15ff",
+      "visual_sha256": "3d347575eaddeb09ab8e5fb0fc12bbc6fee9cde43ed681a1bbfe727142ef3611",
+      "five_view_covered_pixels": [
+        75495,
+        67310,
+        76612,
+        71754,
+        74131
+      ]
+    },
+    "5_anchors": {
+      "known_pose_frames": 5,
+      "estimated_pose_frames": 91,
+      "unresolved_pose_frames": 0,
+      "median_withheld_gt_translation_error_m": 0.046619273798505514,
+      "max_withheld_gt_translation_error_m": 0.4923866677189813,
+      "faces": 282229,
+      "components": 1512,
+      "largest_component_fraction": 0.8103915614625004,
+      "glb_sha256": "5f9f40dc133fc47207459142cca2f2bd0640c1ce141e035065691479f1a03bd9",
+      "visual_sha256": "922282fb6c7903186ef4c3ad57f839fea27c56b6dfa78758f75b5a58a47855e4",
+      "five_view_covered_pixels": [
+        75618,
+        70105,
+        76487,
+        72049,
+        74421
+      ]
+    },
+    "1_anchor": {
+      "known_pose_frames": 1,
+      "estimated_pose_frames": 12,
+      "unresolved_pose_frames": 83,
+      "median_withheld_gt_translation_error_m": 0.02966639234446518,
+      "faces": 27609,
+      "components": 137,
+      "glb_sha256": "0ecf7618fb0f3f8aae94aef94bc1b9314a51c7455838835df98501a26e8a32d7",
+      "visual_sha256": "1d7fc7950b9dac21f9f8841a8ff520d9ceee9950e0e650f915f83b426b8c0e06",
+      "five_view_covered_pixels": [
+        68002,
+        0,
+        60643,
+        38677,
+        50883
+      ]
+    }
+  },
+  "fair_baseline_five_view_covered_pixels": [
+    75110,
+    69984,
+    76504,
+    71220,
+    74337
+  ],
+  "visual_review": "5-anchor model still visibly resembles desk/monitor, wall/door edges and furniture in the same 3 real + 2 free views, broadly comparable to all-known-pose measured Mesh, with holes/blur and local false surfaces. Not a full room recovery or #74 PASS. One-anchor result is severe coverage FAIL: 83 missing camera poses and second heldout view empty.",
+  "caveats": [
+    "Withheld GT translation error is a camera-centre metric, not independent surface truth; orientation and Mesh geometry are not fully validated.",
+    "One-anchor error median is only among 12 solved frames, not 95 withheld frames.",
+    "Original #106 96-pose Mesh used a different voxel size and is not the fair control; fair control re-fused at voxel .03m, truncation .09m, stride2.",
+    "Source RGB is originally 640x480 but candidate uses 320x240; no life replay or wearable capture implemented.",
+    "Historical RGB-only SGBM FAIL in PR #107 remains; this trial retains measured sensor depth."
+  ],
+  "next_shortest_unblock": "Connect the one-anchor RGB-D pose graph across visual discontinuities using mature global image retrieval and loop closure; preserve 5-anchor full-coverage working rung and compare actual Mesh at identical fusion settings.",
+  "issue_74": "FAIL / not accepted"
+}
