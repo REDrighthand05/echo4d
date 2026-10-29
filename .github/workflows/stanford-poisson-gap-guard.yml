@@ -1,0 +1,50 @@
+name: Stanford measured Mesh Poisson local hole experiment
+on:
+  push:
+    branches: [research/stanford-poisson-gap-guard-20261029]
+    paths:
+      - tools/stanford_poisson_gap_guard.py
+      - tests/python/test_stanford_poisson_gap_guard.py
+      - .github/workflows/stanford-poisson-gap-guard.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: stanford-poisson-gap-guard-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  real-stanford-poisson-gap:
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install pinned Open3D measured Mesh dependencies
+        run: |
+          python -m pip install -r requirements.lock
+          python -m pip install --no-deps -e .
+          python -m pip install 'open3d==0.19.0' 'trimesh>=4,<5'
+      - name: Check observed-boundary and measured-depth veto
+        env:
+          PYTHONPATH: tools
+        run: python -m pytest -q tests/python/test_stanford_poisson_gap_guard.py
+      - name: Run actual Stanford 480-frame measured Mesh local Poisson gap candidates
+        env:
+          PYTHONPATH: tools
+          OPENBLAS_NUM_THREADS: '1'
+          OMP_NUM_THREADS: '2'
+        run: |
+          python tools/stanford_poisson_gap_guard.py \
+            --cache "$RUNNER_TEMP/stanford-lounge-rgbd" \
+            --source docs/real-room-review/stanford-measured-gap/OBSERVED-gap-guided-full.glb \
+            --output "$GITHUB_WORKSPACE/artifacts/stanford-poisson-gap"
+      - name: Preserve GLBs and 3 recorded plus 2 free A/B images even on failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stanford-poisson-gap-${{ github.run_id }}
+          path: artifacts/stanford-poisson-gap/
+          retention-days: 14
+          if-no-files-found: warn
