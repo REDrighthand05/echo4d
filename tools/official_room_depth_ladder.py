@@ -1,0 +1,201 @@
+"""Re-fuse a frozen Open3D Lounge RGB-D pose solution with fewer measured depth frames.
+
+This is a FUSION-STAGE ablation: all camera poses were estimated upstream from the
+full RGB-D sequence, so sparse-depth runs are not independent capture pipelines.
+No prior mesh enters sparse TSDF integration. Requires Open3D 0.19, trimesh, PIL.
+"""
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+from pathlib import Path
+
+import numpy as np
+
+SOURCE_RUN = 40865675012
+SOURCE_ARTIFACT = 12896335330
+UPSTREAM_SHA = "1e7b17438687a0b0c1e5a7187321ac7044afe275"
+
+
+def sha256(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def load_trajectory(path: Path) -> dict[int, np.ndarray]:
+    lines = path.read_text().splitlines()
+    if not lines or len(lines) % 5:
+        raise ValueError("Invalid Open3D trajectory.log record count")
+    poses = {}
+    for k in range(0, len(lines), 5):
+        header = [int(v) for v in lines[k].split()]
+        if len(header) != 3 or header[0] != header[1] or header[2] != header[0] + 1:
+            raise ValueError(f"Invalid Open3D pose header: {lines[k]}")
+        idx = header[0]
+        if idx in poses:
+            raise ValueError(f"Duplicate pose index {idx}")
+        values = [float(v) for row in lines[k + 1:k + 5] for v in row.split()]
+        if len(values) != 16:
+            raise ValueError(f"Incomplete pose matrix {idx}")
+        pose = np.asarray(values, dtype=np.float64).reshape(4, 4)
+        if not np.isfinite(pose).all() or not np.allclose(pose[3], [0, 0, 0, 1], atol=1e-5):
+            raise ValueError(f"Invalid homogeneous pose {idx}")
+        poses[idx] = pose
+    return poses
+
+
+def native_pairs(color_dir: Path, depth_dir: Path, poses: dict[int, np.ndarray]):
+    """Include native frame 000000 even if data.color_paths starts at 000001."""
+    colors = {int(p.stem): p for p in color_dir.iterdir()
+              if p.is_file() and p.suffix.lower() in (".png", ".jpg", ".jpeg")
+              and p.stem.isdecimal()}
+    depths = {int(p.stem): p for p in depth_dir.iterdir()
+              if p.is_file() and p.suffix.lower() == ".png" and p.stem.isdecimal()}
+    if not colors or colors.keys() != depths.keys() or colors.keys() != poses.keys():
+        raise ValueError(f"RGB/depth/pose identity mismatch: "
+                         f"RGB={len(colors)}, depth={len(depths)}, pose={len(poses)}, "
+                         f"RGB-only={sorted(colors.keys()-depths.keys())[:5]}, "
+                         f"pose-only={sorted(poses.keys()-colors.keys())[:5]}")
+    return [(idx, colors[idx], depths[idx], poses[idx]) for idx in sorted(colors)]
+
+
+def even_indices(length: int, count: int) -> list[int]:
+    if not 2 <= count <= length:
+        raise ValueError("Each measured-depth sample count must be between 2 and total frames")
+    indices = np.linspace(0, length - 1, count, dtype=int).tolist()
+    if len(set(indices)) != count:
+        raise ValueError("Sampling produced duplicate frames")
+    return indices
+
+
+def integrate_subset(o3d, trimesh, pairs, count, output: Path, voxel: float):
+    volume = o3d.pipelines.integration.ScalableTSDFVolume(
+        voxel_length=voxel, sdf_trunc=0.04,
+        color_type=o3d.pipelines.integration.TSDFVolumeColorType.RGB8)
+    intrinsic = o3d.camera.PinholeCameraIntrinsic(
+        o3d.camera.PinholeCameraIntrinsicParameters.PrimeSenseDefault)
+    chosen = even_indices(len(pairs), count)
+    for n, i in enumerate(chosen):
+        frame_id, color_path, depth_path, pose = pairs[i]
+        rgbd = o3d.geometry.RGBDImage.create_from_color_and_depth(
+            o3d.io.read_image(str(color_path)), o3d.io.read_image(str(depth_path)),
+            depth_scale=1000.0, depth_trunc=3.0, convert_rgb_to_intensity=False)
+        volume.integrate(rgbd, intrinsic, np.linalg.inv(pose))
+        if (n + 1) % 50 == 0:
+            print(f"depth {count}: fused {n+1}/{count} measured frames", flush=True)
+    mesh = volume.extract_triangle_mesh()
+    if not mesh.has_triangles() or not mesh.has_vertex_colors():
+        raise RuntimeError(f"No colored geometry with {count} measured frames")
+    mesh.compute_vertex_normals()
+    xyz = np.asarray(mesh.vertices)
+    faces = np.asarray(mesh.triangles)
+    colors = np.clip(np.asarray(mesh.vertex_colors) * 255, 0, 255).astype(np.uint8)
+    trimesh.Trimesh(vertices=xyz, faces=faces, vertex_colors=colors,
+                    process=False).export(output / f"measured-{count}.glb")
+    return mesh, {"measured_depth_frames": count, "triangles": len(faces),
+                  "vertices": len(xyz), "sample_frame_ids": [pairs[i][0] for i in chosen],
+                  "glb_sha256": sha256(output / f"measured-{count}.glb")}
+
+
+def comparison_image(output: Path, labels: list[str]):
+    from PIL import Image, ImageDraw
+    folders = [output / label / "views" for label in labels]
+    names = ["recorded-00000.png", "recorded-01500.png", "recorded-02999.png",
+             "free-1.png", "free-2.png"]
+    canvas = Image.new("RGB", (1280, 5 * 272 + 38), (22, 22, 22))
+    draw = ImageDraw.Draw(canvas)
+    for col, title in enumerate(["REAL RGB / free view", "FULL RGB-D", "600 measured Z", "150 measured Z"]):
+        draw.text((col * 320 + 8, 12), title, fill="white")
+    for row, name in enumerate(names):
+        y = 38 + row * 272
+        for col, folder in enumerate(folders):
+            with Image.open(folder / name) as img:
+                img = img.convert("RGB")
+                if row < 3:
+                    panel = img.crop((0 if col == 0 else img.width - 320, 28,
+                                      320 if col == 0 else img.width, 268))
+                else:
+                    panel = img.crop((img.width - 320, 28, img.width, 268))
+                if col == 0 and row >= 3:
+                    panel = Image.new("RGB", (320, 240), (22, 22, 22))
+                canvas.paste(panel, (col * 320, y + 24))
+        draw.text((8, y + 3), name.replace(".png", ""), fill="white")
+    target = output / "source-full-600-150-3plus2.png"
+    canvas.save(target)
+    return target
+
+
+def run(official: Path, output: Path, counts=(600, 150)):
+    import open3d as o3d
+    import trimesh
+    from run_official_room import render_views
+
+    official, output = official.resolve(), output.resolve()
+    if output.exists():
+        raise FileExistsError("Fresh output directory required")
+    receipt = json.loads((official / "receipt.json").read_text())
+    if receipt.get("upstream_commit") != UPSTREAM_SHA or receipt.get("real_frames") != 2999:
+        raise ValueError("Unexpected official source provenance")
+    poses = load_trajectory(official / "scene" / "trajectory.log")
+    if len(poses) != 3000:
+        raise ValueError(f"Expected original 3000 upstream poses, got {len(poses)}")
+    original = o3d.data.LoungeRGBDImages()
+    color_dir = Path(original.color_paths[0]).parent
+    depth_dir = Path(original.depth_paths[0]).parent
+    pairs = native_pairs(color_dir, depth_dir, poses)
+    if len(pairs) != 3000:
+        raise ValueError(f"Expected original 3000 frame identities, got {len(pairs)}")
+    output.mkdir(parents=True)
+    baseline = o3d.io.read_triangle_mesh(str(official / "scene" / "integrated.ply"))
+    if not baseline.has_triangles() or not baseline.has_vertex_colors():
+        raise RuntimeError("Official baseline has no colored triangles")
+    print(f"Recovered {len(pairs)} actual RGB-D frames / {len(poses)} poses", flush=True)
+    models = {"full": baseline}
+    stats = {"full": {"measured_depth_frames": 3000,
+                      "triangles": len(baseline.triangles),
+                      "glb_sha256": sha256(official / "room-full.glb")}}
+    for count in counts:
+        if count >= len(pairs):
+            raise ValueError("Sparse count must be less than original frame count")
+        mesh, stat = integrate_subset(o3d, trimesh, pairs, count, output, 3.0 / 512.0)
+        models[str(count)] = mesh
+        stats[str(count)] = stat
+    color_paths = [color for _, color, _, _ in pairs]
+    ordered_poses = [pose for _, _, _, pose in pairs]
+    for key, mesh in models.items():
+        target = output / key
+        target.mkdir()
+        render_views(o3d, mesh, color_paths, ordered_poses, target)
+    labels = ["full", str(counts[0]), str(counts[1])]
+    image_path = comparison_image(output, labels)
+    report = {
+        "status": "GENERATED_NOT_VISUALLY_ACCEPTED", "scene": "Stanford Lounge",
+        "source_run": SOURCE_RUN, "source_artifact": SOURCE_ARTIFACT,
+        "source_upstream_sha": UPSTREAM_SHA, "open3d_version": o3d.__version__,
+        "input_real_rgb_frames": len(pairs),
+        "original_input_ledger_count": receipt["real_frames"],
+        "ledger_correction": "Original data.color_paths omitted native frame 000000; "
+                             "upstream system integrated 3000, not 2999, RGB-D frames.",
+        "pose_source": "Estimated from ALL 3000 measured RGB-D frames by official upstream; "
+                       "frozen prior in sparse-depth integration (not RGB-only).",
+        "mesh_prior_in_sparse_runs": False,
+        "measured_depth_units": "millimeters, converted by depth_scale=1000",
+        "predicted_depth_frames": 0,
+        "fusion_config": {"voxel_m": 3.0 / 512.0, "sdf_trunc_m": 0.04,
+                          "depth_max_m": 3.0, "intrinsic": "PrimeSenseDefault"},
+        "models": stats, "visual": image_path.name,
+        "source_full_glb": f"https://github.com/REDrighthand05/echo4d/actions/runs/{SOURCE_RUN}/artifacts/{SOURCE_ARTIFACT}",
+        "visual_acceptance": "PENDING_HUMAN_REVIEW; do not claim complete room",
+    }
+    (output / "report.json").write_text(json.dumps(report, indent=2) + "\n")
+    print(json.dumps({"status": report["status"], "models": stats,
+                      "visual": str(image_path)}, indent=2), flush=True)
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--official", required=True, type=Path)
+    parser.add_argument("--output", required=True, type=Path)
+    parser.add_argument("--samples", type=int, nargs=2, default=[600, 150])
+    args = parser.parse_args()
+    run(args.official, args.output, args.samples)
