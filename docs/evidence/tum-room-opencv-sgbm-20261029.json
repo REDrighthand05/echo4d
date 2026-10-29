@@ -1,0 +1,46 @@
+{
+  "experiment": "TUM fr1_room: mature OpenCV StereoSGBM known-pose RGB-only real Mesh vs DA2 and sensor baseline",
+  "date_utc": "2026-10-29",
+  "status": "LOCAL_REAL_EXECUTION_VISUAL_FAIL",
+  "local_execution_environment": "CPU, OpenCV 4.13.0, NumPy, trimesh 4.11.1, VTK 9.6.2 offscreen visual comparison",
+  "code_branch": "research/room96-opencv-sgbm-20261029",
+  "source": "Previous #106 real 96 RGB (320x240 frozen RGB images originally downsampled from 640x480), 96 real metric camera poses and calibration",
+  "retained": [
+    "RGB pixels",
+    "96 known metric poses",
+    "intrinsics"
+  ],
+  "removed_from_candidate": [
+    "all measured depth pixels",
+    "existing mesh geometry"
+  ],
+  "candidate_algorithm": "cv2.stereoRectify + cv2.StereoSGBM + reverse disparity check + reprojectImageTo3D + local pixel-grid triangulation",
+  "candidate_scope": "48 evenly spread reference cameras; 6 candidate neighbors per reference; horizontal rectified pairs only",
+  "actual_execution": {
+    "synthetic_cpu_tests_passed": 3,
+    "attempted_references": 48,
+    "successful_references": 37,
+    "triangles": 40042,
+    "vertices": 28455,
+    "skipped_vertical_pairs": 31,
+    "skipped_empty_rectified_roi_pairs": 45
+  },
+  "baseline_old_da2": {
+    "triangles": 185725,
+    "source": "PR #106 real run 40832708084"
+  },
+  "baseline_measured": {
+    "triangles": 137255,
+    "source": "PR #106 real run 40832708084"
+  },
+  "candidate_glb_sha256": "7f2a8fc94ebbfb60024a64259da00d0b073646f7ddb119e9e77390052ce0f17c",
+  "candidate_ply_sha256": "ebbe1f1ca37c2307c042d2931466891478d3f6d74a9ea08345d2237bacb16ed9",
+  "visual_3plus2_sha256": "6bdcfb5e511953fb35cca81240077c041262585ce0bd624c09929ddebf5b8d29",
+  "visual_review": "FAIL: SGBM has severe black missing areas and small isolated textured fragments at all three real camera poses and two free viewpoints. Desk/monitor recognizable in measured/DA2 controls but not as continuous SGBM room. Do not integrate this method as a replacement.",
+  "source_photo_provenance": "Three 640x480 source RGB frames recovered from prior actual source association manifest; controls loaded from earlier 96-view measured and zero-sensor PLY, never fed to SGBM.",
+  "geometric_truth_claim": false,
+  "github_workflow_run": "https://github.com/REDrighthand05/echo4d/actions/runs/40838732211",
+  "github_workflow_status_at_write": "in_progress; do not claim GitHub CI success until checked",
+  "issue_74": "FAIL / NOT ACCEPTED",
+  "next_shortest_unblock": "Use multi-view dense depth with arbitrary baseline/orientation (e.g. COLMAP PatchMatch MVS on GPU when genuinely available); do not promote two-view SGBM, and keep 96-sensor Mesh as working reference."
+}
