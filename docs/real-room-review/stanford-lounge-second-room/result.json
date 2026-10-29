@@ -1,0 +1,95 @@
+{
+  "scene": "REAL Stanford Lounge (not Redwood Bedroom)",
+  "dataset": "Open3D LoungeRGBDImages",
+  "input": "actual measured RGB-D and logged camera poses",
+  "calibrated_intrinsics": [
+    640,
+    480,
+    525.0,
+    525.0,
+    319.5,
+    239.5
+  ],
+  "pose_mapping": "Stanford Lounge consecutive image order, LOG offset 1; LOG headers non-unique; camera continuity checked",
+  "available_frames": 2999,
+  "fused_frames": 360,
+  "observed_faces": 426789,
+  "observed_model": "OBSERVED-viewable.glb",
+  "observed_faces_are_independently_fused": true,
+  "prior": {
+    "state": "ALIGNED_PRIOR_ONLY",
+    "all_faces_preexisting": true,
+    "original_faces": 3150436,
+    "preview_faces": 169999,
+    "observed_color_fraction": 0.8260955759599332,
+    "registration": {
+      "fitness": 0.9982398793060095,
+      "rmse_m": 0.03973013984530893,
+      "candidate_count": 2,
+      "prior_to_measured": [
+        [
+          0.9999958606286918,
+          -0.002316479099758413,
+          0.0017066487820806555,
+          -0.008613388250743401
+        ],
+        [
+          0.002305148177553723,
+          0.9999754862208199,
+          0.0066115996039727625,
+          -0.015922915062007142
+        ],
+        [
+          -0.0017219225779678891,
+          -0.006607638157774476,
+          0.9999766867785554,
+          0.008630436395663363
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ]
+    }
+  },
+  "prior_faces_independently_recovered": false,
+  "three_real_and_two_free_views": [
+    {
+      "view": "real camera",
+      "file": "visual/photo-vs-mesh-00000.png",
+      "covered_pixels": 74625
+    },
+    {
+      "view": "real camera",
+      "file": "visual/photo-vs-mesh-01503.png",
+      "covered_pixels": 76604
+    },
+    {
+      "view": "real camera",
+      "file": "visual/photo-vs-mesh-02998.png",
+      "covered_pixels": 76800
+    },
+    {
+      "view": "free camera",
+      "file": "visual/free-view-1.png",
+      "covered_pixels": 76667
+    },
+    {
+      "view": "free camera",
+      "file": "visual/free-view-2.png",
+      "covered_pixels": 75181
+    }
+  ],
+  "prior_AB_images": [
+    "ab/free-view-1.png",
+    "ab/free-view-2.png",
+    "ab/photo-vs-mesh-00000.png",
+    "ab/photo-vs-mesh-01503.png",
+    "ab/photo-vs-mesh-02998.png"
+  ],
+  "human_visual_acceptance": "NOT REVIEWED",
+  "issue_74": "FAIL unchanged",
+  "desk_v2": "FAIL 16.7779cm > 15cm unchanged"
+}
