@@ -1,0 +1,59 @@
+name: Stanford original full existing scan vs measured RGB-D
+on:
+  push:
+    branches: [research/stanford-original-fullscan-shell-20261029]
+    paths:
+      - tools/stanford_original_scan_geometry.py
+      - tools/stanford_original_scan_views.py
+      - .github/workflows/stanford-original-fullscan-shell.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  full-original-scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 110
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install stock real-scene engine
+        run: |
+          pip install -r requirements.lock
+          pip install --no-deps -e .
+          pip install 'open3d==0.19.0' 'trimesh>=4,<5'
+      - name: Run existing furniture and shell safeguards
+        env:
+          PYTHONPATH: tools:tests/python
+        run: python -m pytest -q tests/python/test_stanford_prior_additive_shell.py tests/python/test_stanford_observed_prior_shell.py
+      - name: Real full ORIGINAL 3.15M-face prior against observed 426k-face room
+        env:
+          PYTHONPATH: tools
+          OPENBLAS_NUM_THREADS: '1'
+          OMP_NUM_THREADS: '1'
+        run: |
+          python tools/stanford_original_scan_geometry.py \
+            --observed docs/real-room-review/stanford-lounge-native-planar/OBSERVED-plus-INFERRED.glb \
+            --observed-report docs/real-room-review/stanford-lounge-native-planar/result.json \
+            --prior-report docs/real-room-review/stanford-lounge-second-room/result.json \
+            --cache "$RUNNER_TEMP/lounge-full" \
+            --output artifacts/stanford-fullscan
+      - name: Render 3 recorded RGB plus 2 room-scale free cameras
+        env:
+          PYTHONPATH: tools
+          OPENBLAS_NUM_THREADS: '1'
+          OMP_NUM_THREADS: '1'
+        run: |
+          python tools/stanford_original_scan_views.py \
+            --observed docs/real-room-review/stanford-lounge-native-planar/OBSERVED-plus-INFERRED.glb \
+            --observed-report docs/real-room-review/stanford-lounge-native-planar/result.json \
+            --output artifacts/stanford-fullscan \
+            --cache "$RUNNER_TEMP/lounge-full"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: stanford-full-original-scan-${{ github.run_id }}
+          path: artifacts/stanford-fullscan/
+          retention-days: 14
+          if-no-files-found: warn
