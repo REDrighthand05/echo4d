@@ -1,0 +1,86 @@
+name: Real TUM room measured RGB-D with sparse known camera pose anchors
+
+on:
+  push:
+    branches:
+      - research/room96-rgbd-pose-anchors-20261029
+    paths:
+      - 'tools/tum_room_rgbd_pose_ladder.py'
+      - 'tests/python/test_tum_room_rgbd_pose_ladder.py'
+      - '.github/workflows/tum-room-rgbd-pose-ladder.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: real-room-rgbd-pose-ladder-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  real-rgbd-pose-removal:
+    runs-on: ubuntu-latest
+    timeout-minutes: 100
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install existing Open3D TSDF and mature OpenCV SIFT PnP
+        run: |
+          python -m pip install -r requirements.lock
+          python -m pip install --no-deps -e .
+          python -m pip install 'open3d==0.19.0' 'opencv-python-headless==4.12.0.88' 'trimesh==4.11.1' 'pytest>=8,<10'
+      - name: Run actual CPU synthetic PnP and withheld-pose regressions
+        env:
+          PYTHONPATH: tools:src
+          OPENBLAS_NUM_THREADS: '1'
+        run: |
+          python -m py_compile tools/tum_room_rgbd_pose_ladder.py
+          python -m pytest -q tests/python/test_tum_room_rgbd_pose_ladder.py
+      - name: Retrieve frozen original RGB association and 96 RGB/real Mesh baseline
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/room99" "$RUNNER_TEMP/room96"
+          gh run download 40790769632 --repo "$GITHUB_REPOSITORY" --name tum-room-da2-consensus-40790769632 --dir "$RUNNER_TEMP/room99"
+          gh run download 40832708084 --repo "$GITHUB_REPOSITORY" --name tum-room-96-depth-support-40832708084 --dir "$RUNNER_TEMP/room96"
+          test -s "$RUNNER_TEMP/room99/replay-inputs/source/association.json"
+          test -s "$RUNNER_TEMP/room96/replay/predicted-96/recording.json"
+          test -s "$RUNNER_TEMP/room96/mesh-sensor-96/mesh.ply"
+      - name: Real official TUM measured RGB-D, estimate 83 and 95 camera poses, fuse actual Mesh
+        env:
+          PYTHONPATH: tools:src
+          OPENBLAS_NUM_THREADS: '1'
+          OMP_NUM_THREADS: '2'
+        run: |
+          python tools/tum_room_rgbd_pose_ladder.py \
+            --source "$RUNNER_TEMP/room99" \
+            --room96 "$RUNNER_TEMP/room96" \
+            --work "$RUNNER_TEMP/pose-work" \
+            --output "$GITHUB_WORKSPACE/artifacts/room-rgbd-pose"
+      - name: Print observed results, never assume visual PASS
+        if: always()
+        run: |
+          if [ -f artifacts/room-rgbd-pose/report.json ]; then
+            python - <<'PY'
+          import json
+          r=json.load(open('artifacts/room-rgbd-pose/report.json'))
+          print('POSE_GRAPH',r['pose_graph'])
+          for k,v in r['variants'].items():
+              print('ANCHORS',k,'ESTIMATED',v['estimated_pose_frames'],
+                    'UNRESOLVED',v['unresolved_pose_frames'],
+                    'FACES',v['faces'],
+                    'MEDIAN_TRANSLATION_ERROR_M',v['withheld_gt_translation_error_median_m'])
+          print('VISUAL',r['visual_acceptance'])
+          PY
+          fi
+      - name: Preserve real GLBs, five-view source comparisons and FAIL receipts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tum-room-rgbd-pose-${{ github.run_id }}
+          path: artifacts/room-rgbd-pose/
+          if-no-files-found: warn
+          retention-days: 14
