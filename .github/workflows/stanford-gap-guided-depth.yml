@@ -1,0 +1,49 @@
+name: Stanford measured missing-surface RGB-D refusion
+on:
+  push:
+    branches: [research/stanford-gap-guided-depth-20261029]
+    paths:
+      - tools/stanford_gap_guided_depth.py
+      - tests/python/test_stanford_gap_guided_depth.py
+      - .github/workflows/stanford-gap-guided-depth.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  real-measured-refusion:
+    runs-on: ubuntu-latest
+    timeout-minutes: 110
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install Open3D and colored mesh exporter
+        run: |
+          pip install -r requirements.lock
+          pip install --no-deps -e .
+          pip install 'open3d==0.19.0' 'trimesh>=4,<5'
+      - name: Test deterministic frame selection and camera guards
+        env:
+          PYTHONPATH: tools
+        run: python -m pytest -q tests/python/test_stanford_gap_guided_depth.py tests/python/test_stanford_lounge_second_room.py
+      - name: Real 640x480 measured depth coverage and 480-frame TSDF
+        env:
+          PYTHONPATH: tools
+          OPENBLAS_NUM_THREADS: '1'
+          OMP_NUM_THREADS: '1'
+        run: |
+          python tools/stanford_gap_guided_depth.py \
+            --source docs/real-room-review/stanford-lounge-native-planar/OBSERVED-plus-INFERRED.glb \
+            --source-report docs/real-room-review/stanford-lounge-native-planar/result.json \
+            --cache "$RUNNER_TEMP/lounge-measured" \
+            --output "$GITHUB_WORKSPACE/artifacts/stanford-measured-gap" \
+            --extra 120 --stride 4
+      - name: Preserve native colored mesh, five real camera comparisons and failures
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: stanford-measured-gap-${{ github.run_id }}
+          path: artifacts/stanford-measured-gap/
+          retention-days: 14
+          if-no-files-found: warn
