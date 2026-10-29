@@ -54,7 +54,34 @@ def test_recorded_sensor_depth_veto_rejects_false_foreground_wall():
     faces = np.array([[0, 1, 2], [3, 4, 5]])
     depth_mm = np.full((480, 640), 2000, dtype=np.uint16)
     k = (640, 480, 500, 500, 320, 240)
+    poses = [np.eye(4) for _ in range(3)]
+    poses[1][0, 3] = .02
+    poses[2][0, 3] = -.02
     reject, record = depth_conflict_mask(
-        vertices, faces, [(np.eye(4), depth_mm)] * 3, k)
+        vertices, faces, [(i, p, depth_mm) for i, p in enumerate(poses)], k)
     assert reject.tolist() == [True, False]
     assert record["vetoed_faces"] == 1
+
+
+def test_repeated_recorded_observation_cannot_create_two_votes():
+    vertices = np.array([[0, 0, 1], [.1, 0, 1], [0, .1, 1]], dtype=float)
+    faces = np.array([[0, 1, 2]])
+    depth = np.full((480, 640), 2000, dtype=np.uint16)
+    for ids in ([7, 7, 7], [7, 8, 9]):
+        reject, receipt = depth_conflict_mask(
+            vertices, faces, [(i, np.eye(4), depth) for i in ids],
+            (640, 480, 500, 500, 320, 240))
+        assert reject.tolist() == [False]
+        assert receipt["tested_recorded_frames"] == 1
+        assert receipt["duplicate_recorded_frames"] == 2
+
+
+def test_same_source_identity_with_different_depth_is_rejected():
+    vertices = np.array([[0, 0, 1], [.1, 0, 1], [0, .1, 1]], dtype=float)
+    faces = np.array([[0, 1, 2]])
+    depth = np.full((480, 640), 2000, dtype=np.uint16)
+    with pytest.raises(ValueError, match="conflicting data"):
+        depth_conflict_mask(
+            vertices, faces, [(7, np.eye(4), depth), (7, np.eye(4), depth + 1)],
+            (640, 480, 500, 500, 320, 240))
+

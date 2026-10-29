@@ -5,6 +5,7 @@ Run on the native 480-frame measured-only Stanford GLB.
 """
 from __future__ import annotations
 import argparse
+import hashlib
 import json
 from pathlib import Path
 import numpy as np
@@ -124,16 +125,32 @@ def extend_plane(vertices, colors, plane, tree, *,
 def depth_conflict_mask(vertices, faces, samples, k, *, tolerance=.10, votes=2):
     """Reject inferred faces that occlude real depth in recorded cameras.
 
-    samples: iterable of (world_to_camera_4x4, uint16_depth_mm).
+    samples: iterable of (source_frame_id, world_to_camera_4x4, uint16_depth_mm).
     Invalid sensor pixels do not vote; one noisy frame cannot veto.
     """
     w, h, fx, fy, cx, cy = k
     centers = vertices[faces].mean(axis=1)
     conflicts = np.zeros(len(faces), dtype=np.uint16)
     tested = 0
-    for pose, raw in samples:
+    duplicates = 0
+    identities = {}
+    observations = set()
+    for source_id, pose, raw in samples:
+        pose = np.asarray(pose, dtype=np.float64)
+        if not isinstance(source_id, (str, int)) or isinstance(source_id, bool):
+            raise ValueError("Recorded source frame identity is required")
+        if pose.shape != (4, 4) or not np.isfinite(pose).all():
+            raise ValueError("Recorded camera pose must be finite 4x4")
         if raw.shape != (h, w) or raw.dtype != np.uint16:
             raise ValueError("Recorded depth must be native uint16")
+        digest = hashlib.sha256(pose.tobytes() + raw.tobytes()).hexdigest()
+        if source_id in identities and identities[source_id] != digest:
+            raise ValueError("One recorded frame identity has conflicting data")
+        identities[source_id] = digest
+        if digest in observations:
+            duplicates += 1
+            continue
+        observations.add(digest)
         camera = centers @ pose[:3, :3].T + pose[:3, 3]
         z = camera[:, 2]
         good = (z > .35) & (z < 3.95)
@@ -149,6 +166,7 @@ def depth_conflict_mask(vertices, faces, samples, k, *, tolerance=.10, votes=2):
         tested += 1
     return conflicts >= votes, {
         "tested_recorded_frames": tested,
+        "duplicate_recorded_frames": duplicates,
         "vetoed_faces": int(np.sum(conflicts >= votes))}
 
 
@@ -163,7 +181,7 @@ def recorded_depth_samples(cache):
     indices = spaced_real_frames(
         len(data.color_paths), min(100, len(data.color_paths)))
     return k, [
-        (np.asarray(poses[i], dtype=float),
+        (f"stanford-lounge-depth:{i}", np.asarray(poses[i], dtype=float),
          np.asarray(o3d.io.read_image(data.depth_paths[i])))
         for i in indices]
 
@@ -251,3 +269,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
