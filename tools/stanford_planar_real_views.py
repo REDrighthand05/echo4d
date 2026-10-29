@@ -37,7 +37,7 @@ def render(out:Path,cache:Path):
         scene.add_triangles(o3d.t.geometry.TriangleMesh.from_legacy(mesh))
         scenes.append(scene)
     views=[(i,"recorded",poses[i]) for i in (frames[0],frames[len(frames)//2],frames[-1])]
-    bounds=measured.bounds
+    bounds=baseline.bounds  # Hold cameras fixed when inferred geometry changes
     center=bounds.mean(axis=0)
     span=bounds[1]-bounds[0]
     # Room-scale third-person viewpoints, NOT 35cm shifts beside input cameras.
@@ -89,7 +89,7 @@ def render(out:Path,cache:Path):
         canvas.save(target/name)
         records.append({"kind":kind,"file":"three-real-two-free/"+name,
                         "before_hit_pixels":n0,"after_hit_pixels":n1,
-                        "free_camera":"room-scale, 78 degree FOV, 16m far" if kind=="free" else None})
+                        "free_camera":"fixed measured-only bounds, 78 degree FOV, 16m far" if kind=="free" else None})
     report=json.loads((out/"result.json").read_text())
     report["three_real_two_free_views"]=records
     report["recorded_pose_mapping"]=mapping

@@ -4,6 +4,7 @@ on:
     branches: [research/stanford-depth-surface-visibility-20261029]
     paths:
       - tools/stanford_room_envelope.py
+      - tools/stanford_planar_real_views.py
       - tests/python/test_stanford_room_envelope.py
       - .github/workflows/stanford-room-envelope.yml
   workflow_dispatch:
