@@ -1,0 +1,11 @@
+{
+  "upstream": "https://github.com/isl-org/Open3D",
+  "upstream_commit": "1e7b17438687a0b0c1e5a7187321ac7044afe275",
+  "open3d_version": "0.19.0",
+  "real_frames": 2999,
+  "stage": "FAILED",
+  "input": "native RGB-D; no logged GT trajectory or prior mesh used",
+  "visual_acceptance": "NOT REVIEWED",
+  "error": "RuntimeError: Estimated pose/frame count differs",
+  "seconds": 2165.92684006691
+}

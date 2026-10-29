@@ -1,0 +1,22 @@
+{
+  "blender_version": "4.0.2",
+  "input_provenance": "New #114 official full RGB-D reconstruction; estimated poses; actual recovered artifact",
+  "source_glb_sha256": "957a00a5a7e664b5285cca2896b9142798650cd929e91123580e2017de59e0b9",
+  "blend_sha256": "cb8754d139ee576b2dbdd1fb2a637a26e0dfc9b9887dd2feac92ea7978c07024",
+  "imported": {
+    "mesh_objects": 1,
+    "vertices": 2974918,
+    "triangles": 5635827,
+    "materials": 1,
+    "vertex_color_layers": 1
+  },
+  "reopened": {
+    "mesh_objects": 1,
+    "vertices": 2974918,
+    "triangles": 5635827,
+    "materials": 1,
+    "vertex_color_layers": 1
+  },
+  "native_blend_reopen": "PASS",
+  "scene_quality": "NOT EVALUATED by this compatibility check"
+}

@@ -1,0 +1,27 @@
+{
+  "stage": "COMPLETE_POSTPROCESS_RECOVERY",
+  "original_run": "https://github.com/REDrighthand05/echo4d/actions/runs/40865675012",
+  "original_tested_checkout": "b4e3428442f55cfdf5b217a60ecd1d654fd81f99",
+  "upstream_commit": "1e7b17438687a0b0c1e5a7187321ac7044afe275",
+  "reconstruction_rerun": false,
+  "original_sdk_inventory": 2999,
+  "actual_upstream_inventory": 3000,
+  "estimated_poses": 3000,
+  "cause": "SDK inventory omits a file present in upstream folder inventory",
+  "input": "native measured RGB-D, estimated poses; GT trajectory not read",
+  "faces": 5635827,
+  "vertices": 2974918,
+  "model_sha256": {
+    "room-full.glb": "957a00a5a7e664b5285cca2896b9142798650cd929e91123580e2017de59e0b9",
+    "room-preview.glb": "e8e53dd1a80a6d01e970b8fa572c08833f755a23776f1617235f9f8f00df5bfb",
+    "scene/integrated.ply": "d429e2de5deea9733b4d9a021dd9a5433d0c8a766dcffcb9df24f32d9f401d19"
+  },
+  "views": {
+    "recorded-02999.png": "6d54d652a64ff116a3c2e10227f7b63b6e3ea464add248e8cecdfe369f909102",
+    "recorded-01500.png": "f8561b708a6ae8eb4861e3969eaf596b085f4e7ae9033645335546b4642eae89",
+    "free-2.png": "c407fb6f3bc9613ef3f514ceb626c768ff84673de26d3b43ebb64b6c87c2891f",
+    "recorded-00000.png": "f9bab43d2af3dfa8592aed7bd949ae659654c7576633a75e723cc873d4cccfaf",
+    "free-1.png": "0464eecb1986bcfe2b84dd7c74fc46f20e07f6426f2327139eec6fb5caf53c55"
+  },
+  "visual_acceptance": "NOT REVIEWED"
+}
