@@ -13,6 +13,7 @@ from pathlib import Path
 
 import cv2
 import numpy as np
+from PIL import Image, ImageDraw
 
 import tum_room_rgbd_pose_ladder as base
 from echo4d.model import file_sha256
@@ -132,6 +133,19 @@ def retrieval_pose_graph(colors, depths, K, max_gap=6):
 base_graph_builder = base.build_pose_graph
 
 
+def relabel_visual_board(path, left, right):
+    """Correct inherited generic DA2 captions for the actual pose experiment."""
+    with Image.open(path) as original:
+        board = original.convert("RGB")
+    draw = ImageDraw.Draw(board)
+    for row in range(5):
+        y = row * 480
+        draw.rectangle((640, y, 1919, y + 28), fill=(12, 12, 12))
+        draw.text((648, y + 7), left, fill="white")
+        draw.text((1288, y + 7), right, fill="white")
+    board.save(path)
+
+
 def run(source, room96, old, output, work, archive=None):
     # Scope this replacement strictly to one call; the original algorithm
     # and its independent fair TSDF/GLB/visual implementation remain unchanged.
@@ -152,6 +166,12 @@ def run(source, room96, old, output, work, archive=None):
         visual.mkdir()
         report["variants"][str(count)]["old_new_five_views"] = base.five_view_comparison(
             Path(source), replay, old_mesh, new_mesh, visual, frozen)
+        relabel_visual_board(visual / "source-old-new-3plus2.png",
+                             f"OLD: {count} known poses / local RGB-D PnP",
+                             f"NEW: {count} known poses / global RGB-D loop")
+        relabel_visual_board(Path(output) / f"visual-poses-{count}/source-old-new-3plus2.png",
+                             "REFERENCE: 96 known poses / measured depth",
+                             f"NEW: {count} known poses / global RGB-D loop")
         report["variants"][str(count)]["old_mesh_sha256"] = file_sha256(old_mesh)
         report["variants"][str(count)]["old_new_board_sha256"] = file_sha256(
             visual / "source-old-new-3plus2.png")
