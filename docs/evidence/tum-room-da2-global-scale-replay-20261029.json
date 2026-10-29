@@ -1,0 +1,54 @@
+{
+  "experiment": "TUM fr1_room frozen DA2 Small known-pose RGB global depth-scale replay",
+  "date_utc": "2026-10-29",
+  "status": "VISUAL_FAIL_no_material_room_improvement",
+  "issue_74": "FAIL_NOT_ACCEPTED",
+  "tested_head": "23f985105e4b4351a344c28a775fbcda30cf1138",
+  "workflow_run": "https://github.com/REDrighthand05/echo4d/actions/runs/40797864880",
+  "artifact": "https://github.com/REDrighthand05/echo4d/actions/runs/40797864880/artifacts/12864592124",
+  "input": {
+    "source": "TUM fr1_room real 640x480 RGB, 320x240 DA2 RGB-inferred Z",
+    "source_archive_sha256": "5ace47a1d2e53696bc939a84999293a04a7226958e848a609666691fd3cc38da",
+    "retained": "30 frozen DA2 RGB-predicted metric depth frames, 96 known metric training camera poses, intrinsics",
+    "removed": "measured depth pixels and existing Mesh from candidate; old Mesh posthoc only",
+    "sensor_depth_arrays_retained": false,
+    "metric_scale": "known-pose RGB ZNCC anchors plus global RGB/pose correction; not monocular absolute scale"
+  },
+  "actual_run": {
+    "result": "SUCCESS, real existing Open3D TSDF",
+    "rgb_correspondence_pairs": 59,
+    "fit_correspondences": 59033,
+    "heldout_correspondence_rmse_before_m": 0.13567893545826548,
+    "heldout_correspondence_rmse_after_m": 0.11178422606736191,
+    "old_mesh_sha256": "fec078d13b8ca8b7c43f14746621e6b828f00d04a2980bc0802e792bef9e0475",
+    "new_mesh_sha256": "20b156dd18d63aa62190bcacc02a50c563b77ca144e739875892028197c0f2dd",
+    "old_faces": 86095,
+    "new_faces": 83431,
+    "old_components": 840,
+    "new_components": 775,
+    "old_largest_component_fraction": 0.5637841918810617,
+    "new_largest_component_fraction": 0.5432752813702341,
+    "frozen_3plus2_covered_pixels": {
+      "old": [
+        68623,
+        56165,
+        72963,
+        45135,
+        67871
+      ],
+      "new": [
+        69047,
+        55716,
+        73196,
+        45601,
+        68423
+      ]
+    },
+    "five_view_png_sha256": "753f0661df457194d8788749c999a0adf5b40dd921c05923c23f9cc585ce5938",
+    "old_glb_sha256": "3b5d5abd9e6b20fbec9f7cbaaaac303fb5d5ca7f74182a94ee9ccdaa0708ff60",
+    "new_glb_sha256": "176a2b594ea35932eab7deb834f55bfc75e0c1c94bf63a21e97f9f14e2a1411d"
+  },
+  "visual_conclusion": "Screen and desk recognizable from heldout views but geometry remains swollen and warped. Free views still broken. Changes are minor; one heldout coverage decreases and largest connected fraction falls. No room-structure acceptance.",
+  "evidence_limits": "Correspondence holdout is pixels of the same training scene, not independent physical truth. 3+2 render is actual Mesh; original RGB not used in candidate. No browser integration claim.",
+  "next": "Replace per-frame DA2 metric fit with mature dense multi-view depth/pose-aware global surface estimation; test same frozen 3+2 scene before proceeding to estimated poses."
+}
