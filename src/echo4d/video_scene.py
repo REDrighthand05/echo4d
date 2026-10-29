@@ -153,6 +153,32 @@ def build_parser():
     return parser
 
 
+def dense_and_export(output, receipt, programs, args, frames):
+    """Shared downstream execution, also used to resume a frozen SfM result."""
+    mvs = required_file(output/'scene.mvs')
+    stages = [('densify','DensifyPointCloud',mvs,output/'scene_dense.mvs'),
+              ('mesh','ReconstructMesh',output/'scene_dense.mvs',output/'scene_mesh.mvs'),
+              ('refine','RefineMesh',output/'scene_mesh.mvs',output/'scene_refined.mvs'),
+              ('texture','TextureMesh',output/'scene_refined.mvs',output/'scene_textured.mvs')]
+    for label, program, source, target in stages:
+        command = [programs[program], '-i', source, '-o', target, '--max-threads', args.threads]
+        if label in ['densify','refine','texture']:
+            command += ['--resolution-level', args.resolution_level]
+        if label == 'texture':
+            command += ['--export-type','glb']
+        if label in ['mesh', 'refine']:
+            command += ['--close-holes','0']
+        run_stage(label, command, output, receipt)
+        required_file(target)
+    glb = output/'scene_textured.glb'
+    receipt['mesh'] = verify_textured_glb(glb)
+    run_stage('blender', [programs['blender'], '-b', '--python-exit-code', '1', '--python', args.blender_script.resolve(), '--', '--input', glb, '--output', output/'scene.blend', '--units', 'unknown', '--trajectory', output/'camera-timeline.json', '--render-views', '--provenance', 'RGB-only COLMAP/OpenMVS; scale unknown; estimated geometry'], output, receipt)
+    required_file(output/'scene.blend')
+    receipt['outputs'] = package_scene(output, frames)
+    receipt['delivery_zip_sha256'] = file_sha256(output/'scene-delivery.zip')
+    receipt['status'] = 'completed_not_quality_accepted'
+
+
 def run(args):
     output = args.output.resolve()
     if output.exists():
@@ -220,27 +246,8 @@ def run(args):
         mvs = output/'scene.mvs'
         run_stage('interface', [programs['InterfaceCOLMAP'], '-i', dense, '-o', mvs, '--image-folder', dense/'images'], output, receipt)
         required_file(mvs)
-        stages = [('densify','DensifyPointCloud',mvs,output/'scene_dense.mvs'),
-                  ('mesh','ReconstructMesh',output/'scene_dense.mvs',output/'scene_mesh.mvs'),
-                  ('refine','RefineMesh',output/'scene_mesh.mvs',output/'scene_refined.mvs'),
-                  ('texture','TextureMesh',output/'scene_refined.mvs',output/'scene_textured.mvs')]
-        for label, program, source, target in stages:
-            command = [programs[program], '-i', source, '-o', target, '--max-threads', args.threads]
-            if label in ['densify','refine','texture']:
-                command += ['--resolution-level', args.resolution_level]
-            if label == 'texture':
-                command += ['--export-type','glb']
-            if label in ['mesh', 'refine']:
-                command += ['--close-holes','0']
-            run_stage(label, command, output, receipt)
-            required_file(target)
-        glb = output/'scene_textured.glb'
-        receipt['mesh'] = verify_textured_glb(glb)
-        run_stage('blender', [programs['blender'], '-b', '--python-exit-code', '1', '--python', args.blender_script.resolve(), '--', '--input', glb, '--output', output/'scene.blend', '--units', 'unknown', '--trajectory', output/'camera-timeline.json', '--render-views', '--provenance', 'RGB-only COLMAP/OpenMVS; scale unknown; estimated geometry'], output, receipt)
-        required_file(output/'scene.blend')
-        receipt['outputs'] = package_scene(output, frames)
-        receipt['delivery_zip_sha256'] = file_sha256(output/'scene-delivery.zip')
-        receipt['status'] = 'completed_not_quality_accepted'
+        dense_and_export(output, receipt, programs, args, frames)
+
     except Exception as error:
         receipt.update(status='failed', error=f'{type(error).__name__}: {error}')
         raise

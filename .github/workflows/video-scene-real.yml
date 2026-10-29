@@ -10,6 +10,8 @@ concurrency:
   cancel-in-progress: true
 jobs:
   rgb-only:
+    # Resume commits reuse the frozen successful SfM instead of repeating it.
+    if: github.event_name == 'workflow_dispatch' || !startsWith(github.event.head_commit.message, 'resume-only:')
     runs-on: ubuntu-24.04
     timeout-minutes: 100
     steps:
@@ -23,7 +25,7 @@ jobs:
         id: mvs-cache
         with:
           path: /tmp/mvs-bin
-          key: openmvs-cpu-ce03889e-vcg5cae2abc-ubuntu24-v1
+          key: openmvs-cpu-ce03889e-vcg5cae2abc-timebounds-v1
       - name: Build pinned CPU OpenMVS, no GPU claim
         if: steps.mvs-cache.outputs.cache-hit != 'true'
         run: |
@@ -31,9 +33,12 @@ jobs:
           git -C /tmp/openmvs checkout ce03889e2055a3d6cbcae9dd5a93b5eeea94b909
           git clone https://github.com/cnr-isti-vclab/vcglib.git /tmp/vcglib
           git -C /tmp/vcglib checkout 5cae2abc2f9056785b0537dcbe156c40da2aea20
+          python tools/check_openmvs_time.py /tmp/openmvs
+          python tools/patch_openmvs_time.py /tmp/openmvs > backend-patch.json
           env -u VCPKG_ROOT cmake -S /tmp/openmvs -B /tmp/openmvs-build -G Ninja -DCMAKE_BUILD_TYPE=Release -DVCG_ROOT=/tmp/vcglib -DOpenMVS_USE_CUDA=OFF -DOpenMVS_USE_OPENGL=OFF -DOpenMVS_BUILD_VIEWER=OFF -DOpenMVS_USE_PYTHON=OFF -DOpenMVS_ENABLE_IPO=OFF -DOpenMVS_ENABLE_TESTS=OFF -DOpenMVS_USE_BREAKPAD=OFF
           cmake --build /tmp/openmvs-build --parallel 2 --target InterfaceCOLMAP DensifyPointCloud ReconstructMesh RefineMesh TextureMesh
           mkdir -p /tmp/mvs-bin
+          cp backend-patch.json /tmp/mvs-bin/patch.json
           find /tmp/openmvs-build -type f -executable -name InterfaceCOLMAP -exec cp '{}' /tmp/mvs-bin/ \;
           find /tmp/openmvs-build -type f -executable -name DensifyPointCloud -exec cp '{}' /tmp/mvs-bin/ \;
           find /tmp/openmvs-build -type f -executable -name ReconstructMesh -exec cp '{}' /tmp/mvs-bin/ \;
@@ -43,7 +48,7 @@ jobs:
         if: steps.mvs-cache.outputs.cache-hit != 'true'
         with:
           path: /tmp/mvs-bin
-          key: openmvs-cpu-ce03889e-vcg5cae2abc-ubuntu24-v1
+          key: openmvs-cpu-ce03889e-vcg5cae2abc-timebounds-v1
       - name: Package actual public RGB pixels as an MP4 input, no depth or GT pose consumed
         run: |
           mkdir -p trial-source/frames
