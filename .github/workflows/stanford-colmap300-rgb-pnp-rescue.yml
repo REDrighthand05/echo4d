@@ -1,0 +1,71 @@
+name: Stanford 300 RGB-only PnP pose rescue and 30-depth real Mesh
+on:
+  push:
+    branches: [research/stanford-colmap300-rgb-pnp-rescue-20261030]
+    paths:
+      - tools/stanford_colmap300_rgb_pnp_rescue.py
+      - .github/workflows/stanford-colmap300-rgb-pnp-rescue.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: stanford-colmap300-rgb-pnp-rescue
+  cancel-in-progress: false
+jobs:
+  rgb-only-pnp-rescue:
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install pinned CPU SfM rescue and TSDF dependencies
+        run: |
+          python -m pip install 'opencv-python-headless==4.12.0.88' 'open3d==0.19.0' 'trimesh==4.11.1' 'scipy==1.16.2' 'pillow==11.3.0'
+          python -m py_compile tools/stanford_colmap300_rgb_pnp_rescue.py
+      - name: Download frozen independent 300 RGB poses and prior 30-depth model
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/colmap300" "$RUNNER_TEMP/baseline30"
+          gh run download 40906999521 --repo "$GITHUB_REPOSITORY" --name stanford-colmap300-40906999521 --dir "$RUNNER_TEMP/colmap300"
+          gh run download 40953574932 --repo "$GITHUB_REPOSITORY" --name stanford-colmap300rgb-depth-registered-75-30-40953574932 --dir "$RUNNER_TEMP/baseline30"
+          test -f "$RUNNER_TEMP/colmap300/model-txt-0/images.txt"
+          test -f "$RUNNER_TEMP/baseline30/measured30.glb"
+      - name: Recover missing RGB-only poses and actually fuse new 30-depth Mesh
+        env:
+          OPENBLAS_NUM_THREADS: '1'
+          OMP_NUM_THREADS: '2'
+          OPEN3D_CPU_RENDERING: 'true'
+        run: |
+          python tools/stanford_colmap300_rgb_pnp_rescue.py \
+            --source "$RUNNER_TEMP/colmap300" \
+            --baseline "$RUNNER_TEMP/baseline30" \
+            --output artifacts/stanford-colmap300-rgb-pnp-rescue
+      - name: Print real receipt and refuse to call no-recovery a success
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p = Path('artifacts/stanford-colmap300-rgb-pnp-rescue/rescue-receipt.json')
+          result = json.loads(p.read_text())
+          print(json.dumps({k: result.get(k) for k in
+                ('status', 'original_registered', 'recovered_count',
+                 'still_missing', 'same_ray_image', 'comparison_error')}, indent=2))
+          if result['status'] != 'REAL_MESH_GENERATED_VISUAL_REVIEW_REQUIRED':
+              raise SystemExit('No genuine new Mesh; retain FAIL evidence')
+          if not (p.parent / 'candidate' / 'measured30.glb').exists():
+              raise SystemExit('Missing actual reconstructed GLB')
+          if not (p.parent / 'source-old-vs-pnp-rescue-3plus2.png').exists():
+              raise SystemExit('Missing same-ray visual comparison')
+          PY
+      - name: Preserve real meshes, five views and all failures
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stanford-colmap300-rgb-pnp-rescue-${{ github.run_id }}
+          path: artifacts/stanford-colmap300-rgb-pnp-rescue/
+          retention-days: 30
+          if-no-files-found: warn
