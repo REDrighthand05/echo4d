@@ -42,8 +42,10 @@ def make_references(sift, image_path, observations):
     return keypoints, descriptors, attached
 
 
-def solve_missing(target, reference_keys, refs, photos, sift, matcher):
-    keypoints, desc = sift.detectAndCompute(cv2.imread(str(photos[target]), 0), None)
+def solve_missing(target, reference_keys, refs, photos, sift, matcher, feature_cache):
+    if target not in feature_cache:
+        feature_cache[target] = sift.detectAndCompute(cv2.imread(str(photos[target]), 0), None)
+    keypoints, desc = feature_cache[target]
     if desc is None or len(keypoints) < 40:
         return None
     candidates = {}
@@ -124,9 +126,13 @@ def rescue(source, output):
     save()
 
     sift = cv2.SIFT_create(nfeatures=6000)
-    matcher = cv2.BFMatcher(cv2.NORM_L2)
+    matcher = cv2.FlannBasedMatcher(dict(algorithm=1, trees=4), dict(checks=64))
+    feature_cache = {}
     refs = {}
+    relevant = {r for r in registered if any(abs(r - m) <= 45 for m in missing)}
     for k, (_, _, obs) in registered.items():
+        if k not in relevant:
+            continue
         r = make_references(sift, photos[k], obs)
         if r is not None:
             refs[k] = r
@@ -143,7 +149,7 @@ def rescue(source, output):
             if not nearby:
                 attempts[k] = 'no reference within 45 frames'
                 continue
-            found = solve_missing(k, nearby, refs, photos, sift, matcher)
+            found = solve_missing(k, nearby, refs, photos, sift, matcher, feature_cache)
             if found is None:
                 attempts[k] = 'insufficient reliable 2D-3D RGB correspondences'
                 continue
