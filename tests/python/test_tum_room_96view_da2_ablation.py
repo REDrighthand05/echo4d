@@ -5,6 +5,9 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+pytest.importorskip("cv2", reason="OpenCV is installed in the dedicated real-room workflow")
+pytest.importorskip("trimesh", reason="trimesh is installed in the dedicated real-room workflow")
+
 from echo4d.model import DataError
 from tum_room_sensor_anchor_ladder import anchor_indices
 from tum_room_96view_da2_ablation import replace_with_predicted, validate_cohort
