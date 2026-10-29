@@ -42,6 +42,77 @@ def make_references(sift, image_path, observations):
     return keypoints, descriptors, attached
 
 
+
+def solve_missing_flow(target, flow_refs, photos, gray_cache):
+    """Track original COLMAP 2D/3D observations across adjacent RGB frames.
+
+    Unlike descriptor matching, optical flow follows already-triangulated
+    pixels through short temporal steps. Every resulting camera still needs
+    independently verified 2D/3D PnP; no interpolated pose is accepted.
+    """
+    def gray(k):
+        if k not in gray_cache:
+            image = cv2.imread(str(photos[k]), cv2.IMREAD_GRAYSCALE)
+            if image is None:
+                raise FileNotFoundError(photos[k])
+            gray_cache[k] = image
+        return gray_cache[k]
+
+    nearby = sorted((k for k in flow_refs if 0 < abs(k-target) <= 2),
+                    key=lambda k: abs(k-target))
+    for k in nearby[:4]:
+        src_xy, src_xyz = flow_refs[k]
+        if len(src_xy) < MIN_INLIERS:
+            continue
+        start = np.asarray(src_xy, np.float32).reshape(-1, 1, 2)
+        options = dict(winSize=(31, 31), maxLevel=4,
+                       criteria=(cv2.TERM_CRITERIA_EPS |
+                                 cv2.TERM_CRITERIA_COUNT, 40, .01))
+        tracked, status, _ = cv2.calcOpticalFlowPyrLK(
+            gray(k), gray(target), start, None, **options)
+        if tracked is None:
+            continue
+        reverse, back_status, _ = cv2.calcOpticalFlowPyrLK(
+            gray(target), gray(k), tracked, None, **options)
+        if reverse is None:
+            continue
+        xy = tracked.reshape(-1, 2)
+        back = reverse.reshape(-1, 2)
+        fb = np.linalg.norm(back - start.reshape(-1, 2), axis=1)
+        ok = ((status.ravel() > 0) & (back_status.ravel() > 0) &
+              np.isfinite(xy).all(axis=1) & np.isfinite(fb) & (fb < 1.5) &
+              (xy[:, 0] >= 2) & (xy[:, 0] < 638) &
+              (xy[:, 1] >= 2) & (xy[:, 1] < 478))
+        if int(ok.sum()) < MIN_INLIERS:
+            continue
+        xy, xyz = xy[ok].astype(np.float64), np.asarray(src_xyz)[ok]
+        success, rvec, tvec, inliers = cv2.solvePnPRansac(
+            xyz, xy, CAMERA_K, None, flags=cv2.SOLVEPNP_EPNP,
+            reprojectionError=3., confidence=.999, iterationsCount=1500)
+        if not success or inliers is None or len(inliers) < MIN_INLIERS:
+            continue
+        ids = inliers.ravel()
+        success, rvec, tvec = cv2.solvePnP(
+            xyz[ids], xy[ids], CAMERA_K, None, rvec, tvec, True,
+            flags=cv2.SOLVEPNP_ITERATIVE)
+        if not success:
+            continue
+        projected, _ = cv2.projectPoints(xyz[ids], rvec, tvec, CAMERA_K, None)
+        error = np.linalg.norm(projected.reshape(-1, 2) - xy[ids], axis=1)
+        area = float(np.prod(np.ptp(xy[ids], axis=0)) / (640 * 480))
+        rot, _ = cv2.Rodrigues(rvec)
+        camera_z = (rot @ xyz[ids].T + tvec).T[:, 2]
+        if (np.median(error) > MAX_MEDIAN_ERROR_PX or area < .02 or
+                np.mean(camera_z > .1) < .95):
+            continue
+        pose = dict(rot=rot, t=tvec.ravel(), inliers=len(ids),
+                    median_error_px=round(float(np.median(error)), 3),
+                    inlier_image_area=round(area, 4),
+                    method='RGB LK optical flow + PnP', tracked_from=k)
+        return pose, (xy[ids].astype(np.float32), xyz[ids])
+    return None
+
+
 def solve_missing(target, reference_keys, refs, photos, sift, matcher, feature_cache):
     if target not in feature_cache:
         feature_cache[target] = sift.detectAndCompute(cv2.imread(str(photos[target]), 0), None)
@@ -101,7 +172,7 @@ def rescue(source, output):
 
     output.mkdir(parents=True, exist_ok=False)
     receipt = dict(status='RUNNING', source_run=40906999521,
-                   selected_rgb=300, localization='OpenCV SIFT + original COLMAP 3D tracks + RGB-only PnP',
+                   selected_rgb=300, localization='Original COLMAP 3D tracks + RGB optical flow/PnP, SIFT/PnP fallback',
                    measured_depth_for_localization=0, old_mesh_prior=False,
                    interpolated_camera_poses=False, visual_acceptance='NOT REVIEWED')
     def save():
@@ -137,14 +208,37 @@ def rescue(source, output):
         if r is not None:
             refs[k] = r
     receipt['initial_reference_views'] = len(refs)
+    # COLMAP's own triangulated observations are exact flow seeds. Re-running
+    # SIFT is unnecessary for the optical-flow bridge.
+    flow_refs = {
+        k: (np.asarray([[x, y] for x, y, _ in obs], np.float32),
+            np.asarray([p for _, _, p in obs], np.float64))
+        for k, (_, _, obs) in registered.items() if len(obs) >= MIN_INLIERS
+    }
+    gray_cache = {}
     recovered = {}
+    flow_recovered = []
     attempts = {}
     # Nearest registered camera first; successful PnP frames become bridges.
     for iteration in range(4):
         progress = 0
         pending = sorted(missing - set(recovered),
-                         key=lambda k: min(abs(k - r) for r in refs))
+                         key=lambda k: min(abs(k - r) for r in flow_refs))
         for k in pending:
+            tracked = solve_missing_flow(k, flow_refs, photos, gray_cache)
+            if tracked is not None:
+                pose, observations = tracked
+                recovered[k] = pose
+                flow_refs[k] = observations
+                flow_recovered.append(k)
+                # Retain the original SIFT fallback as an independent route.
+                flow_obs = [(float(x), float(y), p)
+                            for (x, y), p in zip(*observations)]
+                bridge = make_references(sift, photos[k], flow_obs)
+                if bridge is not None:
+                    refs[k] = bridge
+                progress += 1
+                continue
             nearby = [r for r in refs if abs(r - k) <= 45]
             if not nearby:
                 attempts[k] = 'no reference within 45 frames'
@@ -156,10 +250,17 @@ def rescue(source, output):
             pose, bridge = found
             recovered[k] = pose
             refs[k] = bridge
+            kp, _, associated = bridge
+            if len(associated) >= MIN_INLIERS:
+                flow_refs[k] = (
+                    np.asarray([kp[i].pt for i in associated], np.float32),
+                    np.asarray(list(associated.values()), np.float64))
             progress += 1
         if progress == 0:
             break
-    receipt.update(recovered_count=len(recovered), recovered={
+    receipt.update(flow_recovered_count=len(flow_recovered),
+                   flow_recovered_frames=sorted(flow_recovered),
+                   recovered_count=len(recovered), recovered={
         str(k): {x: v for x, v in p.items() if x not in ('rot', 't')}
         for k, p in sorted(recovered.items())},
         still_missing=sorted(missing - set(recovered)),
