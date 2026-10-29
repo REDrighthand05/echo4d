@@ -50,8 +50,8 @@ jobs:
           key: openmvs-cpu-ce03889e-vcg5cae2abc-timebounds-v1
       - uses: actions/download-artifact@v4
         with:
-          name: real-rgb-video-scene-6818ce1bb0dd7a2e7d16ec467b69ce05473ba684
-          run-id: 40965270374
+          name: recovered-rgb-video-scene-38c52c79ddb4d8905108e4aea13676bed2eaf84d
+          run-id: 40966804036
           github-token: ${{ github.token }}
       - name: Resume only the fixed frozen densify failure
         env:

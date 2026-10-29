@@ -153,15 +153,23 @@ def build_parser():
     return parser
 
 
-def dense_and_export(output, receipt, programs, args, frames):
+def dense_and_export(output, receipt, programs, args, frames, start='densify', mesh_file=None):
     """Shared downstream execution, also used to resume a frozen SfM result."""
     mvs = required_file(output/'scene.mvs')
     stages = [('densify','DensifyPointCloud',mvs,output/'scene_dense.mvs'),
               ('mesh','ReconstructMesh',output/'scene_dense.mvs',output/'scene_mesh.mvs'),
               ('refine','RefineMesh',output/'scene_mesh.mvs',output/'scene_refined.mvs'),
               ('texture','TextureMesh',output/'scene_refined.mvs',output/'scene_textured.mvs')]
+    names = [stage[0] for stage in stages]
+    if start not in names:
+        raise DataError('Unknown resume stage')
+    stages = stages[names.index(start):]
     for label, program, source, target in stages:
-        command = [programs[program], '-i', source, '-o', target, '--max-threads', args.threads]
+        if label == 'refine' and mesh_file is not None:
+            source = required_file(output/'scene_dense.mvs')
+        command = [programs[program], '-i', source, '-o', target, '--archive-type', '2', '--max-threads', args.threads]
+        if label == 'refine' and mesh_file is not None:
+            command += ['--mesh-file', required_file(mesh_file)]
         if label in ['densify','refine','texture']:
             command += ['--resolution-level', args.resolution_level]
         if label == 'texture':
@@ -244,7 +252,7 @@ def run(args):
         original['images'] = 'dense/images: undistorted source RGB'
         write_json(output/'camera-timeline.json', original)
         mvs = output/'scene.mvs'
-        run_stage('interface', [programs['InterfaceCOLMAP'], '-i', dense, '-o', mvs, '--image-folder', dense/'images'], output, receipt)
+        run_stage('interface', [programs['InterfaceCOLMAP'], '-i', dense, '-o', mvs, '--archive-type', '2', '--image-folder', dense/'images'], output, receipt)
         required_file(mvs)
         dense_and_export(output, receipt, programs, args, frames)
 

@@ -134,3 +134,22 @@ def test_orchestration_contract_with_explicit_fake_backends(tmp_path, monkeypatc
     timeline=json.loads((args.output/'camera-timeline.json').read_text())
     assert timeline['cameras']['1']==[640,480,525,525,319.5,239.5]
     assert [f['t_s'] for f in timeline['frames']]==[0,1,2]
+
+
+def test_refine_resume_reuses_existing_dense_and_mesh(tmp_path, monkeypatch):
+    from echo4d.video_scene import dense_and_export
+    for name in ['scene.mvs','scene_dense.mvs','scene_mesh.ply']:
+        (tmp_path/name).write_bytes(b'EXPLICIT_FAKE_RESUME_FIXTURE')
+    args=build_parser().parse_args(['--video','unused.mp4','--output','unused'])
+    calls=[]
+    def stage(name,command,*_):
+        calls.append(name)
+        assert name=='refine'
+        assert command[command.index('--archive-type')+1]=='2'
+        assert command[command.index('--mesh-file')+1]==tmp_path/'scene_mesh.ply'
+        assert command[command.index('-i')+1]==tmp_path/'scene_dense.mvs'
+        raise RuntimeError('Stop after asserting the first resume stage')
+    monkeypatch.setattr('echo4d.video_scene.run_stage',stage)
+    with pytest.raises(RuntimeError,match='Stop after'):
+        dense_and_export(tmp_path,{}, {'RefineMesh':'fake-refiner'},args,[],start='refine',mesh_file=tmp_path/'scene_mesh.ply')
+    assert calls==['refine']

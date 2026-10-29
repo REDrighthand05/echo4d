@@ -6,7 +6,7 @@ from pathlib import Path
 import sys
 import bpy
 import math
-from mathutils import Matrix
+from mathutils import Matrix, Vector
 
 def sha(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
@@ -155,11 +155,23 @@ def run(source, output, provenance, units='metric', trajectory=None, render=Fals
     for picture in bpy.data.images:
         if picture.type == 'IMAGE' and picture.has_data and not picture.packed_file:
             picture.pack()
-    # Start in material preview, frame the model and retain free orbit controls.
+    # Preserve source texture appearance and open on the actual model bounds.
+    bpy.context.scene.view_settings.view_transform = 'Standard'
+    bpy.context.scene.view_settings.exposure = 0
+    bpy.context.scene.view_settings.gamma = 1
+    points=[obj.matrix_world @ Vector(p) for obj in bpy.context.scene.objects
+            if obj.type == 'MESH' for p in obj.bound_box]
+    center=sum(points,Vector())/len(points)
+    radius=max((p-center).length for p in points)
     for screen in bpy.data.screens:
         for area in screen.areas:
             if area.type == 'VIEW_3D':
                 area.spaces.active.shading.type = 'MATERIAL'
+                region=area.spaces.active.region_3d
+                region.view_location=center
+                region.view_distance=max(radius*2.8,.01)
+                if bpy.context.scene.camera:
+                    region.view_rotation=bpy.context.scene.camera.matrix_world.to_quaternion()
     bpy.ops.wm.save_as_mainfile(filepath=str(output), compress=True)
     bpy.ops.wm.open_mainfile(filepath=str(output), load_ui=False)
     after = geometry()
