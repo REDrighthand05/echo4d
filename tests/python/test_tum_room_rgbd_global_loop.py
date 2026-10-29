@@ -1,7 +1,8 @@
 """CPU regressions for nonlocal visual retrieval and verified RGB-D loop edges."""
-import cv2
 import numpy as np
 import pytest
+
+cv2 = pytest.importorskip("cv2", reason="OpenCV installed by dedicated real RGB-D workflow")
 
 pytest.importorskip("open3d")
 from tum_room_rgbd_global_loop import global_candidates, connected_sizes, checked_loop_edge
