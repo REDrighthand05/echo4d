@@ -1,0 +1,44 @@
+name: Stanford independently estimated 600 RGB-D Mesh
+on:
+  push:
+    branches: [research/stanford-independent600-20261029]
+    paths:
+      - tools/stanford_independent_600.py
+      - .github/workflows/stanford-independent600.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  real-independent-stanford:
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: isl-org/Open3D
+          ref: 1e7b17438687a0b0c1e5a7187321ac7044afe275
+          path: vendor/Open3D
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install pinned mature CPU RGB-D reconstruction system
+        run: |
+          python -m pip install 'open3d==0.19.0' 'opencv-python-headless==4.12.0.88' 'trimesh==4.11.1' 'joblib==1.5.2' 'pillow'
+      - name: Actually estimate trajectory and fuse Mesh from only 600 real RGB-D frames
+        env:
+          OMP_NUM_THREADS: '2'
+          OPENBLAS_NUM_THREADS: '1'
+        run: |
+          python tools/stanford_independent_600.py \
+            --upstream vendor/Open3D \
+            --output artifacts/stanford-independent600 \
+            --samples 600
+      - name: Preserve real GLB, poses, source hashes, 3+2 views and actual failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stanford-independent600-${{ github.run_id }}
+          path: artifacts/stanford-independent600/
+          retention-days: 30
+          if-no-files-found: warn
