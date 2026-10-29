@@ -1,0 +1,103 @@
+name: Redwood real measured-coverage 600-frame Mesh A/B
+on:
+  push:
+    branches: [research/redwood-fixed-budget-coverage600-20261030]
+    paths:
+      - tools/redwood_coverage_budget_fusion.py
+      - tests/python/test_redwood_coverage_budget_fusion.py
+      - .github/workflows/redwood-coverage-budget600.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  real-coverage-mesh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install measured-depth TSDF and native color GLB tools
+        run: |
+          python -m pip install -r requirements.lock
+          python -m pip install --no-deps -e .
+          python -m pip install 'open3d==0.19.0' 'trimesh>=4,<5'
+      - name: Test world-space measured depth coverage selection
+        env:
+          PYTHONPATH: tools
+        run: python -m pytest -q tests/python/test_redwood_coverage_budget_fusion.py
+      - name: Fetch frozen observed-only 600-frame 4.5m baseline for comparison
+        uses: actions/download-artifact@v4
+        with:
+          repository: REDrighthand05/echo4d
+          run-id: 40778686280
+          name: real-bedroom-dense-600-40778686280
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: source
+      - name: Select exactly 600 real depth views and refusion at native 640x480
+        env:
+          PYTHONPATH: tools
+          OPENBLAS_NUM_THREADS: '1'
+          OMP_NUM_THREADS: '1'
+        run: |
+          python tools/redwood_coverage_budget_fusion.py \
+            --source-ply source/recorded-rgbd-full.ply \
+            --cache "$RUNNER_TEMP/redwood-coverage-real" \
+            --output "$GITHUB_WORKSPACE/artifacts/redwood-coverage600" \
+            --budget 600
+      - name: Preserve observed-only color Mesh and 3+2 A/B visual evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: real-redwood-coverage600-${{ github.run_id }}
+          path: artifacts/redwood-coverage600/
+          retention-days: 14
+          if-no-files-found: warn
+  publish-actual-review:
+    needs: real-coverage-mesh
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: real-redwood-coverage600-${{ github.run_id }}
+          path: result
+      - name: Publish only actual observed Mesh and five images on isolated branch
+        run: |
+          set -eu
+          dir=docs/real-room-review/redwood-bedroom-coverage600
+          mkdir -p "$dir/visual"
+          cp result/visual/*.png "$dir/visual/"
+          cp result/five-view-coverage-ab.png "$dir/"
+          cp result/coverage-selected-observed.glb "$dir/"
+          cp result/result.json "$dir/"
+          cat > "$dir/README.md" <<'EOF'
+          # Redwood Bedroom: 600-frame measured coverage vs 600 uniform frames
+
+          Real original 640x480 RGB-D and logged metric camera poses, Open3D
+          ScalableTSDFVolume 2.5cm voxel and 4.5m depth limit on both sides.
+          The new 600-frame subset is selected from actual measured world-space
+          surface coverage; 60 evenly spaced anchors preserve trajectory range.
+          The frozen baseline observed-only Mesh is used ONLY for A/B images.
+          Neither baseline nor provided reference scan is fused into the output.
+          In three recorded views: left = real RGB, middle = original 600,
+          right = coverage-selected 600. Two free views: left = old, right = new.
+          No claim of visual improvement or #74 PASS without human review.
+          #74 FAIL and old Desk 16.7779cm > 15cm FAIL unchanged.
+          Dataset: https://redwood-data.org/indoor_lidar_rgbd/
+          Baseline: https://github.com/REDrighthand05/echo4d/actions/runs/40778686280
+          EOF
+          git config user.name "echo4d-real-room-ci"
+          git config user.email "echo4d-real-room-ci@users.noreply.github.com"
+          git add "$dir"
+          git diff --cached --quiet && exit 0
+          git commit -m "results(real-room): observed Redwood coverage600 Mesh and five-view A/B"
+          git fetch origin research/redwood-fixed-budget-coverage600-20261030
+          git rebase origin/research/redwood-fixed-budget-coverage600-20261030
+          git push origin HEAD:refs/heads/research/redwood-fixed-budget-coverage600-20261030
