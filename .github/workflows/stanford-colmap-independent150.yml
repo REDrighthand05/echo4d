@@ -1,0 +1,59 @@
+name: Stanford COLMAP independent 150 RGB-D room
+on:
+  push:
+    branches: [research/stanford-colmap-independent150-20261029]
+    paths:
+      - .github/workflows/stanford-colmap-independent150.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  colmap-independent-150:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install official COLMAP CPU and Open3D
+        run: |
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y colmap
+          python -m pip install 'open3d==0.19.0' 'trimesh==4.11.1' pillow scipy
+      - name: Independently reconstruct room using only 150 original RGB-D pairs
+        env:
+          QT_QPA_PLATFORM: offscreen
+          OMP_NUM_THREADS: '2'
+          OPENBLAS_NUM_THREADS: '1'
+        run: |
+          python tools/stanford_colmap_metric300.py --output artifacts/stanford-colmap150 --samples 150
+          mv artifacts/stanford-colmap150/room-colmap300.glb artifacts/stanford-colmap150/room-colmap150.glb
+          mv artifacts/stanford-colmap150/room-colmap300-preview.glb artifacts/stanford-colmap150/room-colmap150-preview.glb
+          mv artifacts/stanford-colmap150/source-colmap300-3plus2.png artifacts/stanford-colmap150/source-colmap150-3plus2.png
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path('artifacts/stanford-colmap150/receipt.json')
+          r=json.loads(p.read_text())
+          r['mesh']='room-colmap150.glb'
+          r['image']='source-colmap150-3plus2.png'
+          r['visual_acceptance']='FAIL until actual 3+2 image inspection'
+          r['comparison']='Independent COLMAP 300 artifact 12911194244; independent COLMAP 600 artifact 12917124559. Neither prior poses nor prior Mesh used.'
+          p.write_text(json.dumps(r,indent=2)+'\n')
+          PY
+      - name: Preserve real Mesh and five views even on failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stanford-colmap150-${{ github.run_id }}
+          path: |
+            artifacts/stanford-colmap150/receipt.json
+            artifacts/stanford-colmap150/inputs.json
+            artifacts/stanford-colmap150/*.log
+            artifacts/stanford-colmap150/*.glb
+            artifacts/stanford-colmap150/*3plus2.png
+            artifacts/stanford-colmap150/views/
+            artifacts/stanford-colmap150/model-txt-*/
+          retention-days: 30
+          if-no-files-found: warn
