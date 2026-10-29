@@ -1,0 +1,102 @@
+name: Redwood measured-gap frame selection and full-room refusion
+on:
+  push:
+    branches: [research/redwood-gap-guided-views-20261029]
+    paths:
+      - tools/redwood_gap_guided_fusion.py
+      - tests/python/test_redwood_gap_guided_fusion.py
+      - .github/workflows/redwood-gap-guided.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  measured-gap-fusion:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install mature Open3D fusion and native raycasting
+        run: |
+          pip install -r requirements.lock
+          pip install --no-deps -e .
+          pip install 'open3d==0.19.0' 'trimesh>=4,<5'
+      - name: Unit test real surface gap selection
+        env:
+          PYTHONPATH: tools
+        run: python -m pytest -q tests/python/test_redwood_gap_guided_fusion.py
+      - name: Download the REAL 600-frame observed-only baseline PLY
+        uses: actions/download-artifact@v4
+        with:
+          name: real-bedroom-dense-600-40778686280
+          repository: REDrighthand05/echo4d
+          run-id: 40778686280
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: source
+      - name: Choose missing measured surfaces and fuse real RGB-D frames
+        env:
+          PYTHONPATH: tools
+          OPENBLAS_NUM_THREADS: '1'
+          OMP_NUM_THREADS: '1'
+        run: |
+          python tools/redwood_gap_guided_fusion.py \
+            --source-ply source/recorded-rgbd-full.ply \
+            --cache "$RUNNER_TEMP/redwood" \
+            --output "$GITHUB_WORKSPACE/artifacts/redwood-gap-guided" \
+            --extra 120
+      - name: Preserve full colored Mesh, five actual A/B views, and any failure
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: real-redwood-gap-guided-${{ github.run_id }}
+          path: artifacts/redwood-gap-guided/
+          retention-days: 14
+  publish-actual-room:
+    needs: measured-gap-fusion
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: real-redwood-gap-guided-${{ github.run_id }}
+          path: result
+      - name: Publish actual observed Mesh and 3+2 review on this isolated branch
+        run: |
+          set -eu
+          dir=docs/real-room-review/redwood-bedroom-gap-guided
+          mkdir -p "$dir/visual"
+          cp result/visual/*.png "$dir/visual/"
+          cp result/gap-guided-observed.glb "$dir/"
+          cp result/result.json "$dir/"
+          cat > "$dir/README.md" <<'EOF'
+          # Redwood Bedroom: real missing-surface depth fusion
+
+          640x480 original real Redwood RGB-D, measured depth, recorded poses.
+          OLD: observed-only 600-frame full-density 553,208-face Mesh.
+          NEW: same TSDF algorithm and 600 frames plus up to 120 real
+          intermediate frames selected for measured surfaces missing from OLD.
+          OLD Mesh is used ONLY for selecting frames, not fused into NEW.
+          Existing supplied reference/laser scan is NOT an input.
+          In the three real-camera comparisons, left is the original RGB,
+          center is the old observed Mesh, right is the newly fused Mesh.
+          In the two free views, left is old and right is new.
+          These pictures and GLB require human review; no automatic pass.
+          Issue #74 remains FAIL, old Desk V2 FAIL unchanged.
+          Source: https://redwood-data.org/indoor_lidar_rgbd/
+          Baseline: https://github.com/REDrighthand05/echo4d/tree/research/redwood-dense-native-mesh-20261029/docs/real-room-review/redwood-bedroom-native600
+          EOF
+          git config user.name "echo4d-real-room-ci"
+          git config user.email "echo4d-real-room-ci@users.noreply.github.com"
+          git add "$dir"
+          git diff --cached --quiet && exit 0
+          git commit -m "results(real-room): actual gap-guided RGB-D Mesh and 3+2 images"
+          git fetch origin research/redwood-gap-guided-views-20261029
+          git rebase origin/research/redwood-gap-guided-views-20261029
+          git push origin HEAD:refs/heads/research/redwood-gap-guided-views-20261029
