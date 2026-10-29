@@ -1,0 +1,51 @@
+name: Stanford real room 30 sensor + 120 DA2 predicted depth Mesh
+on:
+  push:
+    branches: [research/stanford-da2-metric-anchors-20261029]
+    paths:
+      - tools/stanford_da2_anchor_fusion.py
+      - .github/workflows/stanford-da2-anchor-fusion.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  real-stanford-hybrid-mesh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install mature pinned CPU RGB-depth model and Open3D fusion
+        run: |
+          python -m pip install 'open3d==0.19.0' 'trimesh==4.11.1' 'scipy==1.16.2' 'pillow' 'numpy'
+          python -m pip install 'torch==2.5.1+cpu' 'torchvision==0.20.1+cpu' --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install 'transformers==4.48.3' 'huggingface_hub==0.29.3' 'safetensors==0.5.3'
+      - name: Fetch genuine upstream Stanford Lounge reconstruction and frozen estimated poses
+        uses: actions/download-artifact@v4
+        with:
+          name: official-room-40865675012
+          run-id: 40865675012
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: artifacts/upstream-official
+      - name: Actually infer 150 RGB depths on CPU, calibrate 30 measured anchors, integrate 3 Meshes, render 3+2
+        env:
+          OMP_NUM_THREADS: '2'
+          OPENBLAS_NUM_THREADS: '1'
+          HF_HUB_DOWNLOAD_TIMEOUT: '120'
+          HF_HUB_ETAG_TIMEOUT: '120'
+          PYTHONPATH: tools
+        run: |
+          python tools/stanford_da2_anchor_fusion.py \
+            --official artifacts/upstream-official \
+            --output artifacts/stanford-da2-hybrid
+      - name: Preserve real models and five-view comparison even on failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stanford-da2-hybrid-${{ github.run_id }}
+          path: artifacts/stanford-da2-hybrid/
+          if-no-files-found: warn
+          retention-days: 30
