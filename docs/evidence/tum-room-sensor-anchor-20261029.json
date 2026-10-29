@@ -1,0 +1,105 @@
+{
+  "experiment": "TUM fr1_room real sensor-depth frame ladder 0/4/8/30, frozen DA2 Small RGB + known metric poses",
+  "date_utc": "2026-10-29",
+  "tested_checkout": "b594906eb91aa340b16a2306354e9c0143a562e4",
+  "real_run": "https://github.com/REDrighthand05/echo4d/actions/runs/40809774609",
+  "artifact": "https://github.com/REDrighthand05/echo4d/actions/runs/40809774609/artifacts/12870121727",
+  "artifact_id": 12870121727,
+  "source_run": "https://github.com/REDrighthand05/echo4d/actions/runs/40790769632",
+  "source_archive_sha256": "5ace47a1d2e53696bc939a84999293a04a7226958e848a609666691fd3cc38da",
+  "retained": [
+    "30 fixed 320x240 RGB frames from original TUM 640x480 RGB",
+    "30 real metric TUM poses and calibrated intrinsics",
+    "DA2 Small RGB-predicted depth on all non-sensor frames"
+  ],
+  "removed": "prior Mesh from all candidate fusion; sensor Z absent on non-anchor frames; no sensor holdout depth in training",
+  "levels": {
+    "0": {
+      "sensor_frames": 0,
+      "depth_source": "DA2 RGB predicted",
+      "faces": 86095,
+      "fragments": 840,
+      "largest_fraction": 0.5638,
+      "coverage": [
+        68623,
+        56165,
+        72963,
+        45135,
+        67871
+      ],
+      "mesh_source": "frozen #99 posthoc control"
+    },
+    "4": {
+      "sensor_frames": 4,
+      "source_frame_indices": [
+        0,
+        86,
+        135,
+        169
+      ],
+      "faces": 84324,
+      "fragments": 697,
+      "largest_fraction": 0.562153,
+      "coverage": [
+        68857,
+        57939,
+        73459,
+        45241,
+        67620
+      ],
+      "mesh_sha256": "7084435b7e5293b74622dc0e829ea9a3705b6090bd520e10afeca28573390e86"
+    },
+    "8": {
+      "sensor_frames": 8,
+      "source_frame_indices": [
+        0,
+        16,
+        28,
+        48,
+        86,
+        135,
+        151,
+        169
+      ],
+      "faces": 87691,
+      "fragments": 692,
+      "largest_fraction": 0.623371,
+      "coverage": [
+        71465,
+        57939,
+        74654,
+        46139,
+        67826
+      ],
+      "mesh_sha256": "9d979ae6eb0ce834a585d081fb78b42bd739a29ae629032e085d522c2460bcfa"
+    },
+    "30": {
+      "sensor_frames": 30,
+      "faces": 71772,
+      "fragments": 416,
+      "largest_fraction": 0.46801,
+      "coverage": [
+        72761,
+        54248,
+        74732,
+        47385,
+        69603
+      ],
+      "mesh_sha256": "8a3c05c11343541bb9d6931428fb4cacceb30eda38000d7c3cdfca536247e5e2"
+    }
+  },
+  "images": {
+    "source_rgb_old_da2_new_8_sensor_3plus2_sha256": "de71d9c8b7a92934db167c9ce8a552e9947b59bb9389af61823f7938e4151ae3",
+    "source_rgb_old_da2_new_4_sensor_3plus2_sha256": "827f3a56c6567df36a5789b454c96bdefba96f0802963916d409e79b4cee215d",
+    "source_rgb_old_da2_new_30_sensor_3plus2_sha256": "d188ee9a717827769ea76b1035e675b8bf925054b575f0efb7761dfe2dbaf3d9"
+  },
+  "assessment": "VISUAL FAIL: 4 and 8 measured frames produce only modest local improvements over DA2-only; full 30 measured frames better define desk and monitor in some fixed views, but all remain warped/incomplete and free views are not a recognizable continuous room. Coverage is not geometric truth.",
+  "acceptance": "#74 FAIL / NOT ACCEPTED; no complete historical playback",
+  "limitations": [
+    "30-view internal control is not the existing 96-view high-information baseline",
+    "No independent surface ground truth; sensor used for training at predeclared frames only",
+    "Open3D TSDF output is not watertight room geometry",
+    "This run did not execute new DA2 inference; reused previously verified frozen depth arrays"
+  ],
+  "next": "Use 96 known-pose original RGB frames and high-information 96-frame measured baseline; ablate measured depth on that denser cohort, rather than polishing 30-view RGB-only Mesh"
+}
