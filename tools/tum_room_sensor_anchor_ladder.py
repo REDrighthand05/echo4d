@@ -138,7 +138,7 @@ def make_candidate(frozen_input: Path, manifest: dict, output: Path,
     return output / "recording.json", {"level": level, "anchors": used}
 
 
-def relabel_fusion(mesh_path: Path, report_path: Path, level: int) -> None:
+def relabel_fusion(mesh_path: Path, report_path: Path, level: int) -> dict:
     """Correct generic Open3D exporter provenance without modifying geometry."""
     original = b"comment Open3D sparse TSDF; measured RGB-D; known poses; no inferred depth"
     replacement = (f"comment Open3D sparse TSDF; {level}/30 measured Z frames; "
@@ -154,6 +154,7 @@ def relabel_fusion(mesh_path: Path, report_path: Path, level: int) -> None:
     receipt["prior_mesh_used"] = False
     receipt["mesh_sha256"] = file_sha256(mesh_path)
     report_path.write_text(json.dumps(receipt, indent=2, allow_nan=False) + "\n")
+    return receipt
 
 
 def main() -> None:
@@ -221,7 +222,7 @@ def main() -> None:
         fusion = fuse_sparse(manifest_path, destination, voxel_m=.04,
                              truncation_m=.12, max_depth_m=4., pixel_stride=2)
         mesh = destination / "mesh.ply"
-        relabel_fusion(mesh, destination / "report.json", level)
+        fusion = relabel_fusion(mesh, destination / "report.json", level)
         v, f = read_echo_ply(mesh)
         mesh_glb(mesh, output / f"hybrid-{level}-sensor.glb")
         report["variants"][str(level)] = {
@@ -243,7 +244,7 @@ def main() -> None:
     fusion = fuse_sparse(manifest_path, output / "mesh-30", voxel_m=.04,
                          truncation_m=.12, max_depth_m=4., pixel_stride=2)
     full_mesh = output / "mesh-30/mesh.ply"
-    relabel_fusion(full_mesh, output / "mesh-30/report.json", 30)
+    fusion = relabel_fusion(full_mesh, output / "mesh-30/report.json", 30)
     v, f = read_echo_ply(full_mesh)
     mesh_glb(full_mesh, output / "measured-30-sensor.glb")
     report["variants"]["30"] = {

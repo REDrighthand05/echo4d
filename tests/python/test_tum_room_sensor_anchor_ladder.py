@@ -83,3 +83,20 @@ def test_replaces_only_declared_anchor_and_keeps_other_predicted_z(tmp_path):
     assert np.load(output / "depth/002.npy")[0, 0] == 3.0
     with pytest.raises(DataError):
         make_candidate(frozen, manifest, output, [1], {11: replacement}, 1)
+
+
+def test_fusion_receipt_matches_relabelled_mesh_on_disk(tmp_path):
+    from tum_room_sensor_anchor_ladder import relabel_fusion
+    from echo4d.model import file_sha256
+    mesh = tmp_path/'mesh.ply'
+    report = tmp_path/'report.json'
+    mesh.write_bytes(b'ply\ncomment Open3D sparse TSDF; measured RGB-D; known poses; no inferred depth\nend_header\ngeometry unchanged\n')
+    old_hash = file_sha256(mesh)
+    report.write_text(json.dumps({'mesh_sha256':old_hash,'geometry_source':'measured RGB-D'}))
+    revised = relabel_fusion(mesh,report,4)
+    assert revised == json.loads(report.read_text())
+    assert revised['mesh_sha256'] == file_sha256(mesh) != old_hash
+    assert revised['measured_sensor_frames'] == 4
+    assert revised['rgb_predicted_depth_frames'] == 26
+    assert 'DA2' in revised['geometry_source']
+    assert mesh.read_bytes().endswith(b'geometry unchanged\n')
