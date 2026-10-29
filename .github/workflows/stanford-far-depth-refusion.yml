@@ -1,7 +1,7 @@
-name: Stanford 3000-frame measured far-depth TSDF A/B
+name: Stanford 3000-frame coherent far-depth TSDF A/B
 on:
   push:
-    branches: [research/stanford-far-depth-refusion-20261030]
+    branches: [research/stanford-far-depth-coherence-20261030]
     paths:
       - tools/stanford_far_depth_refusion.py
       - .github/workflows/stanford-far-depth-refusion.yml
@@ -36,7 +36,14 @@ jobs:
           test -s "$RUNNER_TEMP/full-room/scene/integrated.ply"
           test -s "$RUNNER_TEMP/full-room/scene/trajectory.log"
           test -s "$RUNNER_TEMP/full-room/views/recorded-00000.png"
-      - name: Re-integrate all 3000 original measured frames at extended sensor range
+      - name: Download completed unfiltered 4.5m real Mesh visual baseline
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh run download 40918365557 --repo "$GITHUB_REPOSITORY" --name stanford-far-depth-refusion-40918365557 --dir "$RUNNER_TEMP/prior45"
+          test -s "$RUNNER_TEMP/prior45/five-view-far-depth-ab.png"
+          test -s "$RUNNER_TEMP/prior45/receipt.json"
+      - name: Re-integrate all 3000 measured frames with far-depth spatial coherence
         env:
           OMP_NUM_THREADS: '2'
           OPENBLAS_NUM_THREADS: '1'
@@ -44,12 +51,13 @@ jobs:
           python tools/stanford_far_depth_refusion.py \
             --source "$RUNNER_TEMP/full-room" \
             --upstream vendor/Open3D \
+            --prior "$RUNNER_TEMP/prior45" \
             --output artifacts/stanford-far-depth-refusion
       - name: Preserve real GLBs and same-ray five-view images
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: stanford-far-depth-refusion-${{ github.run_id }}
+          name: stanford-far-depth-coherence-${{ github.run_id }}
           path: artifacts/stanford-far-depth-refusion/
           retention-days: 30
           if-no-files-found: warn
