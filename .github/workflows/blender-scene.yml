@@ -22,7 +22,8 @@ jobs:
       - name: Install Blender
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y blender
+          sudo apt-get install -y blender python3-numpy
+          blender --background --python-exit-code 1 --python-expr 'import numpy; print(numpy.__version__)'
       - name: Verify frozen native GLB identity
         run: |
           python - <<'PY'
