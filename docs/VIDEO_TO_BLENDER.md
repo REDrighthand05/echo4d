@@ -70,3 +70,6 @@ resume-only提交只跳过昂贵的全链重复任务，原生回放和常规回
 OpenMVS 2.3的GLB导出实际使用旁置PNG。新增 glb_assets.pack_images 将这些PNG真正嵌入GLB，
 合并多buffer时逐段核对原bufferView字节；保留原始外置贴图GLB，不重采样或改变网格。
 独立trimesh重读测试确认顶点、三角形、UV和纹理像素一致；拒绝越界资源路径。
+实跑run40968846555已完成RefineMesh和TextureMesh（保留原始外置PNG输出），
+只在包装器要求内嵌贴图时失败。最终恢复固定该附件12940620183，仅打包贴图、导出原生Blender和5视图；
+定位、稠密、初始网格、精修和贴图均不再运行。

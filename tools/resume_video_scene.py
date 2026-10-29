@@ -22,9 +22,11 @@ if file_sha256(output/'sfm/trajectory-scale-unknown.json') != original['registra
     raise ValueError('Frozen SfM trajectory changed')
 write_json(output/f'scene-report.original-{stage}-failed.json', original)
 shutil.copyfile(output/(stage+'.log'), output/(stage+'.original-failed.log'))
-programs = {name:str(Path('/tmp/mvs-bin')/name) for name in ['DensifyPointCloud','ReconstructMesh','RefineMesh','TextureMesh']}
-programs['blender'] = shutil.which('blender')
+programs = {'blender':shutil.which('blender')}
+if stage in ['densify','mesh']:
+    programs.update({name:str(Path('/tmp/mvs-bin')/name) for name in ['DensifyPointCloud','ReconstructMesh','RefineMesh','TextureMesh']})
 receipt = dict(original)
+receipt['previous_backend_sha256']=original.get('recovery_executable_sha256',original['executable_sha256'])
 receipt.update(status='running',stages=[],recovery_source_checkout=original.get('recovery_checkout','6818ce1bb0dd7a2e7d16ec467b69ce05473ba684'),
                recovery_checkout=os.environ.get('GITHUB_SHA'), recovery_source_run=int(os.environ.get('ECHO_SOURCE_RUN','40966804036')),
                recovered_sfm=True, sfm_rerun=False,
