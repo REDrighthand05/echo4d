@@ -25,7 +25,7 @@ def test_refuse_reused_frame_and_missing_frame():
     with pytest.raises(ValueError, match="360"):
         frozen_indices(3000, baseline[:-1], extra)
     with pytest.raises(ValueError, match="out of range"):
-        frozen_indices(470, baseline, extra)
+        frozen_indices(500, baseline, extra[:-1] + [501])
 
 
 def test_native_calibration_rejects_hidden_downsampling():
