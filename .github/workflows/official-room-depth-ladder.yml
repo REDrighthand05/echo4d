@@ -1,0 +1,54 @@
+name: Stanford official RGB-D frozen-pose depth ladder
+on:
+  push:
+    branches: [research/stanford-official-depth-ladder-20261029]
+    paths:
+      - tools/official_room_depth_ladder.py
+      - tests/python/test_official_room_depth_ladder.py
+      - .github/workflows/official-room-depth-ladder.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  measured-depth-fusion:
+    runs-on: ubuntu-latest
+    timeout-minutes: 100
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          ref: e875a9e36f09cfe8db48fc94ec675e64b6c9bad9
+          path: provider
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install pinned CPU geometry dependencies
+        run: |
+          python -m pip install open3d==0.19.0 trimesh==4.11.1 pillow numpy
+          python -m unittest discover -s tests/python -p test_official_room_depth_ladder.py -v
+      - name: Download frozen full upstream official Mesh and estimated poses
+        uses: actions/download-artifact@v4
+        with:
+          name: official-room-40865675012
+          run-id: 40865675012
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: artifacts/upstream-official
+      - name: Re-integrate 600 and 150 measured-depth frames, 3+2 render
+        env:
+          OMP_NUM_THREADS: '2'
+          OPENBLAS_NUM_THREADS: '1'
+          PYTHONPATH: provider/tools
+        run: |
+          python tools/official_room_depth_ladder.py \
+            --official artifacts/upstream-official \
+            --output artifacts/stanford-depth-ladder \
+            --samples 600 150
+      - name: Preserve real GLB, report and 3+2 images (also on FAIL)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stanford-official-depth-ladder-${{ github.run_id }}
+          path: artifacts/stanford-depth-ladder/
+          retention-days: 30
+          if-no-files-found: warn
