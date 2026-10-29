@@ -1,5 +1,9 @@
 """CPU synthetic stereo metric-geometry regressions for the opt-in OpenCV trial."""
 import numpy as np
+import pytest
+
+pytest.importorskip('cv2', reason='OpenCV installed by dedicated real-room SGBM workflow')
+pytest.importorskip('trimesh', reason='trimesh installed by dedicated real-room SGBM workflow')
 from tum_room_opencv_sgbm_trial import camera_to_world, candidates, stereo_pair, mesh_from_pair
 
 
