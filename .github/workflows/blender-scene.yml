@@ -1,0 +1,47 @@
+name: Blender native scene compatibility
+on:
+  push:
+    branches: [feat/official-room-reconstruction-20261029]
+    paths:
+      - tools/export_blender_scene.py
+      - .github/workflows/blender-scene.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  actual-blender-import:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          ref: 3ee03479707bb1d3d699bc51fa00d8b37b36cdd8
+          path: fixture
+          sparse-checkout: saved-results/20261029/stanford
+      - name: Install Blender
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y blender
+      - name: Verify frozen native GLB identity
+        run: |
+          python - <<'PY'
+          import hashlib
+          from pathlib import Path
+          path=Path("fixture/saved-results/20261029/stanford/OBSERVED-15mm-full.glb")
+          assert hashlib.sha256(path.read_bytes()).hexdigest()=="fc3a24160ba0e90e87fe957130736769d33f3188f506cf6e926375d828b19772"
+          PY
+      - name: Real Blender import, native save and reopen
+        run: |
+          blender --background --python-exit-code 1 --python tools/export_blender_scene.py -- \
+            --input fixture/saved-results/20261029/stanford/OBSERVED-15mm-full.glb \
+            --output artifacts/blender-compatibility/archived-room.blend \
+            --provenance "Archived #112 native GLB; compatibility fixture, NOT new #114 reconstruction"
+      - name: Preserve actual native Blender scene and receipt
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: blender-compatibility-${{ github.run_id }}
+          path: artifacts/blender-compatibility/
+          retention-days: 30
+          if-no-files-found: warn
