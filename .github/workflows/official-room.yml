@@ -1,0 +1,45 @@
+name: Official complete RGB-D room reconstruction
+on:
+  push:
+    branches: [feat/official-room-reconstruction-20261029]
+    paths:
+      - tools/run_official_room.py
+      - .github/workflows/official-room.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: official-room-reconstruction
+  cancel-in-progress: false
+jobs:
+  upstream-system:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: isl-org/Open3D
+          ref: 1e7b17438687a0b0c1e5a7187321ac7044afe275
+          path: vendor/Open3D
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install pinned mature CPU provider
+        run: |
+          python -m pip install open3d==0.19.0 opencv-python-headless==4.12.0.88 trimesh==4.11.1 joblib==1.5.2
+          python -m py_compile tools/run_official_room.py
+      - name: Run upstream make/register/refine/integrate on full real Lounge
+        env:
+          OPENBLAS_NUM_THREADS: '1'
+          OMP_NUM_THREADS: '2'
+          OPEN3D_CPU_RENDERING: 'true'
+        run: python tools/run_official_room.py --upstream vendor/Open3D --output artifacts/official-room
+      - name: Preserve actual model, estimated trajectory and five real views
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: official-room-${{ github.run_id }}
+          path: artifacts/official-room/
+          retention-days: 30
+          if-no-files-found: warn
