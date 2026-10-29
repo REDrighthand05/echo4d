@@ -1,0 +1,43 @@
+name: video scene native timeline
+on:
+  push:
+    paths: ['src/echo4d/video_scene.py', 'tools/export_blender_scene.py', 'tools/blender_timeline_check.py', '.github/workflows/video-scene.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  native-scene:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -e '.[test]' trimesh==4.11.1
+      - run: python -m pytest tests/python/test_video_scene.py -q
+      - run: sudo apt-get update && sudo apt-get install -y blender python3-numpy
+      - name: Create explicitly synthetic export fixture, not reconstruction evidence
+        run: |
+          mkdir native-check
+          python - <<'PY'
+          import json
+          import trimesh
+          from PIL import Image
+          from pathlib import Path
+          m=trimesh.creation.box()
+          m.visual=trimesh.visual.texture.TextureVisuals(uv=[[0,0]]*len(m.vertices),image=Image.new('RGB',(8,8),'red'))
+          m.export('native-check/input.glb')
+          frames=[]
+          for t,x in [(0,0),(.137,1),(1.73,2)]:
+              pose=[1,0,0,0,0,1,0,0,0,0,1,0,x,0,0,1]
+              frames.append({'name':str(t),'t_s':t,'camera_id':1,'camera_to_sfm_world':pose})
+          Path('native-check/timeline.json').write_text(json.dumps({'frames':frames,'cameras':{'1':[640,480,525,525,319.5,239.5]}}))
+          PY
+      - run: blender -b --python tools/export_blender_scene.py -- --input native-check/input.glb --output native-check/scene.blend --units unknown --trajectory native-check/timeline.json --provenance 'SYNTHETIC integration fixture, not real room reconstruction'
+      - run: blender -b --python tools/blender_timeline_check.py -- native-check
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: native-scene-integration-${{ github.sha }}
+          path: native-check

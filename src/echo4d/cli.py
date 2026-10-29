@@ -5,6 +5,7 @@ from dataclasses import asdict
 import json
 from pathlib import Path
 import sys
+import subprocess
 import time
 import numpy as np
 from . import __version__
@@ -117,6 +118,9 @@ def build_parser() -> argparse.ArgumentParser:
     colmap.add_argument("--scale-source", required=True,
                         help="Traceable independent real-world measurement source, not evaluation GT")
     colmap.add_argument("--output", required=True, type=Path)
+    from .video_scene import build_parser as video_scene_parser
+    sub.add_parser('video-scene', parents=[video_scene_parser()], add_help=False,
+                   help='RGB video to textured GLB/native Blender with recorded camera timeline')
     return parser
 
 
@@ -141,6 +145,10 @@ def main(argv: list[str] | None = None) -> int:
             with output_transaction(args.output) as output:
                 write_json(output / "recording.echo.json", preview_recording(recording))
             result = {"output":str(args.output.resolve())}
+        elif args.command == 'video-scene':
+            from .video_scene import run
+            receipt = run(args)
+            result = {'output':str(args.output.resolve()), 'status':receipt['status']}
         elif args.command == "import-colmap":
             # One strict adapter. Uses #6 + #24 hardening, NOT the incompatible
             # second converter implementation from draft PR #19.
@@ -159,7 +167,7 @@ def main(argv: list[str] | None = None) -> int:
             result = import_tum(args)
         print(json.dumps(result, ensure_ascii=False, allow_nan=False))
         return 0
-    except (DataError, OSError, ValueError, MemoryError) as error:
+    except (DataError, OSError, ValueError, MemoryError, subprocess.SubprocessError) as error:
         print(json.dumps({"error":str(error), "type":type(error).__name__}, ensure_ascii=False), file=sys.stderr)
         return 2
     except (KeyboardInterrupt, InterruptedError):
@@ -169,3 +177,4 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
