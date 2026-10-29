@@ -1,0 +1,58 @@
+name: Redwood real measured-depth edge guard A/B
+on:
+  push:
+    branches: [research/redwood-depth-edge-guard-20261030]
+    paths:
+      - tools/redwood_depth_edge_guard.py
+      - tests/python/test_redwood_depth_edge_guard.py
+      - .github/workflows/redwood-depth-edge-guard.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  real-redwood-depth-edge:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install mature measured RGB-D fusion engine
+        run: |
+          python -m pip install -r requirements.lock
+          python -m pip install --no-deps -e .
+          python -m pip install 'open3d==0.19.0' 'trimesh>=4,<5'
+      - name: Unit test discontinuity handling
+        env:
+          PYTHONPATH: tools
+        run: python -m pytest -q tests/python/test_redwood_depth_edge_guard.py
+      - name: Retrieve frozen observed-only 600-frame reference for A/B
+        uses: actions/download-artifact@v4
+        with:
+          repository: REDrighthand05/echo4d
+          run-id: 40778686280
+          name: real-bedroom-dense-600-40778686280
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: source
+      - name: Real 640x480 measured RGB-D refusion and five-view render
+        env:
+          PYTHONPATH: tools
+          OPENBLAS_NUM_THREADS: '1'
+          OMP_NUM_THREADS: '1'
+        run: |
+          python tools/redwood_depth_edge_guard.py \
+            --source-ply source/recorded-rgbd-full.ply \
+            --cache "$RUNNER_TEMP/redwood-edge-guard" \
+            --output "$GITHUB_WORKSPACE/artifacts/redwood-depth-edge" \
+            --threshold-mm 90 \
+            --budget 600
+      - name: Upload actual colored GLB, original-camera and free-camera A/B
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: real-redwood-depth-edge-${{ github.run_id }}
+          path: artifacts/redwood-depth-edge/
+          retention-days: 14
+          if-no-files-found: warn
