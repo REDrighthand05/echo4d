@@ -1,0 +1,83 @@
+name: TUM room measured-depth anchor ladder on frozen DA2 RGB
+
+on:
+  push:
+    branches:
+      - research/room-sensor-anchor-ladder-20261029
+    paths:
+      - 'tools/tum_room_sensor_anchor_ladder.py'
+      - 'tests/python/test_tum_room_sensor_anchor_ladder.py'
+      - '.github/workflows/tum-room-sensor-anchor-ladder.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: room-sensor-anchor-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  real-room-sensor-anchor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 100
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: requirements.lock
+      - name: Install existing Open3D CPU TSDF and RGB provider
+        run: |
+          python -m pip install -r requirements.lock
+          python -m pip install --no-deps -e .
+          python -m pip install 'open3d==0.19.0' 'opencv-python-headless==4.12.0.88' 'trimesh==4.11.1'
+      - name: Compile and test nested sensor-frame isolation
+        env:
+          PYTHONPATH: tools:src
+          OPENBLAS_NUM_THREADS: '1'
+        run: |
+          python -m py_compile tools/tum_room_sensor_anchor_ladder.py
+          python -m pytest -q tests/python/test_tum_room_sensor_anchor_ladder.py
+      - name: Download immutable RGB-only #99 replay and frozen 3+2 camera poses
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/room-source"
+          gh run download 40790769632 --repo "$GITHUB_REPOSITORY" \
+            --name tum-room-da2-consensus-40790769632 --dir "$RUNNER_TEMP/room-source"
+          test -s "$RUNNER_TEMP/room-source/replay-inputs/ledger.json"
+          test -s "$RUNNER_TEMP/room-source/replay-inputs/source/association.json"
+          test -s "$RUNNER_TEMP/room-source/multiview-mesh/mesh.ply"
+      - name: Real official TUM sensor Z 0/4/8/30-frame ablation and Open3D Mesh
+        env:
+          PYTHONPATH: tools:src
+          OPENBLAS_NUM_THREADS: '1'
+          OMP_NUM_THREADS: '2'
+        run: |
+          python tools/tum_room_sensor_anchor_ladder.py \
+            --source "$RUNNER_TEMP/room-source" \
+            --work "$RUNNER_TEMP/room-sensor-work" \
+            --output "$GITHUB_WORKSPACE/artifacts/room-sensor-anchor"
+      - name: Print actual visual evidence without inventing acceptance
+        if: always()
+        run: |
+          if [ -f artifacts/room-sensor-anchor/report.json ]; then
+            python - <<'PY'
+          import json
+          r=json.load(open('artifacts/room-sensor-anchor/report.json'))
+          print('SENSOR_LEVELS',list(r['variants']))
+          print('8_SENSOR_3+2',r['variants']['8']['five_views'])
+          print('ISSUE74',r['issue_74'])
+          PY
+          fi
+      - name: Preserve actual 0/4/8/30 GLB Mesh, RGB source comparisons and receipts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tum-room-sensor-anchor-${{ github.run_id }}
+          path: artifacts/room-sensor-anchor/
+          if-no-files-found: warn
+          retention-days: 14
