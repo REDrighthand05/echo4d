@@ -1,0 +1,119 @@
+{
+  "scene": "Real Redwood Bedroom, 640x480 RGB-D and logged poses",
+  "geometry_role": "ALL output faces are PRE-EXISTING room model PRIOR",
+  "geometry_source": "Open3D BedroomRGBDImages.reconstruction_path",
+  "observed_input_role": "720-frame RGB-D-only TSDF used for registration and color transfer",
+  "prior_fused_from_video_independently": false,
+  "method": "existing model rigid ICP aligned + normal-compatible observed RGB-D vertex color",
+  "registration": {
+    "fitness": 0.9986362509298289,
+    "rmse_m": 0.037691091578307065,
+    "candidate_count": 2,
+    "prior_to_measured": [
+      [
+        0.9999848332100361,
+        0.0032328353765605383,
+        -0.004458937690136288,
+        -0.004164805882637548
+      ],
+      [
+        -0.003216348427771687,
+        0.9999879834636878,
+        0.0036997339124019268,
+        -0.008699712304450415
+      ],
+      [
+        0.004470844739826631,
+        -0.0036853363020852878,
+        0.9999832147809571,
+        -0.015145783638888766
+      ],
+      [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    ]
+  },
+  "measured_faces": 561887,
+  "prior_faces": 10190866,
+  "prior_vertices": 5318546,
+  "full_prior_glb_in_actions_only": "PRIOR-room-observed-colors.glb",
+  "github_preview_faces": 169999,
+  "github_preview_glb": "PRIOR-room-preview.glb",
+  "github_preview_provenance": "PRIOR-room-preview-color-source.glb",
+  "color_from_measured_rgbd_vertices": 5026380,
+  "unknown_color_prior_vertices": 292166,
+  "color_coverage_fraction": 0.9450665651852969,
+  "max_color_transfer_distance_m": 0.09,
+  "colors_for_unobserved": "neutral grey, not inferred",
+  "source_mask": "cyan=prior with measured RGB color; orange=prior with unknown color; ALL faces prior",
+  "colored_glb": "PRIOR-room-observed-colors.glb",
+  "provenance_glb": "PRIOR-room-color-source.glb",
+  "fixed_3plus2_comparisons": [
+    "ab/free-view-1.png",
+    "ab/free-view-2.png",
+    "ab/photo-vs-mesh-00000.png",
+    "ab/photo-vs-mesh-10995.png",
+    "ab/photo-vs-mesh-21929.png"
+  ],
+  "observed_view_records": [
+    {
+      "view": "real camera",
+      "file": "visual/photo-vs-mesh-00000.png",
+      "covered_pixels": 76775
+    },
+    {
+      "view": "real camera",
+      "file": "visual/photo-vs-mesh-10995.png",
+      "covered_pixels": 76211
+    },
+    {
+      "view": "real camera",
+      "file": "visual/photo-vs-mesh-21929.png",
+      "covered_pixels": 76749
+    },
+    {
+      "view": "free camera",
+      "file": "visual/free-view-1.png",
+      "covered_pixels": 74907
+    },
+    {
+      "view": "free camera",
+      "file": "visual/free-view-2.png",
+      "covered_pixels": 71841
+    }
+  ],
+  "prior_view_records": [
+    {
+      "view": "real camera",
+      "file": "visual/photo-vs-mesh-00000.png",
+      "covered_pixels": 76749
+    },
+    {
+      "view": "real camera",
+      "file": "visual/photo-vs-mesh-10995.png",
+      "covered_pixels": 76195
+    },
+    {
+      "view": "real camera",
+      "file": "visual/photo-vs-mesh-21929.png",
+      "covered_pixels": 76393
+    },
+    {
+      "view": "free camera",
+      "file": "visual/free-view-1.png",
+      "covered_pixels": 72067
+    },
+    {
+      "view": "free camera",
+      "file": "visual/free-view-2.png",
+      "covered_pixels": 71113
+    }
+  ],
+  "human_recognition": "NOT REVIEWED",
+  "independent_geometry_accuracy": "NOT MEASURED",
+  "issue_74": "FAIL unchanged",
+  "desk_v2": "FAIL 16.7779cm > 15cm unchanged"
+}
