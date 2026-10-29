@@ -1,0 +1,45 @@
+name: Publish actual official room views
+on:
+  push:
+    branches: [feat/official-room-reconstruction-20261029]
+    paths: [.github/workflows/publish-official-room.yml]
+permissions:
+  contents: write
+  actions: read
+jobs:
+  preserve-actual-views:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/official-room-reconstruction-20261029
+      - name: Fetch completed exports only
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh run download 40877823227 --repo "$GITHUB_REPOSITORY" --name official-room-recovered-40877823227 --dir "$RUNNER_TEMP/recovered"
+      - name: Preserve actual images and compact model in Git
+        env:
+          RESULT_ROOT: ${{ runner.temp }}/recovered
+        run: |
+          python - <<'PY'
+          import os, pathlib, shutil, hashlib, json
+          src=pathlib.Path(os.environ["RESULT_ROOT"])
+          target=pathlib.Path("docs/real-room-review/official-complete-20261029")
+          target.mkdir(parents=True,exist_ok=True)
+          assert hashlib.sha256((src/"room-preview.glb").read_bytes()).hexdigest()=="e8e53dd1a80a6d01e970b8fa572c08833f755a23776f1617235f9f8f00df5bfb"
+          for name in ["receipt.json","receipt.original-failed.json","room-full.json","room-preview.glb","inputs.json"]:
+              shutil.copyfile(src/name,target/name)
+          shutil.copytree(src/"views",target/"views",dirs_exist_ok=True)
+          PY
+          git config user.name "echo4d-results-archive"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/real-room-review/official-complete-20261029
+          git commit -m "results: preserve actual complete-system model preview and five views"
+          git push origin HEAD:feat/official-room-reconstruction-20261029
+      - uses: actions/upload-artifact@v4
+        with:
+          name: official-room-images
+          path: |
+            docs/real-room-review/official-complete-20261029/views/
+          retention-days: 30
