@@ -1,0 +1,85 @@
+name: Redwood prior-FIRST real room, colored from measured RGB-D
+on:
+  push:
+    branches: [research/redwood-prior-first-room-20261029]
+    paths:
+      - tools/redwood_prior_first_room.py
+      - tests/python/test_redwood_prior_first_room.py
+      - .github/workflows/redwood-prior-first-room.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  real-prior-first-room:
+    runs-on: ubuntu-latest
+    timeout-minutes: 100
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install Open3D and real-room dependencies
+        run: |
+          pip install -r requirements.lock
+          pip install --no-deps -e .
+          pip install 'open3d==0.19.0' 'trimesh>=4,<5'
+      - name: Color transfer geometry guards
+        env:
+          PYTHONPATH: tools
+        run: python -m pytest -q tests/python/test_redwood_prior_first_room.py
+      - name: Actual Redwood Bedroom existing PRIOR, aligned and observed RGB-D colored
+        env:
+          PYTHONPATH: tools
+          OPENBLAS_NUM_THREADS: '1'
+          OMP_NUM_THREADS: '1'
+        run: |
+          python tools/redwood_prior_first_room.py \
+            --observed docs/real-room-review/redwood-bedroom-gap-guided/gap-guided-observed.glb \
+            --cache "$RUNNER_TEMP/redwood" \
+            --output "$GITHUB_WORKSPACE/artifacts/prior-first"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: redwood-prior-first-${{ github.run_id }}
+          path: artifacts/prior-first/
+          retention-days: 14
+
+  publish-real-result:
+    needs: real-prior-first-room
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: redwood-prior-first-${{ github.run_id }}
+          path: review
+      - name: Publish actual full prior GLB and fixed A/B images
+        run: |
+          mkdir -p docs/real-room-review/redwood-bedroom-prior-first/ab
+          cp review/ab/*.png docs/real-room-review/redwood-bedroom-prior-first/ab/
+          cp review/PRIOR-room-observed-colors.glb docs/real-room-review/redwood-bedroom-prior-first/
+          cp review/PRIOR-room-color-source.glb docs/real-room-review/redwood-bedroom-prior-first/
+          cp review/report.json docs/real-room-review/redwood-bedroom-prior-first/
+          cat > docs/real-room-review/redwood-bedroom-prior-first/README.md <<'EOF'
+          # Redwood Bedroom full PRE-EXISTING prior geometry
+          This is NOT independently reconstructed from the RGB-D recording.
+          Full supplied prior geometry is rigidly aligned to the measured
+          720-frame observed-only Mesh. RGB-D colors are transferred only
+          at nearby compatible normals; unsupported colors stay neutral grey.
+          In A/B images left=measured-only and right=prior-first, with
+          three recorded photo views and two free third-person cameras.
+          The source-mask GLB uses cyan for prior with measured RGB color
+          and orange for prior with unknown color; ALL geometry is prior.
+          Human acceptance and #74 remain unpassed.
+          EOF
+          git config user.name "echo4d-real-room-ci"
+          git config user.email "echo4d-real-room-ci@users.noreply.github.com"
+          git add docs/real-room-review/redwood-bedroom-prior-first/
+          git diff --cached --quiet && exit 0
+          git commit -m "results(real-room): full pre-existing room geometry with measured RGB-D colors"
+          git fetch origin research/redwood-prior-first-room-20261029
+          git rebase origin/research/redwood-prior-first-room-20261029
+          git push origin HEAD:refs/heads/research/redwood-prior-first-room-20261029
