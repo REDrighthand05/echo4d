@@ -4,6 +4,55 @@ from pathlib import Path
 import numpy as np
 
 
+def lounge_recorded_poses(trajectory, paths, log_path):
+    """Resolve Stanford Lounge's repeated LOG header IDs by strict sequence order.
+
+    Unlike Redwood, Lounge logs have repeated first-column header IDs. We
+    accept order-based matching ONLY for a consecutive 000001..000NNN image
+    sequence and exactly N or N+1 recorded poses. The latter maps image i
+    to trajectory pose i; no RGB/depth frame is silently shifted.
+    """
+    from open3d_official_room_baseline import read_poses
+    try:
+        k, poses=read_poses(trajectory,paths,log_path)
+        return k,poses,"explicit unique LOG IDs"
+    except ValueError as exc:
+        if "Duplicate logged Redwood camera frame ID" not in str(exc):
+            raise
+    from open3d_official_room_baseline import trajectory_frame_ids
+    from pathlib import Path
+    ids=[int(Path(p).stem) for p in paths]
+    if ids!=list(range(1,len(ids)+1)):
+        raise ValueError("Cannot order-match nonconsecutive Stanford Lounge image IDs")
+    parameters=trajectory.parameters
+    if len(parameters) not in (len(ids),len(ids)+1):
+        raise ValueError("Lounge LOG pose count not consistent with original image indices")
+    start=1 if len(parameters)==len(ids)+1 else 0
+    entry=parameters[start].intrinsic
+    k=np.asarray(entry.intrinsic_matrix,dtype=float)
+    w,h=int(entry.width),int(entry.height)
+    if (w<2 or h<2 or k.shape!=(3,3) or not np.isfinite(k).all()
+            or k[0,0]<=0 or k[1,1]<=0 or not np.allclose(k[2],[0,0,1],atol=1e-6)):
+        raise ValueError("Invalid Stanford Lounge camera intrinsics")
+    poses=[]
+    centers=[]
+    for p in parameters[start:]:
+        x=np.asarray(p.extrinsic,dtype=float)
+        if (x.shape!=(4,4) or not np.isfinite(x).all() or
+                not np.allclose(x[3],[0,0,0,1],atol=1e-5) or
+                not np.allclose(x[:3,:3].T@x[:3,:3],np.eye(3),atol=2e-3) or
+                abs(np.linalg.det(x[:3,:3])-1.)>2e-3):
+            raise ValueError("Nonrigid Stanford Lounge recorded camera pose")
+        poses.append(x)
+        centers.append(-x[:3,:3].T@x[:3,3])
+    jumps=np.linalg.norm(np.diff(np.asarray(centers),axis=0),axis=1)
+    if len(jumps) and (np.median(jumps)>.20 or np.quantile(jumps,.99)>1.):
+        raise ValueError("Lounge ordered pose trajectory not continuous")
+    return (w,h,float(k[0,0]),float(k[1,1]),float(k[0,2]),float(k[1,2])),poses,(
+        f"Stanford Lounge consecutive image order, LOG offset {start}; "
+        "LOG headers non-unique; camera continuity checked")
+
+
 def integrate(o3d,data,k,poses,indices,voxel):
     if not .015<=voxel<=.06: raise ValueError("invalid voxel")
     engine=o3d.pipelines.integration.ScalableTSDFVolume(
@@ -65,7 +114,7 @@ def run(output,cache,frames,voxel):
     n=len(data.color_paths)
     if n<3 or len(data.depth_paths)!=n: raise ValueError("Missing synchronized real RGB-D")
     trajectory=o3d.io.read_pinhole_camera_trajectory(data.trajectory_log_path)
-    k,poses=read_poses(trajectory,list(data.color_paths),data.trajectory_log_path)
+    k,poses,pose_mapping=lounge_recorded_poses(trajectory,list(data.color_paths),data.trajectory_log_path)
     indices=spaced_real_frames(n,min(n,frames))
     output.mkdir(parents=True)
     observed=integrate(o3d,data,k,poses,indices,voxel)
@@ -89,7 +138,7 @@ def run(output,cache,frames,voxel):
     report={"scene":"REAL Stanford Lounge (not Redwood Bedroom)",
             "dataset":"Open3D LoungeRGBDImages",
             "input":"actual measured RGB-D and logged camera poses",
-            "calibrated_intrinsics":k,"available_frames":n,
+            "calibrated_intrinsics":k,"pose_mapping":pose_mapping,"available_frames":n,
             "fused_frames":len(indices),"observed_faces":len(observed.triangles),
             "observed_model":"OBSERVED-viewable.glb",
             "observed_faces_are_independently_fused":True,
