@@ -103,8 +103,40 @@
   "inferred_geometry_is_measured": false,
   "source_colors": "nearest coplanar measured RGB-D vertex; no generated textures",
   "provenance": "cyan=measured RGB-D; orange=plane-inferred tiles",
-  "three_real_two_free_views": "not yet rendered",
+  "three_real_two_free_views": [
+    {
+      "kind": "recorded",
+      "file": "three-real-two-free/photo-vs-mesh-00000.png",
+      "before_hit_pixels": 74943,
+      "after_hit_pixels": 75090
+    },
+    {
+      "kind": "recorded",
+      "file": "three-real-two-free/photo-vs-mesh-01503.png",
+      "before_hit_pixels": 76666,
+      "after_hit_pixels": 76666
+    },
+    {
+      "kind": "recorded",
+      "file": "three-real-two-free/photo-vs-mesh-02998.png",
+      "before_hit_pixels": 76800,
+      "after_hit_pixels": 76800
+    },
+    {
+      "kind": "free",
+      "file": "three-real-two-free/free-view-1.png",
+      "before_hit_pixels": 76776,
+      "after_hit_pixels": 76776
+    },
+    {
+      "kind": "free",
+      "file": "three-real-two-free/free-view-2.png",
+      "before_hit_pixels": 75381,
+      "after_hit_pixels": 75691
+    }
+  ],
   "human_visual_improvement": "NOT VERIFIED",
   "issue_74": "FAIL unchanged",
-  "desk_v2": "FAIL 16.7779cm > 15cm unchanged"
+  "desk_v2": "FAIL 16.7779cm > 15cm unchanged",
+  "recorded_pose_mapping": "Stanford Lounge consecutive image order, LOG offset 1; LOG headers non-unique; camera continuity checked"
 }
