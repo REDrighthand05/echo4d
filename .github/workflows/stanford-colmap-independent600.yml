@@ -1,0 +1,59 @@
+name: Stanford COLMAP independent 600 RGB-D room
+on:
+  push:
+    branches: [research/stanford-colmap-independent600-20261029]
+    paths:
+      - .github/workflows/stanford-colmap-independent600.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  colmap-independent-600:
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install real CPU COLMAP and Open3D
+        run: |
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y colmap
+          python -m pip install 'open3d==0.19.0' 'trimesh==4.11.1' pillow scipy
+          colmap -h | head -n 5
+      - name: Reconstruct Stanford room from 600 selected RGB-D frames without any prior poses or Mesh
+        env:
+          QT_QPA_PLATFORM: offscreen
+          OMP_NUM_THREADS: '2'
+          OPENBLAS_NUM_THREADS: '1'
+        run: |
+          python tools/stanford_colmap_metric300.py --output artifacts/stanford-colmap600 --samples 600
+          mv artifacts/stanford-colmap600/room-colmap300.glb artifacts/stanford-colmap600/room-colmap600.glb
+          mv artifacts/stanford-colmap600/room-colmap300-preview.glb artifacts/stanford-colmap600/room-colmap600-preview.glb
+          mv artifacts/stanford-colmap600/source-colmap300-3plus2.png artifacts/stanford-colmap600/source-colmap600-3plus2.png
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path('artifacts/stanford-colmap600/receipt.json')
+          r=json.loads(p.read_text())
+          r['mesh']='room-colmap600.glb'
+          r['image']='source-colmap600-3plus2.png'
+          r['comparison']='Compare 3 original camera views + 2 free views against independent 300-frame COLMAP artifact 12911194244; visual PASS must be manually established'
+          p.write_text(json.dumps(r,indent=2)+'\n')
+          PY
+      - name: Preserve actual Mesh, source views and reconstruction evidence even on failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stanford-colmap600-${{ github.run_id }}
+          path: |
+            artifacts/stanford-colmap600/receipt.json
+            artifacts/stanford-colmap600/inputs.json
+            artifacts/stanford-colmap600/*.log
+            artifacts/stanford-colmap600/*.glb
+            artifacts/stanford-colmap600/*3plus2.png
+            artifacts/stanford-colmap600/views/
+            artifacts/stanford-colmap600/model-txt-*/
+          retention-days: 30
+          if-no-files-found: warn
