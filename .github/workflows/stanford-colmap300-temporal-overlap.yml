@@ -1,0 +1,67 @@
+name: Stanford 300 RGB early-overlap independent COLMAP with 30 measured depths
+on:
+  push:
+    branches: [research/stanford-colmap300-temporal-overlap-20261030]
+    paths:
+      - tools/stanford_colmap_metric300.py
+      - .github/workflows/stanford-colmap300-temporal-overlap.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: stanford-colmap300-temporal-overlap
+  cancel-in-progress: true
+jobs:
+  early-overlap-room:
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install real CPU COLMAP and RGB-D fusion dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y colmap
+          python -m pip install 'open3d==0.19.0' 'trimesh==4.11.1' 'pillow==11.3.0' 'scipy==1.16.2'
+          python -m py_compile tools/stanford_colmap_metric300.py
+          colmap -h | head -n 5
+      - name: Independently estimate poses and fuse 30 measured depth maps
+        env:
+          QT_QPA_PLATFORM: offscreen
+          OMP_NUM_THREADS: '2'
+          OPENBLAS_NUM_THREADS: '1'
+        run: |
+          python tools/stanford_colmap_metric300.py \
+            --output artifacts/stanford-300rgb-early-overlap-30depth \
+            --samples 300 --sampling early-overlap --depth-budget 30
+      - name: Require real 30-depth GLB and source/free views
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path('artifacts/stanford-300rgb-early-overlap-30depth')
+          r=json.loads((p/'receipt.json').read_text())
+          print(json.dumps({k:r.get(k) for k in ('status','registered_frames','selected_rgb','selected_measured_depth','rgb_sampling','visual_acceptance')},indent=2))
+          assert r['status']=='REAL_MESH_GENERATED_VISUAL_REVIEW_REQUIRED'
+          assert r['selected_measured_depth']==30
+          assert (p/'room-colmap300.glb').exists()
+          assert (p/'source-colmap300-3plus2.png').exists()
+          PY
+      - name: Preserve actual Mesh, five views, model and failures
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stanford-300rgb-early-overlap-30depth-${{ github.run_id }}
+          path: |
+            artifacts/stanford-300rgb-early-overlap-30depth/receipt.json
+            artifacts/stanford-300rgb-early-overlap-30depth/inputs.json
+            artifacts/stanford-300rgb-early-overlap-30depth/*.log
+            artifacts/stanford-300rgb-early-overlap-30depth/room-colmap300.glb
+            artifacts/stanford-300rgb-early-overlap-30depth/room-colmap300-preview.glb
+            artifacts/stanford-300rgb-early-overlap-30depth/source-colmap300-3plus2.png
+            artifacts/stanford-300rgb-early-overlap-30depth/views/
+            artifacts/stanford-300rgb-early-overlap-30depth/model-txt-*/
+          retention-days: 30
+          if-no-files-found: warn
