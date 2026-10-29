@@ -93,7 +93,7 @@ def compose(out, n):
             draw.text((6,y+5),name[:-4],fill="white")
     image.save(out/"source-colmap300-3plus2.png")
 
-def run(output, count):
+def run(output, count, sampling='uniform', depth_budget=None):
     import open3d as o3d
     import trimesh
     from run_official_room import render_views
@@ -102,7 +102,7 @@ def run(output, count):
         raise FileExistsError("Fresh output required")
     output.mkdir(parents=True)
     report=dict(status="RUNNING",dataset="Stanford Lounge original RGB-D",
-                selected_rgb=count,selected_measured_depth=count,
+                selected_rgb=count,selected_measured_depth=depth_budget or count,
                 pose_source="COLMAP SIFT RGB SfM, depth only for metric scale and TSDF",
                 full_trajectory_prior=False,existing_mesh_prior=False,
                 predicted_depth=False,visual_acceptance="NOT REVIEWED")
@@ -112,7 +112,23 @@ def run(output, count):
     start=time.time()
     try:
         source=original_pairs(o3d.data.LoungeRGBDImages())
-        selected=np.linspace(0,len(source)-1,count,dtype=int)
+        if sampling == 'early-overlap':
+            if count != 300:
+                raise ValueError('Early-overlap schedule is frozen at 300 RGB frames')
+            # Same 300-RGB budget: double the temporal density in the first
+            # 500 original frames, where uniform sampling lost 40+ poses.
+            # Remaining 200 RGBs still span the rest of the real room video.
+            selected=np.concatenate((
+                np.linspace(0,499,100,dtype=int),
+                np.linspace(500,len(source)-1,200,dtype=int)))
+        elif sampling == 'uniform':
+            selected=np.linspace(0,len(source)-1,count,dtype=int)
+        else:
+            raise ValueError(f'Unknown sampling policy: {sampling}')
+        if len(np.unique(selected)) != count:
+            raise RuntimeError('Non-unique RGB sample indices')
+        report.update(rgb_sampling=sampling, original_index_first=int(selected[0]),
+                      original_index_last=int(selected[-1]))
         rgb_dir=output/"colmap_images"
         rgb_dir.mkdir()
         depths={}
@@ -163,8 +179,23 @@ def run(output, count):
         save()
         if len(views)<3:
             raise RuntimeError("Too few COLMAP registered frames")
-        scale,witnesses=depth_scale(views,depths)
-        report.update(metric_scale_m_per_colmap_unit=scale,scale_depth_witnesses=witnesses)
+        registered_names=sorted(name for name,_,_ in views)
+        budget = len(registered_names) if depth_budget is None else depth_budget
+        if not (3 <= budget <= len(registered_names)):
+            raise ValueError('Depth budget must fit the independently registered cameras')
+        selected_depth_names = {
+            registered_names[int(i)]
+            for i in np.linspace(0,len(registered_names)-1,budget,dtype=int)}
+        if len(selected_depth_names) != budget:
+            raise RuntimeError('Depth anchors are not unique')
+        scale,witnesses=depth_scale(
+            [v for v in views if v[0] in selected_depth_names],
+            {name: depths[name] for name in selected_depth_names})
+        report.update(metric_scale_m_per_colmap_unit=scale,
+                      scale_depth_witnesses=witnesses,
+                      selected_measured_depth=budget,
+                      measured_depth_rgb_samples=sorted(
+                          int(Path(name).stem) for name in selected_depth_names))
         volume=o3d.pipelines.integration.ScalableTSDFVolume(
             voxel_length=.025,sdf_trunc=.10,
             color_type=o3d.pipelines.integration.TSDFVolumeColorType.RGB8)
@@ -172,6 +203,8 @@ def run(output, count):
         photos=[]
         poses=[]
         for name,w2c,_ in sorted(views,key=lambda v:v[0]):
+            if name not in selected_depth_names:
+                continue
             rgbd=o3d.geometry.RGBDImage.create_from_color_and_depth(
                 o3d.io.read_image(str(rgb_dir/name)),
                 o3d.io.read_image(str(depths[name])),
@@ -211,5 +244,7 @@ if __name__=="__main__":
     p=argparse.ArgumentParser(description=__doc__)
     p.add_argument("--output",type=Path,required=True)
     p.add_argument("--samples",type=int,default=300)
+    p.add_argument("--sampling",choices=('uniform','early-overlap'),default='uniform')
+    p.add_argument("--depth-budget",type=int,default=None)
     a=p.parse_args()
-    run(a.output,a.samples)
+    run(a.output,a.samples,a.sampling,a.depth_budget)
