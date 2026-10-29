@@ -1,0 +1,70 @@
+name: Publish actual Redwood native-density GLB and five reviewed images
+on:
+  push:
+    branches: [research/redwood-dense-native-mesh-20261029]
+    paths:
+      - .github/workflows/redwood-native-publish.yml
+permissions:
+  contents: write
+  actions: read
+jobs:
+  publish-actual-output:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download successful native 553k-face Mesh and 3+2 comparisons
+        uses: actions/download-artifact@v4
+        with:
+          name: native-views-40792115358
+          repository: REDrighthand05/echo4d
+          run-id: 40792115358
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: real-output
+      - name: Publish actual observed-only result (never prior)
+        run: |
+          set -eu
+          dir=docs/real-room-review/redwood-bedroom-native600
+          mkdir -p "$dir/visual"
+          cp real-output/visual/*.png "$dir/visual/"
+          cp real-output/observed-full-600frames.glb "$dir/"
+          cp real-output/report.json "$dir/"
+          cat > "$dir/README.md" <<'EOF'
+          # Actual real Redwood Bedroom: native observed 553,208-face Mesh
+
+          600 measured RGB-D frames at 640x480 with recorded camera poses;
+          original Open3D fusion from successful run 40778686280.
+          The colored GLB has all 553,208 observed triangles (287,882 vertices).
+          It is NOT the pre-existing supplied bedroom reference model.
+
+          Photo-vs-mesh: LEFT real source photo, CENTER prior 30,000-face
+          preview, RIGHT the same observed Mesh at full density using
+          CPU raycasting. Free cameras: LEFT prior 30,000-face preview,
+          RIGHT full observed Mesh; neither is an original input camera.
+
+          **Actual human visual review, 2026-10-29:**
+          Full-density views clearly restore the writing desk's shelving,
+          bedcover texture and furniture contours relative to the coarse
+          30k preview. The first camera's desk and the final camera's bed
+          are more recognizable. Some thin objects and boundaries remain
+          jagged, with black holes and detached fragments. Both free
+          views still have major missing/occluded geometry. This is a
+          meaningful visual-detail gain, NOT a completeness gain and
+          NOT a successful stable free-roaming room.
+
+          This is a display/export fix; the underlying 600-frame geometry
+          is unchanged. The separate supplied reference PRIOR was not used.
+          Issue #74 and old Desk V2 FAIL remain unchanged.
+
+          Native-density run:
+          https://github.com/REDrighthand05/echo4d/actions/runs/40792115358
+          Source: https://redwood-data.org/indoor_lidar_rgbd/
+          EOF
+          git config user.name "echo4d-real-room-ci"
+          git config user.email "echo4d-real-room-ci@users.noreply.github.com"
+          git add "$dir"
+          git diff --cached --quiet && exit 0
+          git commit -m "results(real-room): publish full 553k observed GLB and five native comparisons"
+          git fetch origin research/redwood-dense-native-mesh-20261029
+          git rebase origin/research/redwood-dense-native-mesh-20261029
+          git push origin HEAD:refs/heads/research/redwood-dense-native-mesh-20261029
