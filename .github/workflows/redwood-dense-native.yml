@@ -1,0 +1,87 @@
+name: Redwood full native Mesh and 3+2 raycast comparison
+on:
+  push:
+    branches: [research/redwood-dense-native-mesh-20261029]
+    paths:
+      - tools/redwood_dense_native_review.py
+      - tests/python/test_redwood_dense_native_review.py
+      - .github/workflows/redwood-dense-native.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  native-glb:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: |
+          pip install -r requirements.lock
+          pip install --no-deps -e .
+          pip install 'open3d==0.19.0' 'trimesh>=4,<5'
+      - name: Test observed vertex colors
+        env:
+          PYTHONPATH: tools
+        run: python -m pytest -q tests/python/test_redwood_dense_native_review.py
+      - uses: actions/download-artifact@v4
+        with:
+          name: real-bedroom-dense-600-40778686280
+          repository: REDrighthand05/echo4d
+          run-id: 40778686280
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: source
+      - name: Preserve all native observed faces
+        env:
+          PYTHONPATH: tools
+        run: |
+          python tools/redwood_dense_native_review.py \
+            --source-ply source/recorded-rgbd-full.ply \
+            --baseline docs/real-room-review/redwood-bedroom-dense600 \
+            --output artifacts/native --mode export
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: native-glb-${{ github.run_id }}
+          path: artifacts/native/
+          retention-days: 14
+  native-five-views:
+    needs: native-glb
+    runs-on: ubuntu-latest
+    timeout-minutes: 110
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: |
+          pip install -r requirements.lock
+          pip install --no-deps -e .
+          pip install 'open3d==0.19.0' 'trimesh>=4,<5'
+      - uses: actions/download-artifact@v4
+        with:
+          name: real-bedroom-dense-600-40778686280
+          repository: REDrighthand05/echo4d
+          run-id: 40778686280
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: source
+      - name: Five true cameras with native raycasting, no decimation
+        env:
+          PYTHONPATH: tools
+          OPENBLAS_NUM_THREADS: '1'
+          OMP_NUM_THREADS: '1'
+        run: |
+          python tools/redwood_dense_native_review.py \
+            --source-ply source/recorded-rgbd-full.ply \
+            --baseline docs/real-room-review/redwood-bedroom-dense600 \
+            --cache "$RUNNER_TEMP/redwood" \
+            --output artifacts/native-views --mode views
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: native-views-${{ github.run_id }}
+          path: artifacts/native-views/
+          retention-days: 14
