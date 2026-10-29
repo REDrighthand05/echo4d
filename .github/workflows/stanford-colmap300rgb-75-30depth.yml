@@ -1,0 +1,49 @@
+name: Stanford 300 RGB with registered 75 30 real depths
+on:
+  push:
+    branches: [research/stanford-colmap300rgb-75-30depth-20261030]
+    paths:
+      - tools/stanford_colmap300rgb_75_30depth.py
+      - .github/workflows/stanford-colmap300rgb-75-30depth.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  independent-300rgb-sparse-depth-meshes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install pinned mature CPU reconstruction and check nesting
+        run: |
+          python -m pip install 'open3d==0.19.0' 'trimesh==4.11.1' pillow scipy
+          python -m py_compile tools/stanford_colmap300rgb_75_30depth.py
+          PYTHONPATH=tools python -c "from stanford_colmap300rgb_75_30depth import nested_depth_indices; g=nested_depth_indices(range(258)); assert tuple(map(len,g)) == (258,75,30); assert g[2]<g[1]<g[0]"
+      - name: Download independently solved 300 RGB-only COLMAP camera poses
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/colmap300"
+          gh run download 40906999521 --repo "$GITHUB_REPOSITORY" \
+            --name stanford-colmap300-40906999521 --dir "$RUNNER_TEMP/colmap300"
+      - name: Generate registered baseline 75 and 30 real-depth Meshes
+        env:
+          OPENBLAS_NUM_THREADS: '1'
+          OMP_NUM_THREADS: '2'
+          OPEN3D_CPU_RENDERING: 'true'
+        run: |
+          python tools/stanford_colmap300rgb_75_30depth.py \
+            --source "$RUNNER_TEMP/colmap300" \
+            --output artifacts/stanford-colmap300rgb-depth-registered-75-30
+      - name: Preserve all GLBs and 3 recorded plus 2 free views even on failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stanford-colmap300rgb-depth-registered-75-30-${{ github.run_id }}
+          path: artifacts/stanford-colmap300rgb-depth-registered-75-30/
+          retention-days: 30
+          if-no-files-found: warn
