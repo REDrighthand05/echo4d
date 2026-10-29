@@ -106,6 +106,20 @@ def run(cache: Path, source: Path, source_report: Path, output: Path):
                    np.asarray(preview.vertex_colors))
 
     views = five_views(o3d, data, poses, k, before, after, output)
+    # Reused raycaster defaults to old 360-vs-480 labels. These A/B
+    # images are instead the SAME 480 recorded frames at two voxel sizes.
+    from PIL import Image, ImageDraw
+    for view in views:
+        image_path = output / view["file"]
+        with Image.open(image_path) as original:
+            canvas = original.convert("RGB")
+        draw = ImageDraw.Draw(canvas)
+        draw.rectangle((0, 0, canvas.width, 27), fill=(24, 24, 24))
+        label = ("REAL PHOTO / 480 FRAMES 25mm / SAME 480 FRAMES 15mm"
+                 if view["kind"] == "recorded" else
+                 "ROOM-SCALE FREE / 480 FRAMES 25mm / SAME 480 FRAMES 15mm")
+        draw.text((8, 8), label, fill="white")
+        canvas.save(image_path)
     report = {
         "scene": "Stanford Lounge, public Open3D LoungeRGBDImages",
         "input": "real native 640x480 RGB-D, logged metric camera poses",
