@@ -30,7 +30,7 @@ jobs:
           m.export('native-check/input.glb')
           frames=[]
           for t,x in [(0,0),(.137,1),(1.73,2)]:
-              pose=[1,0,0,0,0,1,0,0,0,0,1,0,x,0,0,1]
+              pose=[1,0,0,0,0,1,0,0,0,0,1,0,x,x*.2,x*.3,1]
               frames.append({'name':str(t),'t_s':t,'camera_id':1,'camera_to_sfm_world':pose})
           Path('native-check/timeline.json').write_text(json.dumps({'frames':frames,'cameras':{'1':[640,480,525,525,319.5,239.5]}}))
           PY

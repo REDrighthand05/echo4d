@@ -18,7 +18,8 @@ for entry in timeline['frames']:
     frame = 1+30*entry['t_s']
     scene.frame_set(int(frame), subframe=frame-int(frame))
     matrix = entry['camera_to_sfm_world']
-    assert (scene.camera.location-Vector(matrix[12:15])).length < 1e-5
-    assert (scene.camera.matrix_world.to_quaternion() @ Vector((0,0,-1))-Vector((0,0,1))).length < 1e-5
+    x,y,z = matrix[12:15]
+    assert (scene.camera.location-Vector((x,-z,y))).length < 1e-5
+    assert (scene.camera.matrix_world.to_quaternion() @ Vector((0,0,-1))-Vector((0,-1,0))).length < 1e-5
 assert any(m.use_nodes for m in bpy.data.materials)
 (root/'timeline-check.json').write_text(json.dumps({'status':'PASS', 'frames':3, 'units':'unknown', 'reopened':True}))

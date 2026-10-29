@@ -37,6 +37,9 @@ def add_timeline(path):
     bpy.context.scene.camera = camera
     camera.rotation_mode = 'QUATERNION'
     axes = Matrix.Diagonal((1., -1., -1., 1.))
+    # glTF import rotates mesh world axes from Y-up to Blender Z-up.
+    # OpenMVS writes native XYZ directly; apply the identical transform to poses.
+    world_axes = Matrix(((1.,0.,0.,0.),(0.,0.,-1.,0.),(0.,1.,0.,0.),(0.,0.,0.,1.)))
     previous = -1.
     previous_q = None
     for entry in frames:
@@ -46,7 +49,7 @@ def add_timeline(path):
             raise ValueError('Invalid camera timeline')
         previous = seconds
         pose = Matrix([[values[c*4+r] for c in range(4)] for r in range(4)])
-        camera.matrix_world = pose @ axes
+        camera.matrix_world = world_axes @ pose @ axes
         if previous_q is not None:
             camera.rotation_quaternion.make_compatible(previous_q)
         previous_q = camera.rotation_quaternion.copy()
@@ -59,7 +62,7 @@ def add_timeline(path):
             camera_data.sensor_fit = 'HORIZONTAL'
             camera_data.lens = fx/width*camera_data.sensor_width
             camera_data.shift_x = (.5*width-cx)/width
-            camera_data.shift_y = (cy-.5*height)/width
+            camera_data.shift_y = (cy-.5*height)/width*(fx/fy)
             for property_name in ('lens','shift_x','shift_y'):
                 camera_data.keyframe_insert(data_path=property_name, frame=frame)
             bpy.context.scene.render.resolution_x = int(width)
