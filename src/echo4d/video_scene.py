@@ -145,7 +145,7 @@ def build_parser():
     parser.add_argument('--camera-params')
     parser.add_argument('--openmvs-bin', type=Path, help='Directory containing OpenMVS executables; otherwise PATH')
     parser.add_argument('--blender', default='blender')
-    parser.add_argument('--blender-script', type=Path, default=Path(__file__).resolve().parents[2]/'tools/export_blender_scene.py')
+    parser.add_argument('--blender-script', type=Path, default=Path(__file__).with_name('blender_export.py'))
     parser.add_argument('--resolution-level', type=int, choices=[0, 1, 2], default=1)
     parser.add_argument('--min-registration', type=float, default=.8)
     parser.add_argument('--threads', type=int, default=2)

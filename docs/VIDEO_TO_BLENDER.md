@@ -4,11 +4,12 @@
 
 ```bash
 echo4d video-scene --video room.mp4 --output result \
-  --openmvs-bin /opt/openmvs/bin --blender-script tools/export_blender_scene.py
+  --openmvs-bin /opt/openmvs/bin
 ```
 
 依赖 FFmpeg/ffprobe、现有 CPU COLMAP 接口、OpenMVS、Blender。
 Python 环境另安装项目依赖和 trimesh；OpenMVS 独立程序采用 AGPL-3.0，
+Blender 导出脚本随 Python 包安装，无需用户手动另找脚本路径。
 不将它的许可误写为本仓库许可。安装和分发时保留对应许可/源码义务。
 本轮对照源码版本 OpenMVS `58117204c86bbb11a0b25b26a8987676cf11274d`。
 

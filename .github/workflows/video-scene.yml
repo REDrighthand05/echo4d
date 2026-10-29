@@ -1,7 +1,7 @@
 name: video scene native timeline
 on:
   push:
-    paths: ['src/echo4d/video_scene.py', 'tools/export_blender_scene.py', 'tools/blender_timeline_check.py', '.github/workflows/video-scene.yml']
+    paths: ['src/echo4d/video_scene.py', 'src/echo4d/blender_export.py', 'tools/export_blender_scene.py', 'tools/blender_timeline_check.py', '.github/workflows/video-scene.yml']
   workflow_dispatch:
 permissions:
   contents: read
