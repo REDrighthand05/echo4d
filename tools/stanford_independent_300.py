@@ -70,3 +70,15 @@ if __name__ == "__main__":
             parser.error("--upstream and --output are required")
         base.compose = compose_300
         base.run(args.upstream, args.output, sample_count=300)
+        # The reused exporter names files independent600 regardless of sample_count.
+        # Rename actual 300-frame products; never label them as 600-frame results.
+        for suffix in (".glb", "-preview.glb"):
+            (args.output / ("room-independent600" + suffix)).rename(
+                args.output / ("room-independent300" + suffix)
+            )
+        import json
+        receipt_path = args.output / "receipt.json"
+        receipt = json.loads(receipt_path.read_text())
+        receipt["mesh_file"] = "room-independent300.glb"
+        receipt["preview_file"] = "room-independent300-preview.glb"
+        receipt_path.write_text(json.dumps(receipt, indent=2) + "\n")
