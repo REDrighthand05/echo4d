@@ -11,7 +11,9 @@ echo4d video-scene --video room.mp4 --output result \
 Python 环境另安装项目依赖和 trimesh；OpenMVS 独立程序采用 AGPL-3.0，
 Blender 导出脚本随 Python 包安装，无需用户手动另找脚本路径。
 不将它的许可误写为本仓库许可。安装和分发时保留对应许可/源码义务。
-本轮对照源码版本 OpenMVS `58117204c86bbb11a0b25b26a8987676cf11274d`。
+实跑固定 OpenMVS v2.3.0 `ce03889e2055a3d6cbcae9dd5a93b5eeea94b909`。
+首次尝试2.4开发提交58117204时，Ubuntu OpenCV4.6缺少JPEGXL枚举导致编译失败；
+没有伪造构建成功，改用仍支持纹理GLB的正式2.3版本，无数值算法补丁。
 
 ## 执行内容
 
