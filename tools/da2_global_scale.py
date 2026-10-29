@@ -52,7 +52,7 @@ def _sample_pair(i, j, depths, rgbs, poses, K, stride=4, max_points=1800):
     inside = (tz > .45) & (tz < 4.) & (u >= 2) & (u < w-3) & (v >= 2) & (v < h-3)
     if not inside.any():
         return np.empty((0, 3))
-    u, v, tz, rz, xx, yy = (u[inside], v[inside], tz,
+    u, v, tz, rz, xx, yy = (u[inside], v[inside], tz[inside],
                             rotated[2, inside], xx[inside], yy[inside])
     mx, my = u.reshape(-1, 1), v.reshape(-1, 1)
     zb = cv2.remap(b.astype(np.float32), mx, my, cv2.INTER_LINEAR,
