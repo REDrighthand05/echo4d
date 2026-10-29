@@ -1,0 +1,94 @@
+name: Stanford Lounge native 426k-face observed geometry + planar support
+on:
+  push:
+    branches: [research/stanford-lounge-planar-support-20261029]
+    paths:
+      - .github/workflows/stanford-native-planar-support.yml
+  workflow_dispatch:
+permissions:
+  actions: read
+  contents: write
+jobs:
+  native-measured-geometry:
+    runs-on: ubuntu-latest
+    timeout-minutes: 110
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Retrieve previous REAL Stanford 360-frame native PLY
+        uses: actions/download-artifact@v4
+        with:
+          name: real-stanford-lounge-40815361170
+          run-id: 40815361170
+          github-token: ${{ github.token }}
+          path: original
+      - name: Confirm native sensor-derived geometry, not reference prior
+        run: |
+          test -s original/OBSERVED-full.ply
+          ls -lh original/OBSERVED-full.ply
+      - name: Install Open3D and scene geometry libraries
+        run: |
+          pip install -r requirements.lock
+          pip install --no-deps -e .
+          pip install 'open3d==0.19.0' 'trimesh>=4,<5'
+      - name: Fit planes to FULL native observed Mesh, not 85k-face preview
+        env:
+          PYTHONPATH: tools
+          OPENBLAS_NUM_THREADS: '1'
+          OMP_NUM_THREADS: '1'
+        run: |
+          python tools/stanford_planar_support.py \
+            --source original/OBSERVED-full.ply \
+            --output artifacts/native-planar
+      - name: Save full native observed and inferred Mesh regardless of later rendering
+        uses: actions/upload-artifact@v4
+        with:
+          name: stanford-native-planar-geometry-${{ github.run_id }}
+          path: artifacts/native-planar/
+          retention-days: 14
+      - name: Publish native observed and separately marked inferred geometry
+        run: |
+          set -e
+          git fetch origin research/stanford-lounge-planar-support-20261029
+          git reset --hard origin/research/stanford-lounge-planar-support-20261029
+          dest=docs/real-room-review/stanford-lounge-native-planar
+          mkdir -p "$dest"
+          cp artifacts/native-planar/*.glb artifacts/native-planar/result.json "$dest/"
+          git config user.name "echo4d-real-room-ci"
+          git config user.email "echo4d-real-room-ci@users.noreply.github.com"
+          git add "$dest"
+          git diff --cached --quiet || git commit -m "results(real-room): full native Stanford observed planar Mesh"
+          git fetch origin research/stanford-lounge-planar-support-20261029
+          git rebase origin/research/stanford-lounge-planar-support-20261029
+          git push origin HEAD:refs/heads/research/stanford-lounge-planar-support-20261029
+      - name: Actual original Stanford camera RGB vs observed vs inferred 3+2
+        env:
+          PYTHONPATH: tools
+          OPENBLAS_NUM_THREADS: '1'
+          OMP_NUM_THREADS: '1'
+        run: |
+          python tools/stanford_planar_real_views.py \
+            --output artifacts/native-planar \
+            --cache "$RUNNER_TEMP/stanford-lounge-rgbd"
+      - name: Save 3 real camera plus 2 free camera renders
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stanford-native-planar-actual-3plus2-${{ github.run_id }}
+          path: artifacts/native-planar/
+          retention-days: 14
+      - name: Publish native real-camera comparisons
+        run: |
+          set -e
+          git fetch origin research/stanford-lounge-planar-support-20261029
+          git reset --hard origin/research/stanford-lounge-planar-support-20261029
+          dest=docs/real-room-review/stanford-lounge-native-planar
+          cp artifacts/native-planar/result.json "$dest/"
+          cp -r artifacts/native-planar/three-real-two-free "$dest/"
+          git add "$dest"
+          git diff --cached --quiet || git commit -m "results(real-room): native Stanford 3 recorded plus 2 free views"
+          git fetch origin research/stanford-lounge-planar-support-20261029
+          git rebase origin/research/stanford-lounge-planar-support-20261029
+          git push origin HEAD:refs/heads/research/stanford-lounge-planar-support-20261029
