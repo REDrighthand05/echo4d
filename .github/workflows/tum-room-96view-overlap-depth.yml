@@ -60,7 +60,7 @@ jobs:
           PYTHONPATH: tools:src
           OPENBLAS_NUM_THREADS: '1'
         run: |
-          python tools/tum_room_pose_overlap_preflight.py --source "$RUNNER_TEMP/room-source" --output "$GITHUB_WORKSPACE/artifacts/room96-overlap/preflight.json"
+          python tools/tum_room_pose_overlap_preflight.py --source "$RUNNER_TEMP/room-source" --output "$RUNNER_TEMP/room96-overlap-preflight.json"
       - name: Real CPU DA2 0/32/64/96 measured-depth ladder, fixed 96 RGB and poses
         env:
           PYTHONPATH: tools:src
@@ -73,6 +73,10 @@ jobs:
       - name: Retain per-pixel candidate predictions for independent replay
         if: always()
         run: |
+          if [ -f "$RUNNER_TEMP/room96-overlap-preflight.json" ]; then
+            mkdir -p artifacts/room96-overlap
+            cp "$RUNNER_TEMP/room96-overlap-preflight.json" artifacts/room96-overlap/preflight.json
+          fi
           if [ -f "$RUNNER_TEMP/room96-overlap-work/predicted-96/recording.json" ]; then
             mkdir -p artifacts/room96-overlap/replay
             cp -a "$RUNNER_TEMP/room96-overlap-work/predicted-96" artifacts/room96-overlap/replay/
