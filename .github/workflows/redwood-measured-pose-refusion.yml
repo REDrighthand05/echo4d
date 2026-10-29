@@ -1,0 +1,98 @@
+name: Redwood measured-depth pose correction real Mesh A/B
+on:
+  push:
+    branches: [research/redwood-measured-loop-pose-refusion-20261030]
+    paths:
+      - tools/redwood_measured_pose_refusion.py
+      - tests/python/test_redwood_measured_pose_refusion.py
+      - .github/workflows/redwood-measured-pose-refusion.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  real-redwood-measured-pose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install mature CPU TSDF and measured depth registration
+        run: |
+          python -m pip install -r requirements.lock
+          python -m pip install --no-deps -e .
+          python -m pip install 'open3d==0.19.0' 'trimesh>=4,<5'
+      - name: Test independent measured-pose consensus and transform convention
+        env:
+          PYTHONPATH: tools
+        run: python -m pytest -q tests/python/test_redwood_measured_pose_refusion.py
+      - name: Fetch frozen original 600-frame 4.5m observed-only Mesh for A/B only
+        uses: actions/download-artifact@v4
+        with:
+          repository: REDrighthand05/echo4d
+          run-id: 40778686280
+          name: real-bedroom-dense-600-40778686280
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: source
+      - name: Register independent original measured-depth overlaps and re-fuse RGB-D
+        env:
+          PYTHONPATH: tools
+          OPENBLAS_NUM_THREADS: '1'
+          OMP_NUM_THREADS: '1'
+        run: |
+          python tools/redwood_measured_pose_refusion.py \
+            --source-ply source/recorded-rgbd-full.ply \
+            --cache "$RUNNER_TEMP/redwood-measured-pose" \
+            --output "$GITHUB_WORKSPACE/artifacts/redwood-measured-pose" \
+            --budget 600
+      - name: Keep actual GLB, five views, and negative evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: real-redwood-measured-pose-${{ github.run_id }}
+          path: artifacts/redwood-measured-pose/
+          retention-days: 14
+          if-no-files-found: warn
+  publish-real-visuals:
+    needs: real-redwood-measured-pose
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: real-redwood-measured-pose-${{ github.run_id }}
+          path: result
+      - name: Publish only real measured observed geometry on isolated branch
+        run: |
+          set -eu
+          dir=docs/real-room-review/redwood-measured-pose-refusion
+          mkdir -p "$dir/visual"
+          cp result/visual/*.png "$dir/visual/"
+          cp result/five-view-measured-pose-ab.png "$dir/"
+          cp result/redwood-measured-pose-refused.glb "$dir/"
+          cp result/result.json "$dir/"
+          cat > "$dir/README.md" <<'EOF'
+          # Real Redwood Bedroom measured-depth pose refusion
+          Original 640x480 RGB-D and logged metric poses, same 600 uniform frames,
+          2.5cm TSDF voxels and 4.5m depth cutoff. Only independently overlapping
+          original measured-depth point clouds are used for constrained pose ICP.
+          Frozen original Mesh used only for A/B; preexisting reference scan NOT used.
+          In recorded views: original RGB / old Mesh / new Mesh.
+          In two fixed free views: old Mesh / new Mesh.
+          No visual improvement or full free-orbit acceptance is claimed by CI.
+          #74 FAIL; old Desk 16.7779cm > 15cm FAIL unchanged.
+          EOF
+          git config user.name "echo4d-real-room-ci"
+          git config user.email "echo4d-real-room-ci@users.noreply.github.com"
+          git add "$dir"
+          git diff --cached --quiet && exit 0
+          git commit -m "results(real-room): actual Redwood depth-ICP Mesh and five-view A/B"
+          git fetch origin research/redwood-measured-loop-pose-refusion-20261030
+          git rebase origin/research/redwood-measured-loop-pose-refusion-20261030
+          git push origin HEAD:refs/heads/research/redwood-measured-loop-pose-refusion-20261030
