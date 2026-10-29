@@ -66,3 +66,7 @@ resume-only提交只跳过昂贵的全链重复任务，原生回放和常规回
 原附件12938867294 ZIP SHA `d034b43e164ac6a828ec99cf06a696e8d00e6fcc76604130b6f5dab51f960073`，CRC已核验。
 随后包装器错误地等待默认interface格式不会保存的mesh项目文件；现在明确使用archive-type=2。
 继续恢复直接读取同一scene_dense.mvs及已保存scene_mesh.ply，只运行refine/texture/Blender；不重跑稠密或初始Mesh。
+
+OpenMVS 2.3的GLB导出实际使用旁置PNG。新增 glb_assets.pack_images 将这些PNG真正嵌入GLB，
+合并多buffer时逐段核对原bufferView字节；保留原始外置贴图GLB，不重采样或改变网格。
+独立trimesh重读测试确认顶点、三角形、UV和纹理像素一致；拒绝越界资源路径。

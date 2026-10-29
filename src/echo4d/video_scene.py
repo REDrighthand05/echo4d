@@ -19,6 +19,7 @@ from .model import DataError, file_sha256
 from .video_sfm import run_pipeline as run_sfm
 from .video_sfm import _estimated_track
 from .colmap import _cameras
+from .glb_assets import pack_images
 
 
 def write_json(path, value):
@@ -179,6 +180,7 @@ def dense_and_export(output, receipt, programs, args, frames, start='densify', m
         run_stage(label, command, output, receipt)
         required_file(target)
     glb = output/'scene_textured.glb'
+    receipt['texture_packaging'] = pack_images(glb)
     receipt['mesh'] = verify_textured_glb(glb)
     run_stage('blender', [programs['blender'], '-b', '--python-exit-code', '1', '--python', args.blender_script.resolve(), '--', '--input', glb, '--output', output/'scene.blend', '--units', 'unknown', '--trajectory', output/'camera-timeline.json', '--render-views', '--provenance', 'RGB-only COLMAP/OpenMVS; scale unknown; estimated geometry'], output, receipt)
     required_file(output/'scene.blend')

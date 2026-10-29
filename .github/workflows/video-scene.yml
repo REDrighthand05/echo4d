@@ -15,7 +15,7 @@ jobs:
         with:
           python-version: '3.12'
       - run: python -m pip install -e '.[test]' trimesh==4.11.1
-      - run: python -m pytest tests/python/test_video_scene.py -q
+      - run: python -m pytest tests/python/test_video_scene.py tests/python/test_glb_assets.py -q
       - run: sudo apt-get update && sudo apt-get install -y blender python3-numpy
       - name: Create explicitly synthetic export fixture, not reconstruction evidence
         run: |
