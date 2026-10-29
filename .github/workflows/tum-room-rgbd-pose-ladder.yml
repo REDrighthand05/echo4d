@@ -16,7 +16,7 @@ permissions:
 
 concurrency:
   group: real-room-rgbd-pose-ladder-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   real-rgbd-pose-removal:
@@ -49,7 +49,7 @@ jobs:
           test -s "$RUNNER_TEMP/room99/replay-inputs/source/association.json"
           test -s "$RUNNER_TEMP/room96/replay/predicted-96/recording.json"
           test -s "$RUNNER_TEMP/room96/mesh-sensor-96/mesh.ply"
-      - name: Real official TUM measured RGB-D, estimate 83 and 95 camera poses, fuse actual Mesh
+      - name: Real official TUM measured RGB-D, estimate 83/91/95 camera poses, fuse actual Mesh
         env:
           PYTHONPATH: tools:src
           OPENBLAS_NUM_THREADS: '1'
