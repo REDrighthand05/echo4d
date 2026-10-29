@@ -1,0 +1,85 @@
+name: Real TUM room robust RGB-D PnP one-anchor Mesh A/B
+
+on:
+  push:
+    branches:
+      - research/room96-rgbd-robust-pnp-20261029
+    paths:
+      - 'tools/tum_room_rgbd_robust_graph.py'
+      - 'tests/python/test_tum_room_rgbd_robust_graph.py'
+      - '.github/workflows/tum-room-rgbd-robust-graph.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: real-room-rgbd-robust-graph-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  real-robust-pnp:
+    runs-on: ubuntu-latest
+    timeout-minutes: 100
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install pinned CPU geometry dependencies
+        run: |
+          python -m pip install -r requirements.lock
+          python -m pip install --no-deps -e .
+          python -m pip install 'open3d==0.19.0' 'opencv-python-headless==4.12.0.88' 'trimesh==4.11.1'
+      - name: Test robust observed RGB-D graph
+        env:
+          PYTHONPATH: tools:src
+          OPENBLAS_NUM_THREADS: '1'
+          OMP_NUM_THREADS: '2'
+        run: |
+          python -m py_compile tools/tum_room_rgbd_robust_graph.py
+          python -m pytest -q tests/python/test_tum_room_rgbd_robust_graph.py tests/python/test_tum_room_rgbd_dense_icp.py
+      - name: Download frozen real RGB-D source and old one-anchor Mesh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/room99" "$RUNNER_TEMP/old"
+          gh run download 40790769632 --repo "$GITHUB_REPOSITORY" --name tum-room-da2-consensus-40790769632 --dir "$RUNNER_TEMP/room99"
+          gh run download 40853386631 --repo "$GITHUB_REPOSITORY" --name tum-room-rgbd-global-loop-40853386631 --dir "$RUNNER_TEMP/old"
+          test -s "$RUNNER_TEMP/room99/replay-inputs/source/association.json"
+          test -s "$RUNNER_TEMP/old/input-poses-1/recording.json"
+          test -s "$RUNNER_TEMP/old/input-poses-96/recording.json"
+          test -s "$RUNNER_TEMP/old/mesh-poses-1/mesh.ply"
+      - name: Estimate robust poses, fuse actual Mesh and render five same cameras
+        env:
+          PYTHONPATH: tools:src
+          OPENBLAS_NUM_THREADS: '1'
+          OMP_NUM_THREADS: '2'
+        run: |
+          python tools/tum_room_rgbd_robust_graph.py \
+            --old "$RUNNER_TEMP/old" \
+            --source "$RUNNER_TEMP/room99" \
+            --output "$GITHUB_WORKSPACE/artifacts/room-rgbd-robust-graph"
+      - name: Print actual withheld-camera and Mesh result
+        if: always()
+        run: |
+          if [ -f artifacts/room-rgbd-robust-graph/report.json ]; then
+            python - <<'PY'
+          import json
+          r=json.load(open('artifacts/room-rgbd-robust-graph/report.json'))
+          print('OLD_CAMERA_ERROR',r['old_camera_error'])
+          print('NEW_CAMERA_ERROR',r['new_camera_error'])
+          print('ROBUST_GRAPH',r['refinement'])
+          print('MESH_FACES',r['new_faces'])
+          print('VISUAL',r['visual_acceptance'])
+          PY
+          fi
+      - name: Preserve real Mesh, GLB, three photo and two free view comparisons
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tum-room-rgbd-robust-graph-${{ github.run_id }}
+          path: artifacts/room-rgbd-robust-graph/
+          if-no-files-found: warn
+          retention-days: 14
