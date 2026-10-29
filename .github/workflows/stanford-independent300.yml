@@ -1,0 +1,71 @@
+name: Stanford independent 300-frame RGB-D room Mesh
+on:
+  push:
+    branches: [research/stanford-independent300-20261029]
+    paths:
+      - tools/stanford_independent_300.py
+      - .github/workflows/stanford-independent300.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  independent-300-room:
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: isl-org/Open3D
+          ref: 1e7b17438687a0b0c1e5a7187321ac7044afe275
+          path: vendor/Open3D
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install real CPU reconstruction dependencies
+        run: |
+          python -m pip install 'open3d==0.19.0' 'opencv-python-headless==4.12.0.88' 'trimesh==4.11.1' 'joblib==1.5.2' 'pillow'
+      - name: Estimate poses and build Stanford Mesh from only 300 measured RGB-D frames
+        env:
+          OMP_NUM_THREADS: '2'
+          OPENBLAS_NUM_THREADS: '1'
+        run: |
+          python tools/stanford_independent_300.py \
+            --upstream vendor/Open3D \
+            --output artifacts/stanford-independent300
+      - name: Retrieve prior independent 600-frame real room for direct visual comparison
+        if: success()
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          name: stanford-independent600-40888746916
+          repository: REDrighthand05/echo4d
+          run-id: 40888746916
+          github-token: ${{ github.token }}
+          path: artifacts/previous600
+      - name: Make old/new same-room five-view comparison
+        if: success()
+        run: |
+          if test -f artifacts/previous600/source-independent600-3plus2.png; then
+            python tools/stanford_independent_300.py \
+              --output artifacts/stanford-independent300 \
+              --compare-with artifacts/previous600/source-independent600-3plus2.png
+          fi
+      - name: Publish real 300-frame model and 3+2 views (also on reconstruction failure)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stanford-independent300-${{ github.run_id }}
+          path: |
+            artifacts/stanford-independent300/receipt.json
+            artifacts/stanford-independent300/inputs.json
+            artifacts/stanford-independent300/config.json
+            artifacts/stanford-independent300/room-independent300.glb
+            artifacts/stanford-independent300/room-independent300-preview.glb
+            artifacts/stanford-independent300/source-independent300-3plus2.png
+            artifacts/stanford-independent300/independent600-vs-300-five-views.png
+            artifacts/stanford-independent300/views/
+            artifacts/stanford-independent300/scene/trajectory.log
+          retention-days: 30
+          if-no-files-found: warn
