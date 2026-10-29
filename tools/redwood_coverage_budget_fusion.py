@@ -89,8 +89,8 @@ def select_coverage_frames(cells_by_frame, budget=FRAME_BUDGET, anchors=ANCHORS)
         upper, idx = heapq.heappop(queue)
         actual = gain(idx)
         if actual <= 0:
-            # All remaining candidates have zero marginal coverage.
-            break
+            # This candidate has no gain; another stale upper bound may.
+            continue
         if queue and actual + 1e-8 < -queue[0][0]:
             heapq.heappush(queue, (-actual, idx))
             continue
