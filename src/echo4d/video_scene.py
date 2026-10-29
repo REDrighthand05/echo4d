@@ -162,9 +162,9 @@ def dense_and_export(output, receipt, programs, args, frames, start='densify', m
               ('refine','RefineMesh',output/'scene_mesh.mvs',output/'scene_refined.mvs'),
               ('texture','TextureMesh',output/'scene_refined.mvs',output/'scene_textured.mvs')]
     names = [stage[0] for stage in stages]
-    if start not in names:
+    if start not in [*names,'export']:
         raise DataError('Unknown resume stage')
-    stages = stages[names.index(start):]
+    stages = [] if start == 'export' else stages[names.index(start):]
     for label, program, source, target in stages:
         if label == 'refine' and mesh_file is not None:
             source = required_file(output/'scene_dense.mvs')

@@ -153,3 +153,25 @@ def test_refine_resume_reuses_existing_dense_and_mesh(tmp_path, monkeypatch):
     with pytest.raises(RuntimeError,match='Stop after'):
         dense_and_export(tmp_path,{}, {'RefineMesh':'fake-refiner'},args,[],start='refine',mesh_file=tmp_path/'scene_mesh.ply')
     assert calls==['refine']
+
+
+def test_export_resume_never_runs_geometry(tmp_path, monkeypatch):
+    from echo4d.video_scene import dense_and_export
+    (tmp_path/'scene.mvs').write_bytes(b'EXPLICIT_FAKE_EXPORT_FIXTURE')
+    glb(tmp_path/'scene_textured.glb')
+    args=build_parser().parse_args(['--video','unused.mp4','--output','unused'])
+    calls=[]
+    def stage(name,*_):
+        calls.append(name)
+        (tmp_path/'scene.blend').write_bytes(b'FAKE_NATIVE_OUTPUT')
+    def package(*_):
+        (tmp_path/'scene-delivery.zip').write_bytes(b'FAKE_PACKAGE')
+        return {'fixture':'E2 only'}
+    monkeypatch.setattr('echo4d.video_scene.run_stage',stage)
+    monkeypatch.setattr('echo4d.video_scene.package_scene',package)
+    receipt={}
+    dense_and_export(tmp_path,receipt,{'blender':'fake-blender'},args,[],start='export')
+    assert calls==['blender']
+    assert not (tmp_path/'scene_dense.mvs').exists()
+    assert not (tmp_path/'scene_mesh.mvs').exists()
+    assert not (tmp_path/'scene_refined.mvs').exists()
