@@ -1,0 +1,49 @@
+name: Stanford 600 RGB with nested 150 75 30 real depths
+on:
+  push:
+    branches: [research/stanford-colmap600rgb-75-30depth-20261030]
+    paths:
+      - tools/stanford_colmap600rgb_75_30depth.py
+      - .github/workflows/stanford-colmap600rgb-75-30depth.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  real-nested-measured-depth-meshes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install pinned mature CPU reconstruction
+        run: |
+          python -m pip install 'open3d==0.19.0' 'trimesh==4.11.1' pillow scipy
+          python -m py_compile tools/stanford_colmap600rgb_75_30depth.py
+          PYTHONPATH=tools python -c "from stanford_colmap600rgb_75_30depth import nested_depth_indices; assert tuple(map(len,nested_depth_indices())) == (150,75,30)"
+      - name: Download independently solved 600 RGB-only COLMAP camera poses
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/colmap600"
+          gh run download 40917183649 --repo "$GITHUB_REPOSITORY" \
+            --name stanford-colmap600-40917183649 --dir "$RUNNER_TEMP/colmap600"
+      - name: Generate three independent real Meshes with only 150 75 and 30 depth frames
+        env:
+          OPENBLAS_NUM_THREADS: '1'
+          OMP_NUM_THREADS: '2'
+          OPEN3D_CPU_RENDERING: 'true'
+        run: |
+          python tools/stanford_colmap600rgb_75_30depth.py \
+            --source "$RUNNER_TEMP/colmap600" \
+            --output artifacts/stanford-colmap600rgb-depth150-75-30
+      - name: Preserve GLBs real images and fixed five-view comparison
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stanford-colmap600rgb-depth150-75-30-${{ github.run_id }}
+          path: artifacts/stanford-colmap600rgb-depth150-75-30/
+          retention-days: 30
+          if-no-files-found: warn
