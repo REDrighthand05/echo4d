@@ -1,0 +1,74 @@
+name: Stanford 15mm sparse TSDF measured-only full room A/B
+
+on:
+  push:
+    branches: [research/stanford-sparse-15mm-20261029]
+    paths:
+      - tools/stanford_sparse_15mm.py
+      - tests/python/test_stanford_sparse_15mm.py
+      - .github/workflows/stanford-sparse-15mm.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: stanford-sparse-15mm-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  real-480-view-geometry:
+    runs-on: ubuntu-latest
+    timeout-minutes: 110
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install Open3D measured-depth fusion and GLB tools
+        run: |
+          python -m pip install -r requirements.lock
+          python -m pip install --no-deps -e .
+          python -m pip install 'open3d==0.19.0' 'trimesh>=4,<5'
+      - name: Freeze native camera calibration and identical 480 frame IDs
+        env:
+          PYTHONPATH: tools
+        run: python -m pytest -q tests/python/test_stanford_sparse_15mm.py
+      - name: Fuse 480 real 640x480 RGB-D frames at 15mm, compare 3 recorded + 2 free
+        env:
+          PYTHONPATH: tools
+          OPENBLAS_NUM_THREADS: '1'
+          OMP_NUM_THREADS: '1'
+        run: |
+          python tools/stanford_sparse_15mm.py \
+            --cache "$RUNNER_TEMP/stanford-lounge-rgbd" \
+            --source docs/real-room-review/stanford-measured-gap/OBSERVED-gap-guided-full.glb \
+            --source-report docs/real-room-review/stanford-measured-gap/result.json \
+            --output "$GITHUB_WORKSPACE/artifacts/stanford-sparse-15mm"
+      - name: Show actual geometry and source-matched view results
+        if: always()
+        run: |
+          if [ -f artifacts/stanford-sparse-15mm/result.json ]; then
+            python - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import json
+          from pathlib import Path
+          r=json.loads(Path("artifacts/stanford-sparse-15mm/result.json").read_text())
+          print("# Stanford real measured 15mm TSDF")
+          print("Native source: 640x480 RGB-D, 480 recorded frames, known poses.")
+          print("Baseline 25mm faces:",r["baseline_25mm_observed_faces"])
+          print("Candidate 15mm faces:",r["candidate_15mm_observed_faces"])
+          for v in r["three_real_two_room_scale_free"]:
+              print(v["kind"],v["file"],"before",v["before_hit_pixels"],"after",v["after_hit_pixels"])
+          print("Human visual acceptance: NOT REVIEWED; #74 FAIL unchanged.")
+          PY
+          elif [ -f artifacts/stanford-sparse-15mm/FAILED.txt ]; then
+            cat artifacts/stanford-sparse-15mm/FAILED.txt >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Preserve real full-resolution colored Mesh and all five views or failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stanford-sparse-15mm-${{ github.run_id }}
+          path: artifacts/stanford-sparse-15mm/
+          retention-days: 14
+          if-no-files-found: warn
