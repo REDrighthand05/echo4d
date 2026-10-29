@@ -22,7 +22,7 @@ jobs:
         run: |
           python -m pip install 'open3d==0.19.0' 'trimesh==4.11.1' 'numpy<3' pillow
           python -m py_compile tools/stanford_full_observed_speck_cleanup.py
-      - name: Fetch actual 2999-frame estimated-pose room (no prior Mesh)
+      - name: Fetch actual 3000-frame estimated-pose room (no prior Mesh)
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -44,7 +44,7 @@ jobs:
           path: |
             artifacts/full-observed-cleanup/receipt.json
             artifacts/full-observed-cleanup/five-view-observed-ab.png
-            artifacts/full-observed-cleanup/observed-2999-speck-filtered.glb
-            artifacts/full-observed-cleanup/observed-2999-speck-filtered-preview.glb
+            artifacts/full-observed-cleanup/observed-3000-speck-filtered.glb
+            artifacts/full-observed-cleanup/observed-3000-speck-filtered-preview.glb
           retention-days: 30
           if-no-files-found: warn
