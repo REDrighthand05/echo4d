@@ -43,7 +43,7 @@ def test_large_or_disagreeing_corrections_rejected():
 def test_loop_targets_need_independent_real_observations():
     selected = list(range(0, 900, 50))
     poses = []
-    for _ in selected:
+    for _ in range(max(selected) + 1):
         p = np.eye(4)
         poses.append(p)
     result = loop_targets(selected, poses)
@@ -53,7 +53,7 @@ def test_loop_targets_need_independent_real_observations():
         assert all(abs(t - selected[j]) >= 50 for t in targets)
         assert abs(targets[0] - targets[1]) >= 50
     far = []
-    for i in range(len(selected)):
+    for i in range(max(selected) + 1):
         p = np.eye(4)
         p[0, 3] = i * 2
         far.append(p)
