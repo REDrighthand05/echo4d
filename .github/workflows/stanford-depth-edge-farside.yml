@@ -1,0 +1,76 @@
+name: Stanford measured 25mm TSDF far-side depth-edge A/B
+
+on:
+  push:
+    branches: [research/stanford-depth-edge-farside-20261029]
+    paths:
+      - tools/stanford_depth_edge_farside.py
+      - tests/python/test_stanford_depth_edge_farside.py
+      - .github/workflows/stanford-depth-edge-farside.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: stanford-depth-edge-farside-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  real-480-view-edge-geometry:
+    runs-on: ubuntu-latest
+    timeout-minutes: 110
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install mature measured RGB-D fusion
+        run: |
+          python -m pip install -r requirements.lock
+          python -m pip install --no-deps -e .
+          python -m pip install 'open3d==0.19.0' 'trimesh>=4,<5'
+      - name: Check far-side depth-edge mask behavior
+        env:
+          PYTHONPATH: tools
+        run: |
+          python -m pytest -q tests/python/test_stanford_depth_edge_farside.py tests/python/test_stanford_sparse_15mm.py
+      - name: Re-fuse identical 480 real 640x480 RGB-D frames at 25mm with depth-edge filter
+        env:
+          PYTHONPATH: tools
+          OPENBLAS_NUM_THREADS: '1'
+          OMP_NUM_THREADS: '1'
+        run: |
+          python tools/stanford_depth_edge_farside.py \
+            --cache "$RUNNER_TEMP/stanford-lounge-rgbd" \
+            --source docs/real-room-review/stanford-measured-gap/OBSERVED-gap-guided-full.glb \
+            --source-report docs/real-room-review/stanford-measured-gap/result.json \
+            --output "$GITHUB_WORKSPACE/artifacts/stanford-depth-edge-farside"
+      - name: Print actual geometry and coverage, never claim visual acceptance
+        if: always()
+        run: |
+          if [ -f artifacts/stanford-depth-edge-farside/result.json ]; then
+            python - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import json
+          from pathlib import Path
+          r=json.loads(Path("artifacts/stanford-depth-edge-farside/result.json").read_text())
+          print("# Stanford measured 25mm far-side depth edge filtering")
+          print("Original 25mm faces:",r["frozen_before_observed_faces"])
+          print("Filtered 25mm faces:",r["filtered_after_observed_faces"])
+          print("Removed sensor pixels:",r["removed_far_side_depth_pixels"])
+          print("Removed fraction:",r["removed_fraction"])
+          for v in r["three_recorded_two_free"]:
+              print(v["kind"],v["file"],"before",v["before_hit_pixels"],"after",v["after_hit_pixels"])
+          print("Human visual acceptance: NOT REVIEWED; #74 FAIL unchanged.")
+          PY
+          elif [ -f artifacts/stanford-depth-edge-farside/FAILED.txt ]; then
+            cat artifacts/stanford-depth-edge-farside/FAILED.txt >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Preserve full colored native GLB, PLY and three recorded plus two free views
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stanford-depth-edge-farside-${{ github.run_id }}
+          path: artifacts/stanford-depth-edge-farside/
+          retention-days: 14
+          if-no-files-found: warn
