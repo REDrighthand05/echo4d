@@ -1,0 +1,57 @@
+name: Recover completed room exports and Blender scene
+on:
+  push:
+    branches: [feat/official-room-reconstruction-20261029]
+    paths:
+      - tools/recover_official_room.py
+      - .github/workflows/recover-official-room.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  recover-existing-model:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: isl-org/Open3D
+          ref: 1e7b17438687a0b0c1e5a7187321ac7044afe275
+          path: vendor/Open3D
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install export and native scene dependencies
+        run: |
+          python -m pip install open3d==0.19.0 trimesh==4.11.1
+          sudo apt-get update -qq
+          sudo apt-get install -y blender python3-numpy
+      - name: Download completed model without repeating reconstruction
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh run download 40865675012 --repo "$GITHUB_REPOSITORY" --name official-room-40865675012 --dir "$RUNNER_TEMP/completed-room"
+      - name: Recover exact frame mapping and real views only
+        env:
+          OPENBLAS_NUM_THREADS: '1'
+          OMP_NUM_THREADS: '2'
+        run: |
+          python tools/recover_official_room.py \
+            --source "$RUNNER_TEMP/completed-room" \
+            --output artifacts/official-room-recovered \
+            --upstream vendor/Open3D
+      - name: Export the new full real model to native Blender
+        run: |
+          blender --background --python-exit-code 1 --python tools/export_blender_scene.py -- \
+            --input artifacts/official-room-recovered/room-full.glb \
+            --output artifacts/official-room-recovered/room-full.blend \
+            --provenance "New #114 official full RGB-D reconstruction; estimated poses; actual recovered artifact"
+      - name: Preserve new room, five images, native scene and original failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: official-room-recovered-${{ github.run_id }}
+          path: artifacts/official-room-recovered/
+          retention-days: 30
+          if-no-files-found: warn

@@ -84,9 +84,11 @@ def run(upstream, output):
     initialize_config(config)
     # Use upstream Lounge defaults; all original RGB-D, not 480 sampled frames.
     root = Path(config["path_dataset"])
-    data = o3d.data.LoungeRGBDImages()
-    colors = [Path(p) for p in data.color_paths]
-    depths = [Path(p) for p in data.depth_paths]
+    # Use the EXACT file inventory used by the upstream reconstruction system.
+    # Lounge's SDK exposes 2999 paths, while the extracted folder has 3000.
+    from open3d_example import get_rgbd_file_lists
+    color_files, depth_files = get_rgbd_file_lists(str(root))
+    colors, depths = list(map(Path, color_files)), list(map(Path, depth_files))
     if not colors or len(colors) != len(depths):
         raise ValueError("Missing original RGB-D")
     if any(a.stem != b.stem for a,b in zip(colors,depths)):

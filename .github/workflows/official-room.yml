@@ -13,6 +13,8 @@ concurrency:
   cancel-in-progress: false
 jobs:
   upstream-system:
+    # Export-only recovery commits must not repeat the completed 35-minute reconstruction.
+    if: github.event_name == 'workflow_dispatch' || !startsWith(github.event.head_commit.message, 'recover-only:')
     runs-on: ubuntu-latest
     timeout-minutes: 180
     steps:
