@@ -15,7 +15,11 @@ from redwood_dense_native_review import export_full
 from redwood_gap_guided_fusion import compare
 
 def guard_depth_edges(depth, threshold_mm=90):
-    """Invalidate both sides of strong depth jumps, leaving other measurements intact."""
+    """Invalidate only the farther pixel at a strong depth jump.
+
+    Preserve the foreground silhouette; eroding both sides destroys measured
+    chair/desk edges and can turn thin foreground surfaces into holes.
+    """
     d = np.asarray(depth)
     if d.ndim != 2 or d.dtype != np.uint16:
         raise ValueError("Expected native uint16 millimeter depth")
@@ -26,11 +30,15 @@ def guard_depth_edges(depth, threshold_mm=90):
     for axis in (0, 1):
         left = (slice(None, -1), slice(None)) if axis == 0 else (slice(None), slice(None, -1))
         right = (slice(1, None), slice(None)) if axis == 0 else (slice(None), slice(1, None))
+        near_or_far_left = d[left].astype(np.int32)
+        near_or_far_right = d[right].astype(np.int32)
         jump = valid[left] & valid[right] & (
-            np.abs(d[left].astype(np.int32) - d[right].astype(np.int32)) > threshold_mm
+            np.abs(near_or_far_left - near_or_far_right) > threshold_mm
         )
-        discontinuity[left] |= jump
-        discontinuity[right] |= jump
+        # Keep the near-side measured boundary; suppress only far-side
+        # mixed pixels likely to form phantom geometry across occlusions.
+        discontinuity[left] |= jump & (near_or_far_left > near_or_far_right)
+        discontinuity[right] |= jump & (near_or_far_right > near_or_far_left)
     cleaned = d.copy()
     cleaned[discontinuity] = 0
     return cleaned, int(discontinuity.sum())
@@ -78,10 +86,10 @@ def run(source, cache, output, threshold_mm=90, budget=600):
     selected = spaced_real_frames(len(data.color_paths), budget)
     output.mkdir(parents=True, exist_ok=False)
     new, rejected = integrate_edge_guard(o3d, data, selected, poses, k, threshold_mm)
-    if not o3d.io.write_triangle_mesh(str(output / "redwood-edge-guard-observed.ply"), new):
+    if not o3d.io.write_triangle_mesh(str(output / "redwood-farside-observed.ply"), new):
         raise RuntimeError("Cannot save measured-only PLY")
     exported = export_full(new, output)
-    (output / exported["glb"]).rename(output / "redwood-edge-guard-observed.glb")
+    (output / exported["glb"]).rename(output / "redwood-farside-observed.glb")
     views = compare(o3d, data, poses, k, old, new, output)
     board = Image.new("RGB", (960, 268 * len(views)), (26, 26, 26))
     for j, entry in enumerate(views):
@@ -89,15 +97,15 @@ def run(source, cache, output, threshold_mm=90, budget=600):
         with Image.open(path) as image:
             frame = image.convert("RGB").copy()
         ImageDraw.Draw(frame).rectangle((0, 0, frame.width, 27), fill=(26, 26, 26))
-        title = "REAL RGB / UNFILTERED / DEPTH EDGE GUARD" if entry["kind"] == "recorded" else "FREE VIEW / UNFILTERED / DEPTH EDGE GUARD"
+        title = "REAL RGB / UNFILTERED / FAR-SIDE GUARD" if entry["kind"] == "recorded" else "FREE VIEW / UNFILTERED / FAR-SIDE GUARD"
         ImageDraw.Draw(frame).text((8, 8), title, fill="white")
         frame.save(path)
         board.paste(frame, (0, 268 * j))
-    board.save(output / "five-view-depth-edge-guard-ab.png")
+    board.save(output / "five-view-farside-ab.png")
     report = {
         "scene": "Real Redwood Bedroom",
         "input": "Original 640x480 registered RGB-D, measured depth, logged metric camera poses",
-        "geometry_change": "Invalidate measured depth pixels adjacent to >90mm discontinuities before 2.5cm TSDF fusion",
+        "geometry_change": "Remove only the far-side depth pixel at >90mm occlusion jumps before 2.5cm TSDF fusion",
         "threshold_mm": threshold_mm,
         "frames": len(selected),
         "rejected_depth_pixels": rejected,
