@@ -1,0 +1,110 @@
+{
+  "scene": "REAL Stanford Lounge, previously recorded RGB-D TSDF",
+  "source_observed_mesh": "original/OBSERVED-full.ply",
+  "input_prior_used": false,
+  "observed_triangles": 426789,
+  "inferred_planar_triangles": 2654,
+  "output_triangles": 429443,
+  "inferred_area_m2": 6.502300000000002,
+  "plane_patches": [
+    {
+      "observed_support_vertices": 63770,
+      "inferred_grid_cells": 505,
+      "normal": [
+        0.0357614169306363,
+        0.9993159026508033,
+        -0.009425909416287404
+      ],
+      "support_span_m": [
+        8.502515548290322,
+        4.6096518499937185
+      ]
+    },
+    {
+      "observed_support_vertices": 19183,
+      "inferred_grid_cells": 80,
+      "normal": [
+        0.010956104671999261,
+        -0.005079653687573515,
+        -0.9999270777855905
+      ],
+      "support_span_m": [
+        4.829631866052141,
+        2.1186196360047074
+      ]
+    },
+    {
+      "observed_support_vertices": 9759,
+      "inferred_grid_cells": 451,
+      "normal": [
+        0.02423614890088073,
+        0.9996467033775854,
+        0.010912264328709176
+      ],
+      "support_span_m": [
+        8.120506943663802,
+        4.913081531457577
+      ]
+    },
+    {
+      "observed_support_vertices": 6272,
+      "inferred_grid_cells": 27,
+      "normal": [
+        -0.9989994377072476,
+        0.03506278708657681,
+        0.027761923966548734
+      ],
+      "support_span_m": [
+        4.421338810271304,
+        2.0427389685301995
+      ]
+    },
+    {
+      "observed_support_vertices": 5415,
+      "inferred_grid_cells": 121,
+      "normal": [
+        0.998323706837308,
+        -0.04074412117799502,
+        0.041105874957838066
+      ],
+      "support_span_m": [
+        4.162578837908883,
+        1.6483938937753289
+      ]
+    },
+    {
+      "observed_support_vertices": 4297,
+      "inferred_grid_cells": 133,
+      "normal": [
+        0.005829444072357324,
+        -0.02494290720371753,
+        0.9996718806498632
+      ],
+      "support_span_m": [
+        7.307195709617565,
+        1.6916598748738099
+      ]
+    },
+    {
+      "observed_support_vertices": 3174,
+      "inferred_grid_cells": 10,
+      "normal": [
+        -0.9987135171101897,
+        0.015079605251010576,
+        0.04841400878742132
+      ],
+      "support_span_m": [
+        4.779082909725689,
+        1.2154457520949276
+      ]
+    }
+  ],
+  "method": "RANSAC broad planes, bounded 2D morphological hole fill",
+  "inferred_geometry_is_measured": false,
+  "source_colors": "nearest coplanar measured RGB-D vertex; no generated textures",
+  "provenance": "cyan=measured RGB-D; orange=plane-inferred tiles",
+  "three_real_two_free_views": "not yet rendered",
+  "human_visual_improvement": "NOT VERIFIED",
+  "issue_74": "FAIL unchanged",
+  "desk_v2": "FAIL 16.7779cm > 15cm unchanged"
+}
