@@ -1,0 +1,55 @@
+name: Real TUM room known-pose OpenCV SGBM RGB-only Mesh trial
+
+on:
+  push:
+    branches:
+      - research/room96-opencv-sgbm-20261029
+    paths:
+      - 'tools/tum_room_opencv_sgbm_trial.py'
+      - 'tests/python/test_tum_room_opencv_sgbm_trial.py'
+      - '.github/workflows/tum-room-opencv-sgbm.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  real-room-stereo:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install mature CPU stereo and mesh libraries
+        run: |
+          python -m pip install 'numpy>=1.26,<3' 'opencv-python-headless>=4.12,<4.14' 'trimesh==4.11.1' 'pytest>=8,<10'
+      - name: CPU synthetic geometry regressions
+        env:
+          PYTHONPATH: tools
+        run: |
+          python -m pytest -q tests/python/test_tum_room_opencv_sgbm_trial.py
+      - name: Retrieve prior real RGB and known poses; no sensor depth or prior Mesh passed to candidate
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/room"
+          gh run download 40832708084 --repo "$GITHUB_REPOSITORY" --name tum-room-96-depth-support-40832708084 --dir "$RUNNER_TEMP/room"
+          test -s "$RUNNER_TEMP/room/replay/predicted-96/recording.json"
+          test -s "$RUNNER_TEMP/room/replay/predicted-96/color/000.png"
+      - name: Real 96-camera known-pose RGB-only OpenCV SGBM, 48 reference cameras
+        env:
+          OPENBLAS_NUM_THREADS: '1'
+          OMP_NUM_THREADS: '2'
+        run: |
+          python tools/tum_room_opencv_sgbm_trial.py --recording "$RUNNER_TEMP/room/replay/predicted-96" --output "$GITHUB_WORKSPACE/artifacts/room-sgbm" --limit 48 --stride 3
+      - name: Preserve actual RGB-only GLB/PLY and failure report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tum-room-opencv-sgbm-${{ github.run_id }}
+          path: artifacts/room-sgbm/
+          if-no-files-found: warn
+          retention-days: 14
