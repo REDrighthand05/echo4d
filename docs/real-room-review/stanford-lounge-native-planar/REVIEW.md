@@ -9,13 +9,14 @@ source-mask GLB. In contrast, the *decimated 85k preview* appeared to need
 4,020 inferred triangles; that was not evidence of additional real missing
 room geometry. Original observed faces remain unchanged.
 
-Human inspection of 5 **room-scale virtual** VTK viewpoints: the furniture
-and layout remain recognizable, but measured vs patched images are nearly
-indistinguishable; walls and the scene boundary are still broken. The
-official 3 recorded-camera + 2 earlier 35cm-offset "free" camera images
-likewise show essentially no practical improvement. Those near-camera
-closeups were **not** a proper room-scale free-roam test; the separate
-room-scale raycast review workflow addresses this limitation.
+**Actual five-view result:** 3 original RGB camera poses plus 2 true
+room-scale free viewpoints were successfully rendered using the full native
+Mesh (Actions #40822251618). Furniture and the lounge layout remain
+recognizable. The room-scale views expose large missing outer surfaces and
+broken room boundaries. Before/after are almost indistinguishable; planar
+tiles do not deliver practical free roaming. The previous "free" camera
+views were merely 35cm shifts near the recorded cameras, not a genuine
+third-person room overview, and are superseded by the new room-scale run.
 
 Decision: do not keep tuning morphological radius to chase triangle counts.
 This approach did NOT deliver a freely navigable room. #74 stays FAIL and
