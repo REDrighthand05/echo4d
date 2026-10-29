@@ -106,6 +106,20 @@ def run(observed_path, output, cache, max_distance_m):
     mask=np.where(source[:,None]==1,np.array([.20,.68,.76]),
                   np.array([.98,.49,.16]))
     export_colored(output/"PRIOR-room-color-source.glb",vertices,faces,mask)
+    # Preserve all ~10M original PRIOR faces in Actions artifacts. Publish only
+    # an explicitly decimated viewable copy under GitHub's 100 MB file limit.
+    preview=prior.simplify_quadric_decimation(170000)
+    preview.compute_vertex_normals()
+    preview_rgb,preview_source=transfer_observed_colors(
+        preview,observed,max_distance_m=max_distance_m)
+    preview_xyz=np.asarray(preview.vertices)
+    preview_faces=np.asarray(preview.triangles)
+    export_colored(output/"PRIOR-room-preview.glb",
+                   preview_xyz,preview_faces,preview_rgb)
+    preview_mask=np.where(preview_source[:,None]==1,
+                          np.array([.20,.68,.76]),np.array([.98,.49,.16]))
+    export_colored(output/"PRIOR-room-preview-color-source.glb",
+                   preview_xyz,preview_faces,preview_mask)
     traj=o3d.io.read_pinhole_camera_trajectory(dataset.trajectory_log_path)
     intrinsic,poses=read_poses(traj,list(dataset.color_paths),
                                dataset.trajectory_log_path)
@@ -128,6 +142,10 @@ def run(observed_path, output, cache, max_distance_m):
         "measured_faces":len(observed.triangles),
         "prior_faces":len(faces),
         "prior_vertices":len(vertices),
+        "full_prior_glb_in_actions_only":"PRIOR-room-observed-colors.glb",
+        "github_preview_faces":len(preview_faces),
+        "github_preview_glb":"PRIOR-room-preview.glb",
+        "github_preview_provenance":"PRIOR-room-preview-color-source.glb",
         "color_from_measured_rgbd_vertices":int(np.count_nonzero(source==1)),
         "unknown_color_prior_vertices":int(np.count_nonzero(source==2)),
         "color_coverage_fraction":float(np.mean(source==1)),

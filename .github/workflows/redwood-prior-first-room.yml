@@ -60,8 +60,8 @@ jobs:
         run: |
           mkdir -p docs/real-room-review/redwood-bedroom-prior-first/ab
           cp review/ab/*.png docs/real-room-review/redwood-bedroom-prior-first/ab/
-          cp review/PRIOR-room-observed-colors.glb docs/real-room-review/redwood-bedroom-prior-first/
-          cp review/PRIOR-room-color-source.glb docs/real-room-review/redwood-bedroom-prior-first/
+          cp review/PRIOR-room-preview.glb docs/real-room-review/redwood-bedroom-prior-first/
+          cp review/PRIOR-room-preview-color-source.glb docs/real-room-review/redwood-bedroom-prior-first/
           cp review/report.json docs/real-room-review/redwood-bedroom-prior-first/
           cat > docs/real-room-review/redwood-bedroom-prior-first/README.md <<'EOF'
           # Redwood Bedroom full PRE-EXISTING prior geometry
@@ -71,7 +71,7 @@ jobs:
           at nearby compatible normals; unsupported colors stay neutral grey.
           In A/B images left=measured-only and right=prior-first, with
           three recorded photo views and two free third-person cameras.
-          The source-mask GLB uses cyan for prior with measured RGB color
+          The published GLB is a 170k-face preview of the full prior Mesh.\n          Full ~10M-face GLB remains in the Actions run artifact.\n          The source-mask GLB uses cyan for prior with measured RGB color
           and orange for prior with unknown color; ALL geometry is prior.
           Human acceptance and #74 remain unpassed.
           EOF
