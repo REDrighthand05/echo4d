@@ -1,0 +1,46 @@
+name: Stanford COLMAP 150 exhaustive matching room
+on:
+  push:
+    branches: [research/stanford-colmap150-exhaustive-20261030]
+    paths:
+      - .github/workflows/stanford-colmap-exhaustive150.yml
+      - tools/stanford_colmap150_exhaustive.py
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  colmap-exhaustive-150:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install COLMAP CPU and Open3D
+        run: |
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y colmap
+          python -m pip install 'open3d==0.19.0' 'trimesh==4.11.1' pillow scipy
+      - name: Reconstruct from only 150 original RGB-D pairs with exhaustive RGB matching
+        env:
+          QT_QPA_PLATFORM: offscreen
+          OMP_NUM_THREADS: '2'
+          OPENBLAS_NUM_THREADS: '1'
+        run: |
+          python tools/stanford_colmap150_exhaustive.py --output artifacts/stanford-colmap150-exhaustive
+      - name: Preserve source-aligned five views and actual Mesh
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stanford-colmap150-exhaustive-${{ github.run_id }}
+          path: |
+            artifacts/stanford-colmap150-exhaustive/receipt.json
+            artifacts/stanford-colmap150-exhaustive/inputs.json
+            artifacts/stanford-colmap150-exhaustive/*.log
+            artifacts/stanford-colmap150-exhaustive/*.glb
+            artifacts/stanford-colmap150-exhaustive/*3plus2.png
+            artifacts/stanford-colmap150-exhaustive/views/
+            artifacts/stanford-colmap150-exhaustive/model-txt-*/
+          retention-days: 30
+          if-no-files-found: warn
