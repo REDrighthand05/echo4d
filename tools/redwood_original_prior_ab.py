@@ -88,13 +88,72 @@ def refine_registered_prior(prior, measured, initial, o3d):
         "after_rmse_m": after_rmse,
     }
 
+def fixed_view_specs(data, poses):
+    """Three original camera positions and two fixed independent free views."""
+    from open3d_official_room_baseline import spaced_real_frames
+    from tum_graph_visual import look_at
+    frames = spaced_real_frames(len(data.color_paths), 360)
+    specs = []
+    for idx in (frames[0], frames[len(frames) // 2], frames[-1]):
+        specs.append({"kind": "recorded", "frame": int(idx),
+                      "file": f"visual/photo-vs-mesh-{idx:05d}.png",
+                      "pose": np.asarray(poses[idx])})
+    for j, (idx, dx) in enumerate(((frames[len(frames) // 3], .35),
+                                   (frames[2 * len(frames) // 3], -.35)), 1):
+        c2w = np.linalg.inv(poses[idx])
+        eye = c2w[:3, 3] + dx * c2w[:3, 0]
+        free = look_at(eye, c2w[:3, 3] + 1.8 * c2w[:3, 2])
+        specs.append({"kind": "free", "frame": int(idx),
+                      "file": f"visual/free-view-{j}.png",
+                      "pose": np.linalg.inv(free)})
+    return specs
+
+
+def render_one_mesh(o3d, mesh, specs, intrinsics):
+    """Render one candidate and release its BVH BEFORE building the next one.
+
+    Original supplied PRIOR can contain millions of faces. Building two Open3D
+    raycasting scenes concurrently can exhaust a standard CI runner.
+    """
+    import gc
+    from redwood_dense_native_review import raycast
+    scene = o3d.t.geometry.RaycastingScene()
+    scene.add_triangles(o3d.t.geometry.TriangleMesh.from_legacy(mesh))
+    rendered = []
+    for spec in specs:
+        rgb, hits = raycast(o3d, scene, mesh, intrinsics, spec["pose"])
+        rendered.append((rgb, hits))
+    del scene
+    gc.collect()
+    return rendered
+
+
+def save_five_panels(data, specs, previous, current, output):
+    """Combine identical cameras only after both independent renders finish."""
+    from redwood_gap_guided_fusion import panel
+    (output / "visual").mkdir(exist_ok=True)
+    views = []
+    for spec, (before, old_hits), (after, new_hits) in zip(
+            specs, previous, current):
+        photo = None
+        if spec["kind"] == "recorded":
+            with Image.open(data.color_paths[spec["frame"]]) as image:
+                photo = image.convert("RGB").copy()
+        panel(output / spec["file"], photo, before, after,
+              "REAL RGB / 500K PRIOR / ORIGINAL PRIOR" if photo is not None
+              else "FREE CAMERA / 500K PRIOR / ORIGINAL PRIOR")
+        views.append({"kind": spec["kind"], "frame": spec["frame"],
+                      "file": spec["file"], "old_pixels": old_hits,
+                      "new_pixels": new_hits})
+    return views
+
+
 def run(observed_path, cache, output):
     import open3d as o3d
     from redwood_prior_gapfill import align_prior, load_measured
     from redwood_prior_measured_hybrid import (
         distance_to_prior_triangles, select_measured_detail_faces, export_glb)
     from open3d_official_room_baseline import read_poses
-    from redwood_gap_guided_fusion import compare
 
     if output.exists():
         raise FileExistsError("Use a new output directory")
@@ -142,31 +201,43 @@ def run(observed_path, cache, output):
     # in metadata; ALL prior faces are the first original_faces triangles.
     trajectory = o3d.io.read_pinhole_camera_trajectory(data.trajectory_log_path)
     k, poses = read_poses(trajectory, list(data.color_paths), data.trajectory_log_path)
-    views = compare(o3d, data, poses, k, old, new, output)
+    # Export first; release the original scan and its duplicates before
+    # allocating the full-resolution raycasting acceleration structure.
+    prior_faces = original_faces
+    low_faces = len(low.triangles)
+    detail_faces = len(selected)
+    prior_color_hits = int(full_support.sum())
+    low_color_hits = int(low_support.sum())
+    unknown_prior_colors = int((~full_support).sum())
+    import gc
+    del full, low, detail, observed, full_rgb, low_rgb, full_support, low_support
+    gc.collect()
+    specs = fixed_view_specs(data, poses)
+    print("Rendering decimated 500k PRIOR, then releasing its BVH", flush=True)
+    old_rendered = render_one_mesh(o3d, old, specs, k)
+    del old
+    gc.collect()
+    print("Rendering original multi-million-face PRIOR separately", flush=True)
+    new_rendered = render_one_mesh(o3d, new, specs, k)
+    del new
+    gc.collect()
+    views = save_five_panels(data, specs, old_rendered, new_rendered, output)
     board = Image.new("RGB", (960, 268 * len(views)), (26, 26, 26))
     for i, entry in enumerate(views):
-        path = output / entry["file"]
-        with Image.open(path) as im:
-            panel = im.convert("RGB").copy()
-        draw = ImageDraw.Draw(panel)
-        draw.rectangle((0, 0, panel.width, 27), fill=(26, 26, 26))
-        draw.text((8, 8),
-                  "REAL RGB / 500K PRIOR / ORIGINAL PRIOR" if entry["kind"] == "recorded"
-                  else "FREE VIEW / 500K PRIOR / ORIGINAL PRIOR", fill="white")
-        panel.save(path)
-        board.paste(panel, (0, 268 * i))
+        with Image.open(output / entry["file"]) as image:
+            board.paste(image.convert("RGB"), (0, 268 * i))
     board.save(output / "five-view-original-prior-ab.png")
     report = {
         "scene": "Real Redwood Bedroom, 640x480 measured RGB-D",
         "comparison": "500k vs original-resolution EXISTING SCAN PRIOR; identical measured detail",
         "geometry_source": "Open3D BedroomRGBDImages.reconstruction_path",
         "prior_is_independent_video_reconstruction": False,
-        "original_prior_faces": original_faces,
-        "decimated_prior_faces": len(low.triangles),
-        "measured_detail_faces_in_both": len(selected),
-        "original_prior_vertices_colored_from_measured": int(full_support.sum()),
-        "decimated_prior_vertices_colored_from_measured": int(low_support.sum()),
-        "original_prior_vertices_unknown_color": int((~full_support).sum()),
+        "original_prior_faces": prior_faces,
+        "decimated_prior_faces": low_faces,
+        "measured_detail_faces_in_both": detail_faces,
+        "original_prior_vertices_colored_from_measured": prior_color_hits,
+        "decimated_prior_vertices_colored_from_measured": low_color_hits,
+        "original_prior_vertices_unknown_color": unknown_prior_colors,
         "registration": registration,
         "robust_point_to_plane_refinement": refinement,
         "full_mesh": "original-resolution-PRIOR-plus-measured.glb",
@@ -181,8 +252,8 @@ def run(observed_path, cache, output):
         "old_desk": "FAIL 16.7779cm > 15cm unchanged",
     }
     (output / "result.json").write_text(json.dumps(report, indent=2) + "\n")
-    print(json.dumps({"original_prior_faces": original_faces,
-                      "detail_faces": len(selected), "views": len(views)}), flush=True)
+    print(json.dumps({"original_prior_faces": prior_faces,
+                      "detail_faces": detail_faces, "views": len(views)}), flush=True)
     return report
 
 
