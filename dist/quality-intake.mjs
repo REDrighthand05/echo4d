@@ -18,9 +18,16 @@ export function parseIntake(value) {
           (sha) => sha != null && (typeof sha !== "string" || !SHA256.test(sha)))) {
       throw new Error("证据槽位重复、缺失或 SHA-256 格式错误");
     }
+    // The two fields are separate claims about the *same* file. Never silently
+    // prefer one when a handoff carries contradictory hashes.
+    const observed = file.sha256?.toLowerCase() || null;
+    const carried = file.expected_sha256?.toLowerCase() || null;
+    if (observed && carried && observed !== carried) {
+      throw new Error("同一证据槽位的 SHA-256 与预期 SHA-256 冲突");
+    }
     seen.add(file.slot);
     expected[file.slot] = {
-      sha256: (file.sha256 || file.expected_sha256)?.toLowerCase() || null,
+      sha256: observed || carried,
       file_name: typeof (file.file_name || file.expected_file_name) === "string"
         ? (file.file_name || file.expected_file_name).slice(0, 256) : null
     };

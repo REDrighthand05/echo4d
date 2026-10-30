@@ -40,6 +40,12 @@ test("manifest handoff accepts eight unique slots but never treats them as resto
   handoff.files[0].sha256 = null;
   handoff.files[0].expected_sha256 = sha;
   assert.equal(parseIntake(handoff).expected["rgb-1"].sha256, sha);
+  const consistent = structuredClone(original);
+  consistent.files[0].expected_sha256 = sha.toUpperCase();
+  assert.equal(parseIntake(consistent).expected["rgb-1"].sha256, sha);
+  const conflicting = structuredClone(original);
+  conflicting.files[0].expected_sha256 = "b".repeat(64);
+  assert.throws(() => parseIntake(conflicting), /冲突/);
   const duplicate = structuredClone(original);
   duplicate.files[1].slot = "rgb-1";
   assert.throws(() => parseIntake(duplicate), /重复|缺失/);

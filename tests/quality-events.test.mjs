@@ -64,4 +64,9 @@ test('invalid manifests leave existing scene and expected hashes intact',async t
   const bad=manifest('discard');bad.files[1].slot=bad.files[0].slot;
   await ui.host('importManifest').change(jsonFile(bad));
   assert.equal(ui.host('sceneId').value,'keep');assert.equal((await ui.export()).files[0].expected_sha256,'a'.repeat(64));
+  const contradictory=manifest('discard');contradictory.files[0].expected_sha256='c'.repeat(64);
+  await ui.host('importManifest').change(jsonFile(contradictory));
+  assert.match(ui.host('importStatus').textContent,/冲突/);
+  assert.equal(ui.host('sceneId').value,'keep');
+  assert.equal((await ui.export()).files[0].expected_sha256,'a'.repeat(64));
 });
