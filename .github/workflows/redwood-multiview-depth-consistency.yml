@@ -1,0 +1,58 @@
+name: Redwood measured multiview depth consistency A/B
+on:
+  push:
+    branches: [research/redwood-multiview-depth-consistency-20261030]
+    paths:
+      - tools/redwood_multiview_depth_consistency.py
+      - tests/python/test_redwood_multiview_depth_consistency.py
+      - .github/workflows/redwood-multiview-depth-consistency.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  measured-redwood-multiview:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install measured fusion and rendering engine
+        run: |
+          python -m pip install -r requirements.lock
+          python -m pip install --no-deps -e .
+          python -m pip install 'open3d==0.19.0' 'trimesh>=4,<5'
+      - name: Verify two-sided geometric depth evidence
+        env:
+          PYTHONPATH: tools
+        run: python -m pytest -q tests/python/test_redwood_multiview_depth_consistency.py
+      - name: Retrieve actual observed-only previous mesh for identical-view A/B
+        uses: actions/download-artifact@v4
+        with:
+          repository: REDrighthand05/echo4d
+          run-id: 40977533276
+          name: real-redwood-components-40977533276
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: source
+      - name: Fuse 600 native measured RGB-D frames with two-sided depth consistency
+        env:
+          PYTHONPATH: tools
+          OPENBLAS_NUM_THREADS: '1'
+          OMP_NUM_THREADS: '1'
+        run: |
+          python tools/redwood_multiview_depth_consistency.py \
+            --source-ply source/redwood-observed-components-cleaned.ply \
+            --cache "$RUNNER_TEMP/redwood-multiview" \
+            --output "$GITHUB_WORKSPACE/artifacts/redwood-multiview" \
+            --budget 600 \
+            --tolerance-m 0.08
+      - name: Upload real colored GLB, PLY and three recorded plus two free views
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: real-redwood-multiview-${{ github.run_id }}
+          path: artifacts/redwood-multiview/
+          retention-days: 14
+          if-no-files-found: warn
