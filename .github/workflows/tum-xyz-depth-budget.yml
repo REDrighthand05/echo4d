@@ -1,4 +1,4 @@
-name: TUM real measured depth budget 48 24 12
+name: TUM real measured depth budget 48 24 12 6 3
 
 on:
   push:
@@ -36,7 +36,7 @@ jobs:
         run: |
           python -m py_compile tools/tum_xyz_depth_budget_48_24_12.py
           python -m pytest -q tests/python/test_tum_xyz_depth_budget_48_24_12.py
-      - name: Run real TUM 48 versus 24 versus 12 measured depth Mesh
+      - name: Run real TUM 48 24 12 6 3 measured depth Mesh
         env:
           PYTHONPATH: tools
           OPENBLAS_NUM_THREADS: '1'
@@ -46,7 +46,7 @@ jobs:
           python tools/tum_xyz_depth_budget_48_24_12.py \
             --work "$RUNNER_TEMP/tum-xyz-depth-budget" \
             --output "$GITHUB_WORKSPACE/artifacts/tum-xyz-depth-budget"
-      - name: Verify three real exported GLBs and five visual comparisons
+      - name: Verify five real exported GLBs and five visual comparisons
         run: |
           python - <<'PY'
           import json
@@ -54,15 +54,17 @@ jobs:
           p = Path("artifacts/tum-xyz-depth-budget")
           r = json.loads((p/"result.json").read_text())
           assert r["status"] == "real_meshes_and_five_views_exported_visual_review_pending", r
-          assert sorted(map(int, r["meshes"])) == [12, 24, 48]
+          assert sorted(map(int, r["meshes"])) == [3, 6, 12, 24, 48]
           assert len(r["views"]) == 5
+          assert set(r["sensor_depth_indices"]["3"]) <= set(r["sensor_depth_indices"]["6"])
+          assert set(r["sensor_depth_indices"]["6"]) <= set(r["sensor_depth_indices"]["12"])
           assert set(r["sensor_depth_indices"]["12"]) <= set(r["sensor_depth_indices"]["24"])
           assert set(r["sensor_depth_indices"]["24"]) <= set(r["sensor_depth_indices"]["48"])
           assert r["mesh_prior"] is False and r["learned_depth"] is False
-          for count in (48,24,12):
+          for count in (48,24,12,6,3):
               assert (p/f"tum-measured-{count}.glb").stat().st_size > 10000
-          assert (p/"tum-48-24-12-five-views.png").stat().st_size > 10000
-          print("Three real measured-depth GLBs and five fixed views exported")
+          assert (p/"tum-48-24-12-6-3-five-views.png").stat().st_size > 10000
+          print("Five real measured-depth GLBs and five fixed views exported")
           PY
       - name: Upload actual GLBs, original source RGB and 3+2 side-by-side views
         if: always()
