@@ -1,0 +1,49 @@
+name: TUM Freiburg1 Desk real measured Mesh 160 vs 320
+
+on:
+  push:
+    branches: [research/tum-desk-known-pose-open3d-20261030]
+    paths:
+      - tools/tum_desk_known_pose_open3d.py
+      - tests/python/test_tum_desk_known_pose_open3d.py
+      - .github/workflows/tum-desk-known-pose-open3d.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  real-desk-mesh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install project and pinned Open3D
+        run: |
+          python -m pip install -r requirements.lock
+          python -m pip install --no-deps -e .
+          python -m pip install 'open3d==0.19.0' 'trimesh>=4,<5'
+      - name: Verify intrinsics, measured frame split and fixed cameras
+        env:
+          PYTHONPATH: tools
+        run: python -m pytest -q tests/python/test_tum_desk_known_pose_open3d.py
+      - name: Reconstruct second REAL TUM Desk scene from measured depth and reference poses
+        env:
+          PYTHONPATH: tools
+          OPENBLAS_NUM_THREADS: '1'
+          OMP_NUM_THREADS: '2'
+        run: |
+          python tools/tum_desk_known_pose_open3d.py \
+            --work "$RUNNER_TEMP/tum-desk-open3d" \
+            --output "$GITHUB_WORKSPACE/artifacts/tum-desk-open3d"
+      - name: Preserve two real color GLBs, original photos, five camera views, failures
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tum-desk-real-160-vs-320-${{ github.run_id }}
+          path: artifacts/tum-desk-open3d/
+          retention-days: 14
+          if-no-files-found: warn
