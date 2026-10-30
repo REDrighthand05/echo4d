@@ -76,13 +76,28 @@ def official_assets(html, page=PAGE):
 
 
 def official_page():
-    for url in (PAGE, PAGE.replace("www.", "")):
+    # Redwood's legacy HTTPS endpoint currently presents an untrusted certificate
+    # to GitHub Actions. Never disable TLS verification. HTTP is a last-resort
+    # *index-only* fallback: no downloaded sensor data or executable code uses it.
+    # Asset downloads below still require independently verified HTTPS.
+    urls = (PAGE, PAGE.replace("www.", ""),
+            "http://redwood-data.org/indoor_lidar_rgbd/download.html")
+    for url in urls:
         try:
-            with urlopen(Request(url, headers={"User-Agent": "Echo4D/1.0"}), timeout=90) as r:
-                return r.read(2_000_000).decode("utf-8")
+            with urlopen(Request(url, headers={"User-Agent": "Echo4D/1.0"}), timeout=30) as r:
+                if url.startswith("http://") and urlparse(r.geturl()).scheme != "http":
+                    print("Index HTTP fallback redirected to", r.geturl(), flush=True)
+                html = r.read(2_000_001)
+                if len(html) > 2_000_000:
+                    raise DataError("Oversized official index")
+                decoded = html.decode("utf-8")
+                # Do not accept an arbitrary page returned by a broken proxy.
+                official_assets(decoded)
+                print("Official Boardroom index retrieved from", r.geturl(), flush=True)
+                return decoded
         except Exception as e:
-            print("Official index attempt:", str(e), flush=True)
-    raise DataError("Official Boardroom index unavailable")
+            print("Official index attempt", url, "failed:", str(e), flush=True)
+    raise DataError("Official Boardroom index unavailable (TLS verified; HTTP index fallback failed)")
 
 
 def download(role, url, path):
