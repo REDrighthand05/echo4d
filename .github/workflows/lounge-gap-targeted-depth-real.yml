@@ -1,0 +1,48 @@
+name: Real Lounge measured depth gap-targeted views 144 vs 216
+on:
+  push:
+    branches: [research/lounge-depth-gap-views-20261031]
+    paths:
+      - tools/lounge_gap_targeted_depth_real.py
+      - tests/python/test_lounge_gap_targeted_depth_real.py
+      - .github/workflows/lounge-gap-targeted-depth-real.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  real-lounge-depth-gap:
+    runs-on: ubuntu-latest
+    timeout-minutes: 110
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install pinned reconstruction stack
+        run: |
+          python -m pip install -r requirements.lock
+          python -m pip install --no-deps -e .
+          python -m pip install 'open3d==0.19.0' 'trimesh>=4,<5'
+      - name: Test depth gap semantics
+        env:
+          PYTHONPATH: tools
+        run: python -m pytest -q tests/python/test_lounge_gap_targeted_depth_real.py
+      - name: Reconstruct real Lounge 144 vs gap-selected 216 RGB-D cameras
+        env:
+          PYTHONPATH: tools
+          OPENBLAS_NUM_THREADS: '1'
+          OMP_NUM_THREADS: '2'
+        run: |
+          python tools/lounge_gap_targeted_depth_real.py \
+            --work "$RUNNER_TEMP/lounge-gap-views" \
+            --output "$GITHUB_WORKSPACE/artifacts/lounge-gap-views"
+      - name: Upload real GLBs and 3 recorded plus 2 free views even on failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lounge-real-depth-gap-144-vs-216
+          path: artifacts/lounge-gap-views/
+          retention-days: 14
+          if-no-files-found: warn
