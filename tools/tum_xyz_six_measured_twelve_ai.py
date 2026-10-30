@@ -169,6 +169,7 @@ def main():
     receipt = {
         "status": "running", "scene": "TUM Freiburg1 XYZ", "source": URL,
         "base": "PR #167 -> #165 -> #164 -> high-info #161",
+        "commands": [],
         "run_url": f"https://github.com/{os.getenv('GITHUB_REPOSITORY')}/actions/runs/{os.getenv('GITHUB_RUN_ID')}"
         if os.getenv("GITHUB_RUN_ID") else None,
     }
