@@ -1,0 +1,49 @@
+name: TUM real measured RGB-D 320 Open3D fine color mesh
+
+on:
+  push:
+    branches: [research/tum-xyz-open3d-320-measured-20261030]
+    paths:
+      - tools/tum_xyz_open3d_320.py
+      - tests/python/test_tum_xyz_open3d_320.py
+      - .github/workflows/tum-xyz-open3d-320.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  measured-depth-mesh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install geometry and project
+        run: |
+          python -m pip install -r requirements.lock
+          python -m pip install --no-deps -e .
+          python -m pip install 'open3d==0.19.0' 'trimesh>=4,<5'
+      - name: Test camera ray calibration
+        env:
+          PYTHONPATH: tools
+        run: python -m pytest -q tests/python/test_tum_xyz_open3d_320.py
+      - name: Download official measured TUM RGB-D, fuse 48 frames at 160 and 320, export 5 views
+        env:
+          PYTHONPATH: tools
+          OPENBLAS_NUM_THREADS: '1'
+          OMP_NUM_THREADS: '2'
+        run: |
+          python tools/tum_xyz_open3d_320.py \
+            --work "$RUNNER_TEMP/tum-xyz-320" \
+            --output "$GITHUB_WORKSPACE/artifacts/tum-xyz-320"
+      - name: Upload real colored GLBs, original RGBs and 3+2 comparisons
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tum-xyz-measured-320-${{ github.run_id }}
+          path: artifacts/tum-xyz-320/
+          retention-days: 14
+          if-no-files-found: warn
