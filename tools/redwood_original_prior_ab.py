@@ -41,6 +41,53 @@ def transfer_colors_chunked(prior, measured, max_distance=.09, chunk=50000):
     return result, supported
 
 
+
+def refine_registered_prior(prior, measured, initial, o3d):
+    """Conservative point-to-plane refinement of the supplied scan PRIOR.
+
+    Refine a coarse rigid registration against actual measured RGB-D geometry.
+    Never deform the source mesh, and reject corrections without improved
+    geometric agreement on the same sampled point clouds.
+    """
+    from redwood_prior_gapfill import as_cloud
+    reg = o3d.pipelines.registration
+    o3d.utility.random.seed(21)
+    source, target = as_cloud(prior, o3d), as_cloud(measured, o3d)
+    start = np.asarray(initial, dtype=np.float64)
+    baseline = reg.evaluate_registration(source, target, .12, start)
+    try:
+        estimate = reg.TransformationEstimationPointToPlane(
+            reg.TukeyLoss(k=.08))
+        fitted = reg.registration_icp(
+            source, target, .12, start, estimate,
+            reg.ICPConvergenceCriteria(max_iteration=35))
+    except (RuntimeError, ValueError):
+        return start, {"accepted": False, "reason": "robust ICP unavailable"}
+    candidate = np.asarray(fitted.transformation, dtype=np.float64)
+    delta = candidate @ np.linalg.inv(start)
+    translation = float(np.linalg.norm(delta[:3, 3]))
+    angle = float(np.rad2deg(np.arccos(np.clip(
+        (np.trace(delta[:3, :3]) - 1) / 2, -1, 1))))
+    before_fitness = float(baseline.fitness)
+    before_rmse = float(baseline.inlier_rmse)
+    after_fitness = float(fitted.fitness)
+    after_rmse = float(fitted.inlier_rmse)
+    accepted = (
+        np.isfinite(candidate).all()
+        and np.allclose(candidate[3], [0, 0, 0, 1], atol=1e-5)
+        and np.allclose(candidate[:3, :3].T @ candidate[:3, :3],
+                        np.eye(3), atol=1e-3)
+        and translation <= .08 and angle <= 4.
+        and after_fitness >= max(.2, before_fitness - .015)
+        and after_rmse + .002 <= before_rmse
+    )
+    return (candidate if accepted else start), {
+        "accepted": bool(accepted), "translation_delta_m": translation,
+        "rotation_delta_deg": angle, "before_fitness": before_fitness,
+        "after_fitness": after_fitness, "before_rmse_m": before_rmse,
+        "after_rmse_m": after_rmse,
+    }
+
 def run(observed_path, cache, output):
     import open3d as o3d
     from redwood_prior_gapfill import align_prior, load_measured
@@ -59,6 +106,7 @@ def run(observed_path, cache, output):
         raise RuntimeError("Expected original multi-million-face supplied PRIOR")
     original_faces = len(full.triangles)
     transform, registration = align_prior(full, observed, o3d)
+    transform, refinement = refine_registered_prior(full, observed, transform, o3d)
     full.transform(transform)
     low = full.simplify_quadric_decimation(500000)
     low.compute_vertex_normals()
@@ -116,6 +164,7 @@ def run(observed_path, cache, output):
         "decimated_prior_vertices_colored_from_measured": int(low_support.sum()),
         "original_prior_vertices_unknown_color": int((~full_support).sum()),
         "registration": registration,
+        "robust_point_to_plane_refinement": refinement,
         "full_mesh": "original-resolution-PRIOR-plus-measured.glb",
         "small_mesh": "500k-PRIOR-plus-measured.glb",
         "provenance": "First original_prior_faces faces in full mesh are supplied prior; remainder measured-only; all first decimated_prior_faces faces in small mesh prior",
