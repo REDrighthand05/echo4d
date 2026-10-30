@@ -1,0 +1,48 @@
+name: TUM Freiburg1 Room full-loop measured Mesh A/B
+on:
+  push:
+    branches: [research/tum-room-loop-coverage-20261031]
+    paths:
+      - tools/tum_room_loop_coverage.py
+      - tests/python/test_tum_room_loop_coverage.py
+      - .github/workflows/tum-room-loop-coverage.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  measured-room-loop-mesh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 100
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install measured-depth reconstruction dependencies
+        run: |
+          python -m pip install -r requirements.lock
+          python -m pip install --no-deps -e .
+          python -m pip install 'open3d==0.19.0' 'trimesh>=4,<5'
+      - name: Test source and camera-view guards
+        env:
+          PYTHONPATH: tools
+        run: python -m pytest -q tests/python/test_tum_room_loop_coverage.py
+      - name: Fuse real TUM Room 640 RGB-D with 320 measured depth and known poses
+        env:
+          PYTHONPATH: tools
+          OPENBLAS_NUM_THREADS: '1'
+          OMP_NUM_THREADS: '2'
+        run: |
+          python tools/tum_room_loop_coverage.py \
+            --work "$RUNNER_TEMP/tum-room-loop" \
+            --output "$GITHUB_WORKSPACE/artifacts/tum-room-loop"
+      - name: Preserve actual colored GLBs, real photos, five views and failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tum-room-loop-measured-real
+          path: artifacts/tum-room-loop/
+          retention-days: 14
+          if-no-files-found: warn
