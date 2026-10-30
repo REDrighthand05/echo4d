@@ -1,0 +1,74 @@
+name: TUM real measured depth budget 48 24 12
+
+on:
+  push:
+    branches: [research/tum-xyz-depth-48-24-12-20261030]
+    paths:
+      - tools/tum_xyz_depth_budget_48_24_12.py
+      - tests/python/test_tum_xyz_depth_budget_48_24_12.py
+      - .github/workflows/tum-xyz-depth-budget.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tum-xyz-depth-budget
+  cancel-in-progress: false
+
+jobs:
+  nested-measured-depth-mesh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install existing project and pinned CPU Open3D
+        run: |
+          python -m pip install -r requirements.lock
+          python -m pip install --no-deps -e .
+          python -m pip install 'open3d==0.19.0' 'trimesh>=4,<5'
+      - name: Test nested depth frame selection
+        env:
+          PYTHONPATH: tools
+        run: |
+          python -m py_compile tools/tum_xyz_depth_budget_48_24_12.py
+          python -m pytest -q tests/python/test_tum_xyz_depth_budget_48_24_12.py
+      - name: Run real TUM 48 versus 24 versus 12 measured depth Mesh
+        env:
+          PYTHONPATH: tools
+          OPENBLAS_NUM_THREADS: '1'
+          OMP_NUM_THREADS: '2'
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          python tools/tum_xyz_depth_budget_48_24_12.py \
+            --work "$RUNNER_TEMP/tum-xyz-depth-budget" \
+            --output "$GITHUB_WORKSPACE/artifacts/tum-xyz-depth-budget"
+      - name: Verify three real exported GLBs and five visual comparisons
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p = Path("artifacts/tum-xyz-depth-budget")
+          r = json.loads((p/"result.json").read_text())
+          assert r["status"] == "real_meshes_and_five_views_exported_visual_review_pending", r
+          assert sorted(map(int, r["meshes"])) == [12, 24, 48]
+          assert len(r["views"]) == 5
+          assert set(r["sensor_depth_indices"]["12"]) <= set(r["sensor_depth_indices"]["24"])
+          assert set(r["sensor_depth_indices"]["24"]) <= set(r["sensor_depth_indices"]["48"])
+          assert r["mesh_prior"] is False and r["learned_depth"] is False
+          for count in (48,24,12):
+              assert (p/f"tum-measured-{count}.glb").stat().st_size > 10000
+          assert (p/"tum-48-24-12-five-views.png").stat().st_size > 10000
+          print("Three real measured-depth GLBs and five fixed views exported")
+          PY
+      - name: Upload actual GLBs, original source RGB and 3+2 side-by-side views
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tum-depth-budget-${{ github.run_id }}
+          path: artifacts/tum-xyz-depth-budget/
+          retention-days: 14
+          if-no-files-found: warn
