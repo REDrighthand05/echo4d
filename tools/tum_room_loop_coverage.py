@@ -1,4 +1,4 @@
-"""Real TUM Freiburg1 ROOM full-loop RGB-D Mesh: early vs all camera coverage.
+"""Real TUM Freiburg1 ROOM RGB-D Mesh: 8-stride vs 4-stride measured coverage.
 
 Both meshes use measured RGB/depth, provided reference poses, calibrated 320x240,
 20mm TSDF. No existing scan prior, inferred depth, or geometry hallucination.
@@ -31,7 +31,7 @@ from tum_xyz_open3d_320 import export_glb, free_view, fuse, panel, render
 ROOT = "rgbd_dataset_freiburg1_room"
 URL = "https://cvg.cit.tum.de/rgbd/dataset/freiburg1/rgbd_dataset_freiburg1_room.tgz"
 HOSTS = {"cvg.cit.tum.de", "webshare.cvg.cit.tum.de", "vision.in.tum.de"}
-STRIDE, MAX_FRAMES, EARLY_FRAMES = 8, 220, 45
+STRIDE, MAX_FRAMES = 4, 440
 VOXEL_M, MAX_FACES, MAX_ARCHIVE = .020, 2_500_000, 2 * 1024**3
 
 
@@ -46,6 +46,15 @@ def choose_views(count: int, train: tuple[int, ...]) -> tuple[tuple[int, ...], t
     if len(set(recorded + free)) != 5:
         raise DataError("Viewpoints not distinct")
     return recorded, free
+
+
+def sparse_reference_indices(train: tuple[int, ...]) -> tuple[int, ...]:
+    """Every other dense observation reproduces the prior stride-8 source set.
+
+    Holdout is assigned on dense indices first. Since 2*i % 7 == 0 iff
+    i % 7 == 0, the sparse subset matches the previous 145-frame run.
+    """
+    return tuple(i for i in train if i % 2 == 0)
 
 
 def safe_member(member: tarfile.TarInfo) -> tuple[str, ...]:
@@ -165,24 +174,27 @@ def run(args, result):
     entries = list(recording.entries)
     train = tuple(i for i in range(len(entries)) if i % 7 != 0)
     holdout = tuple(i for i in range(len(entries)) if i % 7 == 0)
-    recorded, free = choose_views(len(entries), train)
+    sparse = sparse_reference_indices(train)
+    recorded, free = choose_views(len(entries), sparse)
     recording.entries = [entries[i] for i in train]
     frames = [frame for _, frame, _ in recording.iter_frames()]
-    if len(frames) != len(train) or len(frames) <= EARLY_FRAMES:
+    if len(frames) != len(train) or len(sparse) < 90:
         raise DataError("Measured frames lost before fusion")
     args.output.mkdir(parents=True, exist_ok=True)
     result.update({"scene": "TUM freiburg1_room office full loop",
                    "geometry_source": "measured RGB-D + TUM reference poses; NO scan prior",
                    "camera": camera.to_dict(), "training": list(train),
                    "holdout": list(holdout), "recorded_views": list(recorded),
-                   "free_views": list(free), "early_frames": EARLY_FRAMES,
-                   "full_loop_frames": len(frames), "voxel_m": VOXEL_M,
+                   "free_views": list(free), "sparse_frames": len(sparse), "sparse_indices": list(sparse),
+                   "dense_frames": len(frames), "voxel_m": VOXEL_M,
                    "visual_verdict": "PENDING human inspection; no free-orbit acceptance"})
     poses = {i: np.asarray(entries[i]["cameraToWorld"], dtype=np.float64).reshape(
         (4, 4), order="F") for i in set(recorded + free)}
     rendered = {}
     result["meshes"] = {}
-    for label, cohort in (("early", frames[:EARLY_FRAMES]), ("full-loop", frames)):
+    frame_by_index = dict(zip(train, frames))
+    sparse_frames = [frame_by_index[i] for i in sparse]
+    for label, cohort in (("sparse", sparse_frames), ("dense", frames)):
         mesh, _ = fuse(o3d, cohort, camera, pixel_stride=1, voxel=VOXEL_M)
         if len(mesh.triangles) > MAX_FACES:
             mesh = mesh.simplify_quadric_decimation(MAX_FACES)
@@ -207,24 +219,24 @@ def run(args, result):
             photo = img.convert("RGB")
             photo.save(args.output / f"real-room-{index:03d}-640x480.png")
             original = np.asarray(photo.resize((320, 240), Image.Resampling.LANCZOS))
-        filename = f"recorded-{index:03d}-early-vs-loop.png"
-        panels.append(panel(args.output / filename, [original, rendered["early"][n],
-                            rendered["full-loop"][n]],
-                            ["REAL RGB", "EARLY / 45", "FULL ROOM LOOP"]))
+        filename = f"recorded-{index:03d}-sparse-vs-dense.png"
+        panels.append(panel(args.output / filename, [original, rendered["sparse"][n],
+                            rendered["dense"][n]],
+                            ["REAL RGB", f"SPARSE / {len(sparse_frames)}", f"DENSE / {len(frames)}"]))
         result["views"].append({"kind": "recorded", "index": index, "file": filename})
     for j, index in enumerate(free):
         n = len(recorded) + j
-        filename = f"free-{j+1}-early-vs-loop.png"
-        blank = np.full_like(rendered["early"][n], 20)
+        filename = f"free-{j+1}-sparse-vs-dense.png"
+        blank = np.full_like(rendered["sparse"][n], 20)
         panels.append(panel(args.output / filename,
-                            [blank, rendered["early"][n], rendered["full-loop"][n]],
-                            ["FREE / no photo", "EARLY / 45", "FULL ROOM LOOP"]))
+                            [blank, rendered["sparse"][n], rendered["dense"][n]],
+                            ["FREE / no photo", f"SPARSE / {len(sparse_frames)}", f"DENSE / {len(frames)}"]))
         result["views"].append({"kind": "free", "index": index, "file": filename,
                                 "shift_m": .22, "yaw_deg": 12 * (-1 if j == 0 else 1)})
     board = Image.new("RGB", (960, 267 * len(panels)))
     for n, item in enumerate(panels):
         board.paste(item, (0, 267*n))
-    board.save(args.output / "room-five-view-early-vs-full-loop.png")
+    board.save(args.output / "room-five-view-sparse-vs-dense.png")
     result["issue_74"] = "FAIL unchanged"
     result["historical_desk"] = "FAIL 16.7779cm > 15cm unchanged"
 
