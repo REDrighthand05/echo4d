@@ -1,0 +1,80 @@
+name: TUM real six measured plus six CPU Depth Anything RGB depth meshes
+on:
+  push:
+    branches: [research/tum-xyz-six-measured-six-da2-20261030]
+    paths:
+      - tools/tum_xyz_six_measured_da6.py
+      - tests/python/test_tum_xyz_six_measured_da6.py
+      - .github/workflows/tum-xyz-six-measured-da6.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tum-xyz-six-measured-da6
+  cancel-in-progress: false
+
+jobs:
+  real-tum-six-plus-six:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install existing CPU reconstruction geometry stack
+        run: |
+          python -m pip install -r requirements.lock
+          python -m pip install --no-deps -e .
+          python -m pip install 'open3d==0.19.0' 'trimesh==4.11.1' 'pytest==8.4.2'
+      - name: Check real-depth reprojection and calibration without model or network
+        env:
+          PYTHONPATH: tools
+        run: |
+          python -m py_compile tools/tum_xyz_six_measured_da6.py
+          python -m pytest -q tests/python/test_tum_xyz_six_measured_da6.py
+          python tools/tum_xyz_six_measured_da6.py --self-test
+      - name: Install same verified CPU Depth Anything V2 Small runtime as PR 157
+        run: |
+          python -m pip install 'torch==2.5.1+cpu' --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install 'transformers==4.53.3' 'huggingface_hub==0.34.4'
+      - name: Run actual TUM RGB-D six-only versus six plus six inferred RGB depth
+        env:
+          PYTHONPATH: tools
+          OMP_NUM_THREADS: '2'
+          OPENBLAS_NUM_THREADS: '1'
+          QT_QPA_PLATFORM: offscreen
+          HF_HUB_DISABLE_XET: '1'
+        run: |
+          python tools/tum_xyz_six_measured_da6.py \
+            --work "$RUNNER_TEMP/tum-xyz-six-plus-six" \
+            --output "$GITHUB_WORKSPACE/artifacts/tum-xyz-six-plus-six"
+      - name: Reopen and verify two real colored GLBs and fixed five-view board
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          import trimesh
+          p = Path("artifacts/tum-xyz-six-plus-six")
+          r = json.loads((p/"result.json").read_text())
+          assert r["status"] == "REAL_TWO_MESHES_EXPORTED_VISUAL_REVIEW_PENDING", r
+          assert len(r["measured_indices"]) == 6 and len(r["rgb_only_predicted_indices"]) == 6
+          assert not set(r["measured_indices"]) & set(r["rgb_only_predicted_indices"])
+          assert r["target_sensor_depth_read"] is False and r["mesh_prior"] is False
+          assert len(r["predictions"]) == 6 and len(r["views"]) == 5
+          for name in ("tum-measured6-control.glb", "tum-measured6-plus-da6.glb"):
+              mesh = trimesh.load(str(p/name), force="mesh", process=False)
+              assert len(mesh.faces) > 100 and mesh.visual.kind == "vertex"
+          assert (p/"tum-six-vs-six-plus-da6-five-views.png").stat().st_size > 10000
+          print("Two real colored meshes and three recorded plus two free views exported")
+          PY
+      - name: Upload original photos, both meshes, six inferred maps, and five-view A/B
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tum-six-measured-six-da2-${{ github.run_id }}
+          path: artifacts/tum-xyz-six-plus-six/
+          if-no-files-found: warn
+          retention-days: 30
