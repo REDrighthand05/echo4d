@@ -31,7 +31,7 @@ jobs:
           path: artifacts/early-colmap
       - name: Install CPU reconstruction and existing RGB stereo module
         run: |
-          python -m pip install 'open3d==0.19.0' 'trimesh==4.11.1' 'pillow==11.3.0' 'scipy==1.16.2' 'opencv-python-headless==4.12.0.88'
+          python -m pip install 'open3d==0.19.0' 'trimesh==4.11.1' 'pillow==11.3.0' 'scipy==1.16.2' 'scikit-image==0.25.2' 'opencv-python-headless==4.12.0.88'
           python -m pip install --no-deps -e .
           python -m py_compile tools/stanford_colmap_stereo6.py
           python tools/stanford_colmap_stereo6.py --self-test
