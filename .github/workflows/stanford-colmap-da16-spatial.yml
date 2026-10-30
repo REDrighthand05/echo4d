@@ -1,0 +1,107 @@
+name: Stanford Lounge nested 8 sensor + 16 CPU learned depths
+on:
+  push:
+    branches: [research/stanford-colmap300-da16-spatial-20261030]
+    paths:
+      - tools/stanford_colmap_da16_spatial.py
+      - .github/workflows/stanford-colmap-da16-spatial.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: stanford-colmap-da16-spatial
+  cancel-in-progress: false
+jobs:
+  real-room-mesh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Download same 300 RGB and independent 287 COLMAP poses
+        uses: actions/download-artifact@v4
+        with:
+          name: stanford-300rgb-early-overlap-30depth-40970565394
+          run-id: 40970565394
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: REDrighthand05/echo4d
+          path: artifacts/early-colmap
+      - name: Download unchanged eight real sensor depths and four metric anchors
+        uses: actions/download-artifact@v4
+        with:
+          name: stanford-eight-measured-control-41000309095
+          run-id: 41000309095
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: REDrighthand05/echo4d
+          path: artifacts/eight-measured-control
+      - name: Download original two CPU-predicted target inputs
+        uses: actions/download-artifact@v4
+        with:
+          name: stanford-eight-da2-41011113006
+          run-id: 41011113006
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: REDrighthand05/echo4d
+          path: artifacts/eight-da2
+      - name: Download prior 8+8 real GLB for A/B ONLY
+        uses: actions/download-artifact@v4
+        with:
+          name: stanford-eight-da8-41023499444
+          run-id: 41023499444
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: REDrighthand05/echo4d
+          path: artifacts/eight-da8
+      - name: Install pinned CPU geometry and run adapter tests
+        run: |
+          python -m pip install 'open3d==0.19.0' 'trimesh==4.11.1' 'pillow==11.3.0' 'scipy==1.16.2' 'scikit-image==0.25.2' 'opencv-python-headless==4.12.0.88'
+          python -m pip install --no-deps -e .
+          python -m py_compile tools/stanford_colmap_da16_spatial.py
+          python tools/stanford_colmap_da16_spatial.py --self-test
+      - name: Install same pinned Apache-2.0 DA2 Small CPU inference
+        run: |
+          python -m pip install 'torch==2.5.1+cpu' --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install 'transformers==4.53.3' 'huggingface_hub==0.34.4'
+      - name: Generate new Mesh with eight real plus sixteen RGB-predicted depths
+        env:
+          QT_QPA_PLATFORM: offscreen
+          OMP_NUM_THREADS: '2'
+          OPENBLAS_NUM_THREADS: '1'
+        run: |
+          python tools/stanford_colmap_da16_spatial.py \
+            --upstream artifacts/early-colmap \
+            --control artifacts/eight-measured-control \
+            --da2 artifacts/eight-da2 \
+            --da8 artifacts/eight-da8 \
+            --output artifacts/eight-da16
+      - name: Verify real GLB and same-camera three-plus-two visual comparison
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path('artifacts/eight-da16')
+          r=json.loads((p/'receipt.json').read_text())
+          assert r['status']=='REAL_MESH_GENERATED_VISUAL_REVIEW_REQUIRED',r
+          assert (r['input_rgb'],r['registered_rgb'])==(300,287)
+          assert (r['measured_depth_maps'],r['inferred_depth_maps'])==(8,16)
+          assert r['added_rgb_only_depth_maps']==8
+          assert len(r['new_predicted_samples'])==14
+          assert len(list(p.glob('inferred-*-mm.png')))==16
+          assert not r['prior_mesh'] and not r['ground_truth_poses'] and not r['gpu']
+          assert r['old_glb_used_as_reconstruction_prior'] is False
+          for name in ('measured8_da16.glb','source-da8-vs-da16-3plus2.png'):
+              assert (p/name).stat().st_size > 10000,name
+          print('REAL 8+16 MESH READY FOR HUMAN VISUAL REVIEW')
+          PY
+      - name: Preserve real GLB, original images, predicted maps, fixed five-view A/B
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stanford-eight-da16-${{ github.run_id }}
+          path: |
+            artifacts/eight-da16/receipt.json
+            artifacts/eight-da16/*.glb
+            artifacts/eight-da16/*.png
+          if-no-files-found: warn
+          retention-days: 30
