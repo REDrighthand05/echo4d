@@ -1,0 +1,49 @@
+name: TUM Freiburg1 Desk real lens rectification A/B
+
+on:
+  push:
+    branches: [research/tum-desk-lens-rectification-20261030]
+    paths:
+      - tools/tum_desk_lens_rectification.py
+      - tests/python/test_tum_desk_lens_rectification.py
+      - .github/workflows/tum-desk-lens-rectification.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  real-desk-lens-mesh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies and explicit OpenCV remapper
+        run: |
+          python -m pip install -r requirements.lock
+          python -m pip install --no-deps -e .
+          python -m pip install 'open3d==0.19.0' 'trimesh>=4,<5' 'opencv-python-headless==4.10.0.84'
+      - name: Check registered RGB-D geometry and camera distortion mapping
+        env:
+          PYTHONPATH: tools
+        run: python -m pytest -q tests/python/test_tum_desk_lens_rectification.py
+      - name: Run real measured RGB-D same-frame TSDF A/B
+        env:
+          PYTHONPATH: tools
+          OPENBLAS_NUM_THREADS: '1'
+          OMP_NUM_THREADS: '2'
+        run: |
+          python tools/tum_desk_lens_rectification.py \
+            --work "$RUNNER_TEMP/tum-desk-lens" \
+            --output "$GITHUB_WORKSPACE/artifacts/tum-desk-lens"
+      - name: Preserve actual GLBs, original and rectified photos, five views and failures
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tum-desk-lens-real-${{ github.run_id }}
+          path: artifacts/tum-desk-lens/
+          retention-days: 14
+          if-no-files-found: warn
