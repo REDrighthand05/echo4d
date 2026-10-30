@@ -1,0 +1,97 @@
+name: Stanford Lounge fixed eight sensor depths plus eight CPU learned RGB depths
+on:
+  push:
+    branches: [research/stanford-colmap300-da8-spatial-20261030]
+    paths:
+      - tools/stanford_colmap_da8_spatial.py
+      - .github/workflows/stanford-colmap-da8-spatial.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: stanford-colmap-da8-spatial
+  cancel-in-progress: false
+jobs:
+  real-room-mesh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Reuse frozen 300 original RGB and independently estimated 287 COLMAP poses
+        uses: actions/download-artifact@v4
+        with:
+          name: stanford-300rgb-early-overlap-30depth-40970565394
+          run-id: 40970565394
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: REDrighthand05/echo4d
+          path: artifacts/early-colmap
+      - name: Reuse eight measured depth control and four metric anchors
+        uses: actions/download-artifact@v4
+        with:
+          name: stanford-eight-measured-control-41000309095
+          run-id: 41000309095
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: REDrighthand05/echo4d
+          path: artifacts/eight-measured-control
+      - name: Download previous two-prediction GLB as comparison only
+        uses: actions/download-artifact@v4
+        with:
+          name: stanford-eight-da2-41011113006
+          run-id: 41011113006
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: REDrighthand05/echo4d
+          path: artifacts/eight-da2
+      - name: Install pinned CPU geometry and test adapter
+        run: |
+          python -m pip install 'open3d==0.19.0' 'trimesh==4.11.1' 'pillow==11.3.0' 'scipy==1.16.2' 'scikit-image==0.25.2' 'opencv-python-headless==4.12.0.88'
+          python -m pip install --no-deps -e .
+          python -m py_compile tools/stanford_colmap_da8_spatial.py
+          python tools/stanford_colmap_depthanything2.py --self-test
+          python tools/stanford_colmap_da8_spatial.py --self-test
+      - name: Install pinned Apache-2.0 Depth Anything V2 Small CPU runtime
+        run: |
+          python -m pip install 'torch==2.5.1+cpu' --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install 'transformers==4.53.3' 'huggingface_hub==0.34.4'
+      - name: Predict eight RGB depths and reconstruct a NEW 8 sensor plus 8 learned Mesh
+        env:
+          QT_QPA_PLATFORM: offscreen
+          OMP_NUM_THREADS: '2'
+          OPENBLAS_NUM_THREADS: '1'
+        run: |
+          python tools/stanford_colmap_da8_spatial.py \
+            --upstream artifacts/early-colmap \
+            --control artifacts/eight-measured-control \
+            --da2 artifacts/eight-da2 \
+            --output artifacts/eight-da8
+      - name: Check actual GLB, predictions, five fixed camera views and provenance
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path('artifacts/eight-da8')
+          r=json.loads((p/'receipt.json').read_text())
+          assert r['status']=='REAL_MESH_GENERATED_VISUAL_REVIEW_REQUIRED',r
+          assert r['input_rgb']==300 and r['registered_rgb']==287
+          assert r['measured_depth_maps']==8 and r['inferred_depth_maps']==8
+          assert len(r['new_predicted_samples'])==6 and len(r['inferred'])==8
+          assert len(list(p.glob('inferred-*-mm.png')))==8
+          assert not r['prior_mesh'] and not r['ground_truth_poses'] and not r['gpu']
+          for name in ('measured8_da8.glb','source-da2-vs-da8-3plus2.png'):
+              assert (p/name).stat().st_size>10000,name
+          print(json.dumps(r,indent=2))
+          PY
+      - name: Keep real colored Mesh, three recorded plus two free views and failure receipt
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stanford-eight-da8-${{ github.run_id }}
+          path: |
+            artifacts/eight-da8/receipt.json
+            artifacts/eight-da8/*.glb
+            artifacts/eight-da8/*.png
+          if-no-files-found: warn
+          retention-days: 30
