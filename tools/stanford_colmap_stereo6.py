@@ -234,36 +234,65 @@ def run(upstream, output):
 
         hybrid = fuse_hybrid(o3d, trimesh, views, shared, inferred, scale,
                              rgb_paths, depth_paths, output / "measured4_stereo6.glb")
-        receipt["stereo_trials"] = trials
-        receipt["actual_inferred_depth_maps"] = len(inferred)
-        receipt["measured10_sha256"] = sha256(output / "measured10.glb")
-        receipt["measured4_stereo6_sha256"] = sha256(output / "measured4_stereo6.glb")
+        # Second actual input budget: retain eight measured maps and replace
+        # only the two RGB-stereo predictions with most consistent pixels.
+        # Selection uses RGB matching quality only, never held-out depth.
+        best_two = sorted(receipt["inferred_frames"],
+                          key=lambda d: (-d["valid_fraction"],
+                                         d["replaced_measured_sample"]))[:2]
+        replaced_two = {f"{d['replaced_measured_sample']:06d}.png" for d in best_two}
+        measured8 = sorted(set(pose_names) - replaced_two)
+        inferred2 = {
+            f"{d['inferred_left_sample']:06d}.png":
+            inferred[f"{d['inferred_left_sample']:06d}.png"]
+            for d in best_two
+        }
+        if len(measured8) != 8 or len(inferred2) != 2:
+            raise RuntimeError("Eight measured plus two RGB-inferred budget violated")
+        hybrid2 = fuse_hybrid(o3d, trimesh, views, measured8, inferred2, scale,
+                              rgb_paths, depth_paths, output / "measured8_stereo2.glb")
+        receipt.update(
+            stereo_trials=trials, actual_inferred_depth_maps=len(inferred),
+            intermediate_measured_depth_maps=8,
+            intermediate_inferred_depth_maps=2,
+            intermediate_replaced_measured_samples=sorted(
+                int(Path(n).stem) for n in replaced_two),
+            measured10_sha256=sha256(output / "measured10.glb"),
+            measured4_stereo6_sha256=sha256(output / "measured4_stereo6.glb"),
+            measured8_stereo2_sha256=sha256(output / "measured8_stereo2.glb"))
         recorded, rays = five_rays(o3d, views, scale)
         labels = [f"recorded RGB sample {Path(v[0]).stem}" for v in recorded]
         labels += ["free room orbit A", "free room orbit B"]
-        panel = Image.new("RGB", (960, 5*270+30), (18,18,18))
-        draw = ImageDraw.Draw(panel)
-        for col, label in enumerate(("Original RGB", "10 measured", "4 measured + 6 RGB stereo")):
-            draw.text((col*320+6, 8), label, fill="white")
         receipt["same_ray_hit_percent"] = {}
-        for i, ray in enumerate(rays):
-            y = 30 + i*270
-            draw.text((6,y+3), labels[i], fill="white")
-            if i < 3:
-                with Image.open(rgb_paths[recorded[i][0]]) as photo:
-                    panel.paste(photo.convert("RGB").resize((320,240)), (0,y+26))
-            for col, (label, mesh) in enumerate(
-                    (("measured10", baseline), ("measured4_stereo6", hybrid)), 1):
-                rendered, coverage = render_rays(o3d, mesh, ray)
-                panel.paste(rendered, (col*320, y+26))
-                receipt["same_ray_hit_percent"].setdefault(label, []).append(coverage)
-        image_name = "source-measured10-vs-measured4-stereo6-3plus2.png"
-        panel.save(output / image_name)
+        for candidate_name, candidate_mesh, column_label, image_name in (
+            ("measured4_stereo6", hybrid, "4 measured + 6 RGB stereo",
+             "source-measured10-vs-measured4-stereo6-3plus2.png"),
+            ("measured8_stereo2", hybrid2, "8 measured + 2 RGB stereo",
+             "source-measured10-vs-measured8-stereo2-3plus2.png"),
+        ):
+            panel = Image.new("RGB", (960, 5*270+30), (18,18,18))
+            draw = ImageDraw.Draw(panel)
+            for col, label in enumerate(("Original RGB", "10 measured", column_label)):
+                draw.text((col*320+6, 8), label, fill="white")
+            for i, ray in enumerate(rays):
+                y = 30 + i*270
+                draw.text((6,y+3), labels[i], fill="white")
+                if i < 3:
+                    with Image.open(rgb_paths[recorded[i][0]]) as photo:
+                        panel.paste(photo.convert("RGB").resize((320,240)), (0,y+26))
+                for col, (label, mesh) in enumerate(
+                        (("measured10", baseline), (candidate_name, candidate_mesh)), 1):
+                    rendered, coverage = render_rays(o3d, mesh, ray)
+                    panel.paste(rendered, (col*320, y+26))
+                    receipt["same_ray_hit_percent"].setdefault(label, []).append(coverage)
+            panel.save(output / image_name)
         receipt.update(
             status="REAL_MESH_GENERATED_VISUAL_REVIEW_REQUIRED",
-            image=image_name, stereo_trials=trials,
+            image="source-measured10-vs-measured4-stereo6-3plus2.png",
+            intermediate_image="source-measured10-vs-measured8-stereo2-3plus2.png",
             recorded_samples=[int(Path(v[0]).stem) for v in recorded],
             visual_acceptance="PENDING human review; full room NOT established")
+
     except Exception as exc:
         receipt.update(status="FAIL", error=f"{type(exc).__name__}: {exc}",
                        stereo_trials=locals().get("trials", []))
