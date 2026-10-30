@@ -1,0 +1,43 @@
+name: Real Lounge measured-first PRIOR carving 3+2 Mesh A/B
+on:
+  push:
+    branches: [research/lounge-measured-first-carve-20261031]
+    paths:
+      - tools/lounge_measured_first_carve_real.py
+      - .github/workflows/lounge-measured-first-carve-real.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  lounge-carve-real:
+    runs-on: ubuntu-latest
+    timeout-minutes: 110
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install pinned reconstruction stack
+        run: |
+          python -m pip install -r requirements.lock
+          python -m pip install --no-deps -e .
+          python -m pip install 'open3d==0.19.0' 'trimesh>=4,<5'
+      - name: Run real Stanford Lounge measured-first vs prior-first five-view A/B
+        env:
+          PYTHONPATH: tools
+          OPENBLAS_NUM_THREADS: '1'
+          OMP_NUM_THREADS: '2'
+        run: |
+          python tools/lounge_measured_first_carve_real.py \
+            --work "$RUNNER_TEMP/lounge-measured-first" \
+            --output "$GITHUB_WORKSPACE/artifacts/lounge-carve-real"
+      - name: Upload 3 recorded and 2 free views, original photos, colored GLBs or failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lounge-measured-first-carve-real
+          path: artifacts/lounge-carve-real/
+          retention-days: 14
+          if-no-files-found: warn
