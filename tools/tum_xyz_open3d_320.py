@@ -1,4 +1,4 @@
-"""Real TUM Freiburg1 XYZ: measured-depth Open3D 320x240 color Mesh vs 160x120.
+"""Real TUM Freiburg1 XYZ: measured-depth Open3D 320x240 edge-guard A/B.
 Known TUM reference poses; no supplied mesh, no RGB-only reconstruction.
 48 fused frames; 12 excluded (indices divisible by five). Existing FAIL gates unchanged.
 """
@@ -52,7 +52,34 @@ def free_view(camera_to_world: np.ndarray, side: float) -> np.ndarray:
     return pose
 
 
-def fuse(o3d, frames, camera: Camera, *, pixel_stride: int, voxel: float):
+def suppress_flying_depth(depth: np.ndarray) -> tuple[np.ndarray, int]:
+    """Reject intermediate depth between two opposite, valid measurements.
+
+    Keep near foreground and far background endpoints of real silhouettes.
+    Only reject pixels whose left/right OR up/down neighbors straddle them
+    by at least 5cm each with a 16cm total jump. Never use invalid zeros as
+    evidence. This removes potential Kinect flying pixels, not entire edges.
+    """
+    if depth.ndim != 2:
+        raise ValueError("Expected 2D metric depth")
+    d = np.asarray(depth, dtype=np.float32)
+    p = np.pad(d, 1, mode="constant", constant_values=0.)
+    left, right = p[1:-1, :-2], p[1:-1, 2:]
+    up, down = p[:-2, 1:-1], p[2:, 1:-1]
+
+    def straddles(a, b):
+        near, far = np.minimum(a, b), np.maximum(a, b)
+        return ((a > 0) & (b > 0) & (far - near >= .16) &
+                (d - near >= .05) & (far - d >= .05))
+
+    rejected = (d > 0) & (straddles(left, right) | straddles(up, down))
+    cleaned = d.copy()
+    cleaned[rejected] = 0.
+    return np.ascontiguousarray(cleaned), int(np.count_nonzero(rejected))
+
+
+def fuse(o3d, frames, camera: Camera, *, pixel_stride: int, voxel: float,
+         edge_guard: bool = False):
     if pixel_stride not in (1, 2) or voxel <= 0:
         raise ValueError("Invalid fusion configuration")
     cam = camera if pixel_stride == 1 else camera.scaled(2)
@@ -61,6 +88,7 @@ def fuse(o3d, frames, camera: Camera, *, pixel_stride: int, voxel: float):
     volume = o3d.pipelines.integration.ScalableTSDFVolume(
         voxel_length=voxel, sdf_trunc=voxel * 3.5,
         color_type=o3d.pipelines.integration.TSDFVolumeColorType.RGB8)
+    removed = 0
     for i, frame in enumerate(frames):
         if pixel_stride == 1:
             depth, color = frame.depth, frame.color
@@ -70,6 +98,9 @@ def fuse(o3d, frames, camera: Camera, *, pixel_stride: int, voxel: float):
             raise DataError("Missing or uncalibrated RGB-D input")
         depth = np.ascontiguousarray(depth.astype(np.float32))
         depth[(depth < .2) | (depth > MAX_DEPTH)] = 0
+        if edge_guard:
+            depth, rejected = suppress_flying_depth(depth)
+            removed += rejected
         rgbd = o3d.geometry.RGBDImage.create_from_color_and_depth(
             o3d.geometry.Image(np.ascontiguousarray(color)),
             o3d.geometry.Image(depth), depth_scale=1.,
@@ -82,7 +113,7 @@ def fuse(o3d, frames, camera: Camera, *, pixel_stride: int, voxel: float):
     mesh.compute_vertex_normals()
     if len(mesh.triangles) < 100:
         raise RuntimeError("TSDF produced insufficient triangles")
-    return mesh
+    return mesh, removed
 
 
 def export_glb(mesh, path: Path):
@@ -167,12 +198,15 @@ def experiment(args, receipt):
     frames = list(frame for _, frame, _ in record.iter_frames())
     if len(frames) != 48:
         raise DataError("Expected 48 real depth frames and 12 untouched heldouts")
-    # Both volumes are reconstructed from the SAME 48 measured frames.
-    old = fuse(o3d, frames, record.camera, pixel_stride=2, voxel=.05)
-    new = fuse(o3d, frames, record.camera, pixel_stride=1, voxel=.018)
+    # Identical 48 measured frames, calibrated rays, 1.8cm voxels and poses.
+    # The edge guard is the ONLY changed geometry input in this A/B.
+    old, _ = fuse(o3d, frames, record.camera, pixel_stride=1, voxel=.018)
+    new, rejected = fuse(o3d, frames, record.camera, pixel_stride=1,
+                         voxel=.018, edge_guard=True)
+    print(f"Edge guard removed {rejected} intermediate depth samples", flush=True)
     args.output.mkdir(parents=True, exist_ok=True)
-    export_glb(old, args.output / "measured-160-coarse.glb")
-    export_glb(new, args.output / "measured-320-fine.glb")
+    export_glb(old, args.output / "measured-320-unguarded.glb")
+    export_glb(new, args.output / "measured-320-edge-guard.glb")
     print("Exported actual colored meshes", flush=True)
     views = []
     canvases = []
@@ -192,7 +226,7 @@ def experiment(args, receipt):
         name = f"recorded-{i:02d}-comparison.png"
         canvases.append(panel(args.output / name,
                               [photo, old_rgb, new_rgb],
-                              ["REAL RGB 640 source", "160 / 5cm TSDF", "320 / 1.8cm TSDF"]))
+                              ["REAL RGB 640 source", "320 unguarded", "320 edge guarded"]))
         views.append({"kind": "recorded", "index": i, "file": name})
         gc.collect()
     for side, index in ((-1., 19), (1., 39)):
@@ -204,19 +238,21 @@ def experiment(args, receipt):
         name = f"free-{'left' if side < 0 else 'right'}-comparison.png"
         canvases.append(panel(args.output / name,
                               [blank, old_rgb, new_rgb],
-                              ["FREE CAMERA / NO RGB", "160 / 5cm TSDF", "320 / 1.8cm TSDF"]))
+                              ["FREE CAMERA / NO RGB", "320 unguarded", "320 edge guarded"]))
         views.append({"kind": "free", "reference_index": index, "file": name,
                       "camera_shift_m": .22, "camera_yaw_deg": 12 * side})
         gc.collect()
     board = Image.new("RGB", (960, 267 * len(canvases)))
     for i, canvas in enumerate(canvases):
         board.paste(canvas, (0, 267 * i))
-    board.save(args.output / "five-view-measured-160-vs-320.png")
+    board.save(args.output / "five-view-measured-320-edge-guard-ab.png")
     receipt["meshes"] = {
-        "160x120_5cm": {"triangles": len(old.triangles),
-                         "vertices": len(old.vertices), "glb": "measured-160-coarse.glb"},
-        "320x240_1p8cm": {"triangles": len(new.triangles),
-                           "vertices": len(new.vertices), "glb": "measured-320-fine.glb"}}
+        "320x240_unguarded": {"triangles": len(old.triangles),
+                              "vertices": len(old.vertices), "glb": "measured-320-unguarded.glb"},
+        "320x240_edge_guard": {"triangles": len(new.triangles),
+                               "vertices": len(new.vertices), "glb": "measured-320-edge-guard.glb"}}
+    receipt["edge_guard_removed_samples"] = rejected
+    receipt["edge_guard_policy"] = "opposite-neighbor depth straddle, preserve near/far"
     receipt["views"] = views
     receipt["geometry_source"] = "TUM measured RGB-D + provided reference poses only; no scan prior"
     receipt["visual_verdict"] = "PENDING human review; counts do not imply quality"
