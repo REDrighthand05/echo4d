@@ -1,0 +1,48 @@
+name: Real Redwood Boardroom measured Mesh plus labeled PRIOR
+on:
+  push:
+    branches: [research/redwood-boardroom-prior-fusion-20261031]
+    paths:
+      - tools/redwood_boardroom_prior_fusion.py
+      - tests/python/test_redwood_boardroom_prior_fusion.py
+      - .github/workflows/redwood-boardroom-prior-fusion.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  boardroom-real-scene:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install mature reconstruction tools
+        run: |
+          python -m pip install -r requirements.lock
+          python -m pip install --no-deps -e .
+          python -m pip install 'open3d==0.19.0' 'trimesh>=4,<5'
+      - name: Test source and geometry input guards
+        env:
+          PYTHONPATH: tools
+        run: python -m pytest -q tests/python/test_redwood_boardroom_prior_fusion.py
+      - name: Download official REAL Boardroom RGB-D poses and existing PRIOR then fuse
+        env:
+          PYTHONPATH: tools
+          OPENBLAS_NUM_THREADS: '1'
+          OMP_NUM_THREADS: '2'
+        run: |
+          python tools/redwood_boardroom_prior_fusion.py \
+            --work "$RUNNER_TEMP/redwood-boardroom" \
+            --output "$GITHUB_WORKSPACE/artifacts/boardroom-real"
+      - name: Preserve actual GLBs three real photos and five fixed views or failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: boardroom-real-prior-mesh
+          path: artifacts/boardroom-real/
+          retention-days: 14
+          if-no-files-found: warn
