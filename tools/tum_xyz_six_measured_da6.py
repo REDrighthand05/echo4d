@@ -120,6 +120,8 @@ def calibrate_from_six(relative, measured_reprojection, *, support_radius=55):
     x, y = x[::3], y[::3]
     z = measured_reprojection[y, x].astype(np.float64)
     p = relative[y, x].astype(np.float64)
+    if np.std(p) < 1e-5:
+        raise RuntimeError("Relative depth cannot be calibrated: prediction is constant")
     A = np.column_stack((p, np.ones_like(p)))
     target = 1.0 / z
     weight = np.ones_like(z)
