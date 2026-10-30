@@ -1,0 +1,68 @@
+name: TUM Room reduce measured depth with pose coverage 145 to 72
+on:
+  push:
+    branches: [research/tum-room-pose-spread-depth72-20261031]
+    paths:
+      - tools/tum_room_pose_depth_ladder.py
+      - tests/python/test_tum_room_pose_depth_ladder.py
+      - .github/workflows/tum-room-pose-depth72.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  real-room-depth72:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install existing real measured-depth Mesh dependencies
+        run: |
+          python -m pip install -r requirements.lock
+          python -m pip install --no-deps -e .
+          python -m pip install 'open3d==0.19.0' 'trimesh>=4,<5' 'pytest==8.4.2'
+      - name: Test deterministic pose selection and original room source
+        env:
+          PYTHONPATH: tools
+        run: |
+          python -m py_compile tools/tum_room_pose_depth_ladder.py
+          python -m pytest -q tests/python/test_tum_room_pose_depth_ladder.py tests/python/test_tum_room_loop_coverage.py
+      - name: Reconstruct three real colored room GLBs at same metric scale
+        env:
+          PYTHONPATH: tools
+          OPENBLAS_NUM_THREADS: '1'
+          OMP_NUM_THREADS: '2'
+        run: |
+          python tools/tum_room_pose_depth_ladder.py \
+            --work "$RUNNER_TEMP/tum-room-pose-depth72" \
+            --output "$GITHUB_WORKSPACE/artifacts/tum-room-pose-depth72"
+      - name: Reopen models and verify actual source photos and five views
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          from PIL import Image
+          import trimesh
+          root=Path('artifacts/tum-room-pose-depth72')
+          data=json.loads((root/'result.json').read_text())
+          assert data['status']=='real_glbs_and_five_views_exported_visual_review_pending',data
+          assert {k:len(v) for k,v in data['cohorts'].items()} == {'reference145':145,'uniform72':72,'pose72':72}
+          assert len(data['views'])==5
+          for item in data['meshes'].values():
+              mesh=trimesh.load(str(root/item['glb']),force='mesh',process=False)
+              assert len(mesh.faces)>1000 and mesh.visual.kind=='vertex'
+          assert Image.open(root/'room-depth145-vs-uniform72-vs-pose72-five-views.png').size == (1280,1335)
+          assert len(list(root.glob('source-*-640x480.png')))==3
+          PY
+      - name: Preserve actual GLBs, original RGB and three-plus-two comparisons
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tum-room-pose-depth72-real
+          path: artifacts/tum-room-pose-depth72/
+          retention-days: 30
+          if-no-files-found: warn
