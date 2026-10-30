@@ -1,6 +1,6 @@
 """Measured-depth removal on the same real TUM Freiburg1 XYZ scene as #161.
 
-Compare 48 / 24 / 12 *real sensor depth frames* at identical 320x240
+Compare 48 / 24 / 12 / 6 / 3 *real sensor depth frames* at identical 320x240
 calibration, reference camera poses, Open3D TSDF voxel size and five cameras.
 The full RGB source remains available; RGB-only frames are NOT inferred here.
 No old mesh is used as a reconstruction prior. Full-room status remains FAIL.
@@ -26,7 +26,7 @@ from tum_xyz_open3d_320 import (
 )
 
 VOXEL_M = .018
-DEPTH_BUDGETS = (48, 24, 12)
+DEPTH_BUDGETS = (48, 24, 12, 6, 3)
 
 
 def diverse_pose_order(entries, candidate_indices, *, orientation_m=.18):
@@ -90,7 +90,8 @@ def experiment(args, receipt):
     all_entries = record.entries
     order = diverse_pose_order(all_entries, TRAIN_INDICES)
     chosen = {budget: tuple(sorted(order[:budget])) for budget in DEPTH_BUDGETS}
-    assert set(chosen[12]).issubset(chosen[24]) and set(chosen[24]).issubset(chosen[48])
+    assert all(set(chosen[small]).issubset(chosen[large])
+               for small, large in ((3, 6), (6, 12), (12, 24), (24, 48)))
     assert set(chosen[48]) == set(TRAIN_INDICES)
     receipt["sensor_depth_indices"] = {str(k): list(v) for k, v in chosen.items()}
     receipt["depth_selection"] = "reference-pose farthest-point nested; 0.18 m/radian"
@@ -136,9 +137,9 @@ def experiment(args, receipt):
         original.save(args.output / f"real-original-{index:02d}-640x480.png")
         rgb = np.asarray(original.resize((320, 240), Image.Resampling.LANCZOS))
         rendered = [render(o3d, meshes[b], record.camera, pose) for b in DEPTH_BUDGETS]
-        name = f"recorded-{index:02d}-48-24-12.png"
+        name = f"recorded-{index:02d}-48-24-12-6-3.png"
         rows.append(panel(args.output / name, [rgb] + rendered,
-                          ["REAL RGB 640 source", "48 sensor", "24 sensor", "12 sensor"]))
+                          ["REAL RGB 640 source"] + [f"{b} sensor" for b in DEPTH_BUDGETS]))
         views.append({"type": "recorded", "index": index, "file": name,
                       "depth_frame_is_training": {str(b): index in chosen[b] for b in DEPTH_BUDGETS}})
         gc.collect()
@@ -146,16 +147,16 @@ def experiment(args, receipt):
         pose = free_view(np.asarray(all_entries[index]["cameraToWorld"]).reshape(
             4, 4, order="F"), side)
         rendered = [render(o3d, meshes[b], record.camera, pose) for b in DEPTH_BUDGETS]
-        name = f"free-{'left' if side < 0 else 'right'}-48-24-12.png"
+        name = f"free-{'left' if side < 0 else 'right'}-48-24-12-6-3.png"
         rows.append(panel(args.output / name, [np.full_like(rendered[0], 20)] + rendered,
-                          ["FREE VIEW (no photo)", "48 sensor", "24 sensor", "12 sensor"]))
+                          ["FREE VIEW (no photo)"] + [f"{b} sensor" for b in DEPTH_BUDGETS]))
         views.append({"type": "free", "index": index, "file": name,
                       "lateral_offset_m": .22, "yaw_deg": 12 * side})
         gc.collect()
-    board = Image.new("RGB", (1280, 267 * len(rows)))
+    board = Image.new("RGB", (320 * (1 + len(DEPTH_BUDGETS)), 267 * len(rows)))
     for i, row in enumerate(rows):
         board.paste(row, (0, i * 267))
-    board.save(args.output / "tum-48-24-12-five-views.png")
+    board.save(args.output / "tum-48-24-12-6-3-five-views.png")
     receipt["views"] = views
     receipt["visual_verdict"] = "PENDING actual human inspection of 3+2 images"
     receipt["full_room"] = "FAIL until continuous scene and free traversal validated"
