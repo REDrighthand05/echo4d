@@ -1,0 +1,57 @@
+name: Redwood actual RGB-D plus explicitly labeled existing PRIOR hybrid
+on:
+  push:
+    branches: [research/redwood-prior-measured-hybrid-20261030]
+    paths:
+      - tools/redwood_prior_measured_hybrid.py
+      - tests/python/test_redwood_prior_measured_hybrid.py
+      - .github/workflows/redwood-prior-measured-hybrid.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  actual-room-hybrid:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install measured RGB-D and prior surface geometry tools
+        run: |
+          python -m pip install -r requirements.lock
+          python -m pip install --no-deps -e .
+          python -m pip install 'open3d==0.19.0' 'trimesh>=4,<5'
+      - name: Check observed-only detail selection guards
+        env:
+          PYTHONPATH: tools
+        run: python -m pytest -q tests/python/test_redwood_prior_measured_hybrid.py
+      - name: Download actual measured-only 600-frame RGB-D Mesh
+        uses: actions/download-artifact@v4
+        with:
+          repository: REDrighthand05/echo4d
+          run-id: 40983846102
+          name: real-redwood-multiview-40983846102
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: source
+      - name: Align existing room scan PRIOR and add separately labeled measured-only detail
+        env:
+          PYTHONPATH: tools
+          OPENBLAS_NUM_THREADS: '1'
+          OMP_NUM_THREADS: '1'
+        run: |
+          python tools/redwood_prior_measured_hybrid.py \
+            --observed source/redwood-multiview-observed.ply \
+            --cache "$RUNNER_TEMP/redwood-prior-measured" \
+            --output "$GITHUB_WORKSPACE/artifacts/prior-measured" \
+            --prior-faces 500000
+      - name: Preserve real colored GLB, provenance and five visual comparisons
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: redwood-prior-measured-hybrid-${{ github.run_id }}
+          path: artifacts/prior-measured/
+          retention-days: 14
+          if-no-files-found: warn
