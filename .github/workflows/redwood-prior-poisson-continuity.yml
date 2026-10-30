@@ -1,0 +1,58 @@
+name: Redwood real prior-derived Poisson continuous-room A/B
+on:
+  push:
+    branches: [research/redwood-prior-poisson-continuity-20261030]
+    paths:
+      - tools/redwood_prior_poisson_continuity.py
+      - tests/python/test_redwood_prior_poisson_continuity.py
+      - .github/workflows/redwood-prior-poisson-continuity.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  real-redwood-continuity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install real geometry engines
+        run: |
+          python -m pip install -r requirements.lock
+          python -m pip install --no-deps -e .
+          python -m pip install 'open3d==0.19.0' 'trimesh>=4,<5'
+      - name: Check geometry provenance rules
+        env:
+          PYTHONPATH: tools
+        run: python -m pytest -q tests/python/test_redwood_prior_poisson_continuity.py
+      - name: Download registered real room scan PRIOR and measured detail
+        uses: actions/download-artifact@v4
+        with:
+          repository: REDrighthand05/echo4d
+          run-id: 41017691224
+          name: redwood-original-prior-41017691224
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: source
+      - name: Run Poisson surface continuity and render three original cameras plus two free cameras
+        env:
+          PYTHONPATH: tools
+          OPENBLAS_NUM_THREADS: '1'
+          OMP_NUM_THREADS: '2'
+        run: |
+          python tools/redwood_prior_poisson_continuity.py \
+            --source-glb source/500k-PRIOR-plus-measured.glb \
+            --cache "$RUNNER_TEMP/redwood-prior-poisson" \
+            --output "$GITHUB_WORKSPACE/artifacts/redwood-prior-poisson" \
+            --points 180000 \
+            --depth 9
+      - name: Upload actual color GLB, provenance and five-view comparison
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: redwood-prior-poisson-${{ github.run_id }}
+          path: artifacts/redwood-prior-poisson/
+          retention-days: 14
+          if-no-files-found: warn
