@@ -1,0 +1,61 @@
+name: Redwood measured-supported existing PRIOR surface fit
+on:
+  push:
+    branches: [research/redwood-prior-measured-surface-fit-20261030]
+    paths:
+      - tools/redwood_prior_measured_surface_fit.py
+      - tests/python/test_redwood_prior_measured_surface_fit.py
+      - .github/workflows/redwood-prior-measured-surface-fit.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  real-prior-measured-surface-fit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install actual geometry processing dependencies
+        run: |
+          python -m pip install 'numpy>=1.26,<3' 'scipy>=1.11,<2' 'trimesh>=4,<5' pytest
+      - name: Check geometry preservation and measured support
+        env:
+          PYTHONPATH: tools
+        run: python -m pytest -q tests/python/test_redwood_prior_measured_surface_fit.py
+      - name: Fetch existing scan PRIOR plus measured RGB-D hybrid
+        uses: actions/download-artifact@v4
+        with:
+          repository: REDrighthand05/echo4d
+          run-id: 40989895332
+          name: redwood-prior-measured-hybrid-40989895332
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: hybrid
+      - name: Fetch real measured-only Redwood mesh
+        uses: actions/download-artifact@v4
+        with:
+          repository: REDrighthand05/echo4d
+          run-id: 40977533276
+          name: real-redwood-components-40977533276
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: observed
+      - name: Fit scan PRIOR geometry to independently measured surfaces
+        env:
+          OPENBLAS_NUM_THREADS: '1'
+        run: |
+          python tools/redwood_prior_measured_surface_fit.py \
+            --prior-glb hybrid/PRIOR-plus-measured-detail.glb \
+            --provenance-glb hybrid/PRIOR-vs-measured-source.glb \
+            --measured-glb observed/redwood-observed-components-cleaned.glb \
+            --output "$GITHUB_WORKSPACE/artifacts/redwood-surface-fit"
+      - name: Archive actual colored Mesh and geometry provenance
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: redwood-prior-measured-surface-fit-${{ github.run_id }}
+          path: artifacts/redwood-surface-fit/
+          retention-days: 14
+          if-no-files-found: warn
