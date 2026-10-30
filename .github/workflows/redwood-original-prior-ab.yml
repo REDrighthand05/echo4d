@@ -1,0 +1,56 @@
+name: Redwood real original-resolution prior vs 500k room A/B
+on:
+  push:
+    branches: [research/redwood-original-prior-detail-20261030]
+    paths:
+      - tools/redwood_original_prior_ab.py
+      - tests/python/test_redwood_original_prior_ab.py
+      - .github/workflows/redwood-original-prior-ab.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  actual-original-room:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install mature real geometry dependencies
+        run: |
+          python -m pip install -r requirements.lock
+          python -m pip install --no-deps -e .
+          python -m pip install 'open3d==0.19.0' 'trimesh>=4,<5'
+      - name: Check original-resolution color transfer
+        env:
+          PYTHONPATH: tools
+        run: python -m pytest -q tests/python/test_redwood_original_prior_ab.py
+      - name: Fetch actual measured-only Redwood Mesh
+        uses: actions/download-artifact@v4
+        with:
+          repository: REDrighthand05/echo4d
+          run-id: 40983846102
+          name: real-redwood-multiview-40983846102
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: source
+      - name: Align original multi-million-face PRIOR and render fixed 3+2 real A/B
+        env:
+          PYTHONPATH: tools
+          OPENBLAS_NUM_THREADS: '1'
+          OMP_NUM_THREADS: '1'
+        run: |
+          python tools/redwood_original_prior_ab.py \
+            --observed source/redwood-multiview-observed.ply \
+            --cache "$RUNNER_TEMP/redwood-original-prior" \
+            --output "$GITHUB_WORKSPACE/artifacts/redwood-original-prior"
+      - name: Upload actual full-resolution colored GLB and five real comparisons
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: redwood-original-prior-${{ github.run_id }}
+          path: artifacts/redwood-original-prior/
+          retention-days: 14
+          if-no-files-found: warn
