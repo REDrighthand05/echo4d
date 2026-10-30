@@ -1,4 +1,4 @@
-name: TUM real measured RGB-D 320 Open3D fine color mesh
+name: TUM measured 320 RGB-D depth-edge guard A/B
 
 on:
   push:
@@ -30,7 +30,7 @@ jobs:
         env:
           PYTHONPATH: tools
         run: python -m pytest -q tests/python/test_tum_xyz_open3d_320.py
-      - name: Download official measured TUM RGB-D, fuse 48 frames at 160 and 320, export 5 views
+      - name: Download measured TUM RGB-D, compare unguarded and edge-guarded 320, export 5 views
         env:
           PYTHONPATH: tools
           OPENBLAS_NUM_THREADS: '1'
@@ -39,11 +39,11 @@ jobs:
           python tools/tum_xyz_open3d_320.py \
             --work "$RUNNER_TEMP/tum-xyz-320" \
             --output "$GITHUB_WORKSPACE/artifacts/tum-xyz-320"
-      - name: Upload real colored GLBs, original RGBs and 3+2 comparisons
+      - name: Upload two color GLBs, original RGBs and 3+2 edge-guard A/B
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: tum-xyz-measured-320-${{ github.run_id }}
+          name: tum-xyz-320-edge-guard-${{ github.run_id }}
           path: artifacts/tum-xyz-320/
           retention-days: 14
           if-no-files-found: warn
