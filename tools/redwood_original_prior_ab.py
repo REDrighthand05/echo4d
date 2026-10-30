@@ -134,6 +134,10 @@ def run(observed_path, cache, output):
     output.mkdir(parents=True)
     export_glb(output / "original-resolution-PRIOR-plus-measured.glb", new)
     export_glb(output / "500k-PRIOR-plus-measured.glb", old)
+    # Independent geometry control: the original supplied scan WITHOUT the
+    # measured-only detail islands. The scan is explicitly an EXISTING PRIOR.
+    # This distinguishes decimation holes from overlapping measured patches.
+    export_glb(output / "original-resolution-PRIOR-only.glb", full)
     # Avoid a duplicate multi-hundred-MB source-mask GLB: preserve provenance
     # in metadata; ALL prior faces are the first original_faces triangles.
     trajectory = o3d.io.read_pinhole_camera_trajectory(data.trajectory_log_path)
@@ -167,6 +171,8 @@ def run(observed_path, cache, output):
         "robust_point_to_plane_refinement": refinement,
         "full_mesh": "original-resolution-PRIOR-plus-measured.glb",
         "small_mesh": "500k-PRIOR-plus-measured.glb",
+        "original_prior_only_mesh": "original-resolution-PRIOR-only.glb",
+        "prior_only_role": "Supplied pre-existing scan, no measured-only detail islands; NOT independently recovered",
         "provenance": "First original_prior_faces faces in full mesh are supplied prior; remainder measured-only; all first decimated_prior_faces faces in small mesh prior",
         "views": views,
         "human_visual_acceptance": "PENDING",
