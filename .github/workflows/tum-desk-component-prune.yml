@@ -23,6 +23,10 @@ jobs:
           python-version: '3.12'
       - name: Install mesh tooling
         run: python -m pip install 'numpy>=2,<3' 'trimesh>=4,<5' 'scipy>=1.13,<2' 'vtk>=9.4,<10' 'Pillow>=10,<13' 'pytest>=8,<10'
+      - name: Provide headless OpenGL for VTK renders
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq xvfb libgl1-mesa-dri libegl1 libosmesa6
       - name: Check component removal and RGB preservation
         env:
           PYTHONPATH: tools
@@ -40,7 +44,7 @@ jobs:
           OPENBLAS_NUM_THREADS: '1'
           OMP_NUM_THREADS: '2'
         run: |
-          python tools/tum_desk_component_prune.py \
+          xvfb-run -a -s '-screen 0 1280x1024x24' python tools/tum_desk_component_prune.py \
             --input "$RUNNER_TEMP/desk-source/desk-native-640-12mm.glb" \
             --photos "$RUNNER_TEMP/desk-source" \
             --output "$GITHUB_WORKSPACE/artifacts/tum-desk-island-prune"
