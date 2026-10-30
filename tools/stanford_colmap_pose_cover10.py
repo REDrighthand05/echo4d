@@ -157,16 +157,31 @@ def five_rays(o3d, views, scale):
             o3d.core.Tensor(metric_extrinsic(w2c, scale).astype(np.float32)),
             320, 240))
 
-    # Two genuinely displaced viewpoints, determined by RGB poses only.
-    # No old 30-depth mesh bounds or hidden geometry are consulted.
-    for (_, w2c, _), side in ((recorded[1], 1.0), (recorded[2], -1.0)):
-        c2w = np.linalg.inv(metric_extrinsic(w2c, scale))
-        center = c2w[:3, 3]
-        right = c2w[:3, 0]
-        up = -c2w[:3, 1]
-        forward = c2w[:3, 2]
-        eye = center + 0.75 * side * right + 0.30 * up
-        target = center + 1.8 * forward
+    # Room-scale free orbit, using only RGB-COLMAP poses, never mesh bounds.
+    # Estimate an observed-space focus from forward rays, and global upright
+    # from camera orientations. Unlike a camera-local offset this avoids
+    # rotated close-ups that hide whether the room itself is recognizable.
+    camera_to_world = [np.linalg.inv(metric_extrinsic(w2c, scale))
+                       for _, w2c, _ in ordered]
+    centers = np.stack([p[:3, 3] for p in camera_to_world])
+    forwards = np.stack([p[:3, 2] for p in camera_to_world])
+    ups = np.stack([-p[:3, 1] for p in camera_to_world])
+    target = np.median(centers + 1.5 * forwards, axis=0)
+    up = ups.mean(axis=0)
+    up /= np.linalg.norm(up)
+    back = centers.mean(axis=0) - target
+    back -= np.dot(back, up) * up
+    if np.linalg.norm(back) < 0.1:
+        back = -forwards.mean(axis=0)
+        back -= np.dot(back, up) * up
+    back /= np.linalg.norm(back)
+    side = np.cross(up, back)
+    side /= np.linalg.norm(side)
+    spread = np.linalg.norm(np.percentile(centers, 90, axis=0) -
+                            np.percentile(centers, 10, axis=0))
+    reach = float(np.clip(spread * 0.65, 2.2, 3.5))
+    for sign, height in ((1.0, 0.75), (-1.0, 0.55)):
+        eye = target + reach * back + sign * 0.45 * reach * side + height * reach * up
         rays.append(o3d.t.geometry.RaycastingScene.create_rays_pinhole(
             78.0, o3d.core.Tensor(target.astype(np.float32)),
             o3d.core.Tensor(eye.astype(np.float32)),
@@ -265,7 +280,7 @@ def run(upstream, output):
 
         recorded, rays = five_rays(o3d, views, scale)
         labels = [f"recorded source sample {Path(v[0]).stem}" for v in recorded]
-        labels += ["free offset from middle camera", "free offset from last camera"]
+        labels += ["free room orbit A (RGB pose only)", "free room orbit B (RGB pose only)"]
         panel = Image.new("RGB", (960, 5 * 270 + 30), (18, 18, 18))
         draw = ImageDraw.Draw(panel)
         for col, label in enumerate(("Original RGB", "temporal 10 depth", "pose-cover 10 depth")):
@@ -287,7 +302,7 @@ def run(upstream, output):
             status="REAL_MESH_GENERATED_VISUAL_REVIEW_REQUIRED",
             image=image_name,
             recorded_samples=[int(Path(v[0]).stem) for v in recorded],
-            free_camera_reference="RGB-COLMAP recorded pose offsets; identical rays for both meshes",
+            free_camera_reference="room-scale RGB-COLMAP pose-only orbit; identical rays for both meshes",
             visual_acceptance="PENDING human comparison; full room NOT established")
     except Exception as exc:
         receipt.update(status="FAIL", error=f"{type(exc).__name__}: {exc}")
