@@ -101,18 +101,33 @@ def official_page():
 
 
 def download(role, url, path):
-    with urlopen(Request(url, headers={"User-Agent": "Echo4D/1.0"}), timeout=180) as r:
-        if urlparse(r.geturl()).scheme != "https":
-            raise DataError("Non-HTTPS redirect for " + role)
-        n = 0
-        with path.open("xb") as out:
-            while chunk := r.read(2 * 1024 * 1024):
-                n += len(chunk)
-                if n > LIMIT[role]:
-                    raise DataError("Oversized " + role)
-                out.write(chunk)
-                if n // 200_000_000 != (n-len(chunk)) // 200_000_000:
-                    print(role, n, "bytes downloaded", flush=True)
+    # Official Redwood links are Google Drive *view pages*, not direct files.
+    # Downloading those pages previously produced ~86KB of HTML instead of data.
+    if urlparse(url).hostname == "drive.google.com":
+        import gdown
+        saved = gdown.download(url=url, output=str(path), fuzzy=True, quiet=False)
+        if not saved or not path.is_file():
+            raise DataError("Official Google Drive " + role + " download failed")
+        n = path.stat().st_size
+    else:
+        with urlopen(Request(url, headers={"User-Agent": "Echo4D/1.0"}), timeout=180) as r:
+            if urlparse(r.geturl()).scheme != "https":
+                raise DataError("Non-HTTPS redirect for " + role)
+            n = 0
+            with path.open("xb") as out:
+                while chunk := r.read(2 * 1024 * 1024):
+                    n += len(chunk)
+                    if n > LIMIT[role]:
+                        raise DataError("Oversized " + role)
+                    out.write(chunk)
+                    if n // 200_000_000 != (n-len(chunk)) // 200_000_000:
+                        print(role, n, "bytes downloaded", flush=True)
+    minimum = {"poses": 100_000, "prior": 1_000_000, "rgbd": 10_000_000}[role]
+    if not minimum <= n <= LIMIT[role]:
+        raise DataError("Invalid " + role + " asset size: " + str(n))
+    if role == "rgbd" and not zipfile.is_zipfile(path):
+        raise DataError("Official RGB-D download is not a ZIP archive")
+    print("Verified official asset", role, n, "bytes", flush=True)
     return n
 
 
@@ -288,12 +303,15 @@ def run(work, output, result):
         path = work / (role + ".download")
         result.setdefault("download_bytes", {})[role] = download(role, assets[role], path)
         paths[role] = path
-    pose_path = unpack_one(paths["poses"], ".log", work/"official-poses.log")
-    prior_path = unpack_one(paths["prior"], ".ply", work/"official-PRIOR.ply")
-    poses = read_log(pose_path.read_text())
-    prior = o3d.io.read_triangle_mesh(str(prior_path))
-    if len(prior.triangles) < 1000:
-        raise DataError("Official PRIOR has no triangle surface")
+        # Validate small metadata and the scan before fetching 4.4GB RGB-D.
+        if role == "poses":
+            pose_path = unpack_one(path, ".log", work/"official-poses.log")
+            poses = read_log(pose_path.read_text())
+        elif role == "prior":
+            prior_path = unpack_one(path, ".ply", work/"official-PRIOR.ply")
+            prior = o3d.io.read_triangle_mesh(str(prior_path))
+            if len(prior.triangles) < 1000:
+                raise DataError("Official PRIOR has no triangle surface")
     with zipfile.ZipFile(paths["rgbd"]) as z:
         index = index_zip(z)
         ids = choose(sorted(set(index) & set(poses)))
