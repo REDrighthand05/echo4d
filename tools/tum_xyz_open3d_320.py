@@ -1,6 +1,6 @@
-"""Real TUM Freiburg1 XYZ: measured-depth Open3D 320x240 edge-guard A/B.
+"""Real TUM Freiburg1 XYZ: measured-depth Open3D 320x240 coverage A/B.
 Known TUM reference poses; no supplied mesh, no RGB-only reconstruction.
-48 fused frames; 12 excluded (indices divisible by five). Existing FAIL gates unchanged.
+48 legacy vs 96 interleaved real frames; 24 holdouts. Existing FAIL gates unchanged.
 """
 from __future__ import annotations
 
@@ -19,9 +19,11 @@ from PIL import Image, ImageDraw
 from echo4d.model import Camera, DataError, load_recording
 from tum_public_roundtrip import ROOT, URL, download, extract, invoke
 
-FRAME_COUNT = 60
+FRAME_COUNT = 120
 TRAIN_INDICES = tuple(i for i in range(FRAME_COUNT) if i % 5)
-RECORDED_INDICES = (7, 29, 47)
+# Old stride-12 views correspond exactly to even stride-6 indices.
+BASELINE_INDICES = tuple(2 * i for i in range(60) if i % 5)
+RECORDED_INDICES = (14, 58, 94)
 MAX_DEPTH = 4.0
 
 
@@ -184,29 +186,32 @@ def experiment(args, receipt):
         download(archive, receipt)
     extract(archive, args.work / "dataset")
     imported = args.work / "imported-320"
-    invoke("import-TUM-320x240-60", [
+    invoke("import-TUM-320x240-120", [
         sys.executable, "-m", "echo4d", "import-tum",
         str(args.work / "dataset" / ROOT), "--output", str(imported),
         "--intrinsics", "525", "525", "319.5", "239.5",
-        "--stride", "12", "--limit", "60", "--downsample", "2",
+        "--stride", "6", "--limit", "120", "--downsample", "2",
         "--world-up", "z"], receipt, timeout=900)
     record = load_recording(imported / "recording.json")
     if len(record) != FRAME_COUNT or (record.camera.width, record.camera.height) != (320, 240):
-        raise DataError("Expected 60 calibrated 320x240 frames")
+        raise DataError("Expected 120 calibrated 320x240 frames")
     full_entries = record.entries
     record.entries = [full_entries[i] for i in TRAIN_INDICES]
     frames = list(frame for _, frame, _ in record.iter_frames())
-    if len(frames) != 48:
-        raise DataError("Expected 48 real depth frames and 12 untouched heldouts")
-    # Identical 48 measured frames, calibrated rays, 1.8cm voxels and poses.
-    # The edge guard is the ONLY changed geometry input in this A/B.
-    old, _ = fuse(o3d, frames, record.camera, pixel_stride=1, voxel=.018)
-    new, rejected = fuse(o3d, frames, record.camera, pixel_stride=1,
-                         voxel=.018, edge_guard=True)
-    print(f"Edge guard removed {rejected} intermediate depth samples", flush=True)
+    if len(frames) != 96:
+        raise DataError("Expected 96 measured training frames and 24 untouched holdouts")
+    by_index = dict(zip(TRAIN_INDICES, frames))
+    baseline_frames = [by_index[i] for i in BASELINE_INDICES]
+    if len(baseline_frames) != 48:
+        raise DataError("Legacy baseline must contain 48 measured frames")
+    # Same source trajectory, calibrated intrinsics, 1.8cm TSDF and no edge filter.
+    # Only the number of real RGB-D observations changes.
+    old, _ = fuse(o3d, baseline_frames, record.camera, pixel_stride=1, voxel=.018)
+    new, _ = fuse(o3d, frames, record.camera, pixel_stride=1, voxel=.018)
+    print("Fused original 48 vs interleaved 96 measured views", flush=True)
     args.output.mkdir(parents=True, exist_ok=True)
-    export_glb(old, args.output / "measured-320-unguarded.glb")
-    export_glb(new, args.output / "measured-320-edge-guard.glb")
+    export_glb(old, args.output / "measured-320-48frames.glb")
+    export_glb(new, args.output / "measured-320-96frames.glb")
     print("Exported actual colored meshes", flush=True)
     views = []
     canvases = []
@@ -226,10 +231,10 @@ def experiment(args, receipt):
         name = f"recorded-{i:02d}-comparison.png"
         canvases.append(panel(args.output / name,
                               [photo, old_rgb, new_rgb],
-                              ["REAL RGB 640 source", "320 unguarded", "320 edge guarded"]))
+                              ["REAL RGB 640 source", "320 / 48 views", "320 / 96 views"]))
         views.append({"kind": "recorded", "index": i, "file": name})
         gc.collect()
-    for side, index in ((-1., 19), (1., 39)):
+    for side, index in ((-1., 38), (1., 78)):
         pose = free_view(np.asarray(full_entries[index]["cameraToWorld"]).reshape(
             4, 4, order="F"), side)
         old_rgb = render(o3d, old, record.camera, pose)
@@ -238,21 +243,23 @@ def experiment(args, receipt):
         name = f"free-{'left' if side < 0 else 'right'}-comparison.png"
         canvases.append(panel(args.output / name,
                               [blank, old_rgb, new_rgb],
-                              ["FREE CAMERA / NO RGB", "320 unguarded", "320 edge guarded"]))
+                              ["FREE CAMERA / NO RGB", "320 / 48 views", "320 / 96 views"]))
         views.append({"kind": "free", "reference_index": index, "file": name,
                       "camera_shift_m": .22, "camera_yaw_deg": 12 * side})
         gc.collect()
     board = Image.new("RGB", (960, 267 * len(canvases)))
     for i, canvas in enumerate(canvases):
         board.paste(canvas, (0, 267 * i))
-    board.save(args.output / "five-view-measured-320-edge-guard-ab.png")
+    board.save(args.output / "five-view-measured-320-48-vs-96.png")
     receipt["meshes"] = {
-        "320x240_unguarded": {"triangles": len(old.triangles),
-                              "vertices": len(old.vertices), "glb": "measured-320-unguarded.glb"},
-        "320x240_edge_guard": {"triangles": len(new.triangles),
-                               "vertices": len(new.vertices), "glb": "measured-320-edge-guard.glb"}}
-    receipt["edge_guard_removed_samples"] = rejected
-    receipt["edge_guard_policy"] = "opposite-neighbor depth straddle, preserve near/far"
+        "320x240_48_original_frames": {"triangles": len(old.triangles),
+                                       "vertices": len(old.vertices), "glb": "measured-320-48frames.glb"},
+        "320x240_96_interleaved_frames": {"triangles": len(new.triangles),
+                                          "vertices": len(new.vertices), "glb": "measured-320-96frames.glb"}}
+    receipt["baseline_indices"] = list(BASELINE_INDICES)
+    receipt["added_training_indices"] = sorted(set(TRAIN_INDICES) - set(BASELINE_INDICES))
+    receipt["ablation"] = "48 vs 96 measured views; fixed trajectory, 320x240, 1.8cm TSDF, no edge filter"
+    receipt["limitation"] = "TUM fr1_xyz mostly fixed orientation; unseen backs remain unobserved"
     receipt["views"] = views
     receipt["geometry_source"] = "TUM measured RGB-D + provided reference poses only; no scan prior"
     receipt["visual_verdict"] = "PENDING human review; counts do not imply quality"

@@ -2,7 +2,10 @@
 import numpy as np
 import pytest
 from echo4d.model import Camera
-from tum_xyz_open3d_320 import camera_matrix, free_view, half_resolution, suppress_flying_depth
+from tum_xyz_open3d_320 import (
+    BASELINE_INDICES, FRAME_COUNT, RECORDED_INDICES, TRAIN_INDICES,
+    camera_matrix, free_view, half_resolution, suppress_flying_depth,
+)
 
 
 def test_pixel_centres_and_intrinsics_match_2x_decimation():
@@ -55,3 +58,13 @@ def test_depth_guard_does_not_erode_clean_silhouette():
     np.testing.assert_array_equal(clean, d)
     with pytest.raises(ValueError):
         suppress_flying_depth(np.zeros((2, 2, 2)))
+
+def test_interleaved_96_frame_ablation_preserves_original_48_views():
+    assert FRAME_COUNT == 120
+    assert len(TRAIN_INDICES) == 96
+    assert len(BASELINE_INDICES) == 48
+    assert set(BASELINE_INDICES).issubset(TRAIN_INDICES)
+    assert len(set(TRAIN_INDICES) - set(BASELINE_INDICES)) == 48
+    assert not set(TRAIN_INDICES).intersection(range(0, FRAME_COUNT, 5))
+    assert set(RECORDED_INDICES).issubset(BASELINE_INDICES)
+    assert BASELINE_INDICES == tuple(2*i for i in range(60) if i % 5)
