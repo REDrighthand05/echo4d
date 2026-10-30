@@ -1,7 +1,7 @@
 """Nested Stanford Lounge RGB-depth expansion: eight measured + sixteen CPU DA2.
 
 Uses the existing #159 RGB-COLMAP pose, sparse metric calibration, CPU model,
-and TSDF implementation. Six extra RGB predictions are added to the previous
+and TSDF implementation. Eight extra RGB predictions are added to the previous
 8+8 depth budget; the old GLB is for visual comparison ONLY, not a prior.
 No held-out target sensor depth is used before fusion.
 """
