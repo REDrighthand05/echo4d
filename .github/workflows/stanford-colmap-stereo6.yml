@@ -60,12 +60,16 @@ jobs:
           assert r['baseline_measured_depth_maps']==10
           assert r['hybrid_measured_depth_maps']==4
           assert r['actual_inferred_depth_maps']==6
+          assert r['intermediate_measured_depth_maps']==8
+          assert r['intermediate_inferred_depth_maps']==2
           assert len(r['inferred_frames'])==6
           for name in ('measured10.glb','measured4_stereo6.glb',
-                       'source-measured10-vs-measured4-stereo6-3plus2.png'):
+                       'source-measured10-vs-measured4-stereo6-3plus2.png',
+                       'measured8_stereo2.glb',
+                       'source-measured10-vs-measured8-stereo2-3plus2.png'):
               assert (p/name).stat().st_size>10000,name
           assert all(len(r['same_ray_hit_percent'][n])==5
-                     for n in ('measured10','measured4_stereo6'))
+                     for n in ('measured10','measured4_stereo6','measured8_stereo2'))
           PY
       - name: Preserve actual geometry or failure receipt
         if: always()
