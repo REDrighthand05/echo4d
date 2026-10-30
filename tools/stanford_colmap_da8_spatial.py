@@ -272,7 +272,9 @@ def run(upstream, control, da2, output):
                       else f"free orbit {i - 2}", fill="white")
             if i < 3:
                 with Image.open(rgb_paths[recorded[i][0]]) as im:
-                    panel.paste(im.convert("RGB").resize((320, 240)), (0, y + 26))
+                    native = im.convert("RGB")
+                    native.save(output / f"source-native-{Path(recorded[i][0]).stem}.png")
+                    panel.paste(native.resize((320, 240)), (0, y + 26))
             for col, (label, candidate) in enumerate(
                     (("old_da2", old), ("new_da8", mesh)), 1):
                 image, hit = render_rays(o3d, candidate, ray)
