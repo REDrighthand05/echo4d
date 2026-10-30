@@ -1,0 +1,62 @@
+name: Real Lounge 72 sensor pose24 RGB vs gap24 RGB five-view Mesh
+on:
+  push:
+    branches: [research/lounge-gap-targeted-rgb24-20261031]
+    paths:
+      - tools/lounge_rgb_gap_select.py
+      - tools/lounge_sparse_rgb_real.py
+      - tests/python/test_lounge_rgb_gap_select.py
+      - .github/workflows/lounge-gap-targeted-rgb24.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lounge-gap-targeted-rgb24
+  cancel-in-progress: false
+
+jobs:
+  lounge-real-gap-rgb:
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install existing real reconstruction dependencies
+        run: |
+          python -m pip install -r requirements.lock
+          python -m pip install --no-deps -e .
+          python -m pip install 'open3d==0.19.0' 'trimesh==4.11.1' 'pytest==8.4.2'
+      - name: Check real RGB target selection and metric regression
+        env:
+          PYTHONPATH: tools
+        run: |
+          python -m py_compile tools/lounge_rgb_gap_select.py tools/lounge_sparse_rgb_real.py
+          python -m pytest -q tests/python/test_lounge_rgb_gap_select.py tests/python/test_lounge_sparse_rgb_real.py
+      - name: Install previously executed pinned CPU Depth Anything runtime
+        run: |
+          python -m pip install 'torch==2.5.1+cpu' --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install 'transformers==4.53.3' 'huggingface_hub==0.34.4'
+      - name: Fuse 72 real sensor + pose24 vs gap24 predicted RGB and 144 measured control
+        env:
+          PYTHONPATH: tools
+          OPENBLAS_NUM_THREADS: '1'
+          OMP_NUM_THREADS: '2'
+          QT_QPA_PLATFORM: offscreen
+          HF_HUB_DISABLE_XET: '1'
+        run: |
+          python tools/lounge_sparse_rgb_real.py \
+            --work "$RUNNER_TEMP/lounge-gap-rgb24" \
+            --output "$GITHUB_WORKSPACE/artifacts/lounge-gap-rgb24" \
+            --gap-selection
+      - name: Upload four actual colored GLBs five-view image original photos and failure receipt
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lounge-real-pose24-vs-gap24-rgb
+          path: artifacts/lounge-gap-rgb24/
+          retention-days: 14
+          if-no-files-found: warn
