@@ -37,3 +37,22 @@ def test_missing_normals_are_rejected():
     prior = Mesh([[0, 0, 0]], [])
     with pytest.raises(ValueError):
         transfer_colors_chunked(prior, measured)
+
+
+def test_five_camera_specs_are_fixed_and_original_camera_poses_preserved():
+    from redwood_original_prior_ab import fixed_view_specs
+
+    class Data:
+        color_paths = [f"frame_{i:05d}.png" for i in range(600)]
+
+    poses = [np.eye(4) for _ in Data.color_paths]
+    specs = fixed_view_specs(Data(), poses)
+    assert len(specs) == 5
+    assert [s["kind"] for s in specs] == [
+        "recorded", "recorded", "recorded", "free", "free"]
+    assert len({s["file"] for s in specs}) == 5
+    for spec in specs[:3]:
+        assert np.array_equal(spec["pose"], poses[spec["frame"]])
+    for spec in specs:
+        assert spec["pose"].shape == (4, 4)
+        assert np.isfinite(spec["pose"]).all()
