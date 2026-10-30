@@ -4,7 +4,7 @@ import tarfile
 import pytest
 
 from echo4d.model import DataError
-from tum_room_loop_coverage import choose_views, safe_member
+from tum_room_loop_coverage import choose_views, safe_member, sparse_reference_indices, STRIDE
 
 
 def test_fixed_room_viewpoints_are_diverse_and_train_only():
@@ -14,6 +14,16 @@ def test_fixed_room_viewpoints_are_diverse_and_train_only():
     assert len(set(recorded + free)) == 5
     assert all(i in train for i in recorded + free)
     assert recorded[0] < 30 < recorded[1] < recorded[2]
+
+
+def test_dense_source_and_exact_sparse_reference_indices():
+    assert STRIDE == 4
+    dense_train = tuple(i for i in range(340) if i % 7)
+    sparse = sparse_reference_indices(dense_train)
+    assert sparse == tuple(2 * i for i in range(170) if i % 7)
+    assert len(sparse) == 145
+    recorded, free = choose_views(340, sparse)
+    assert all(i % 2 == 0 for i in recorded + free)
 
 
 def test_refuse_insufficient_coverage():
