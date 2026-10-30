@@ -1,0 +1,57 @@
+name: Redwood real measured Mesh component cleanup A/B
+on:
+  push:
+    branches: [research/redwood-observed-component-cleanup-20261030]
+    paths:
+      - tools/redwood_observed_component_cleanup.py
+      - tests/python/test_redwood_observed_component_cleanup.py
+      - .github/workflows/redwood-observed-component-cleanup.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  real-redwood-components:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install measured Mesh processing and rendering dependencies
+        run: |
+          python -m pip install -r requirements.lock
+          python -m pip install --no-deps -e .
+          python -m pip install 'open3d==0.19.0' 'trimesh>=4,<5'
+      - name: Check observed-only component topology
+        env:
+          PYTHONPATH: tools
+        run: python -m pytest -q tests/python/test_redwood_observed_component_cleanup.py
+      - name: Retrieve measured 600-frame Redwood Mesh, not a reference prior
+        uses: actions/download-artifact@v4
+        with:
+          repository: REDrighthand05/echo4d
+          run-id: 40969878515
+          name: real-redwood-farside-40969878515
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: source
+      - name: Filter disconnected real Mesh fragments and render five identical views
+        env:
+          PYTHONPATH: tools
+          OPENBLAS_NUM_THREADS: '1'
+          OMP_NUM_THREADS: '1'
+        run: |
+          python tools/redwood_observed_component_cleanup.py \
+            --source-ply source/redwood-farside-observed.ply \
+            --cache "$RUNNER_TEMP/redwood-observed-cleanup" \
+            --output "$GITHUB_WORKSPACE/artifacts/redwood-component-cleanup" \
+            --min-faces 100
+      - name: Upload actual colored GLB and three recorded plus two free-view comparisons
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: real-redwood-components-${{ github.run_id }}
+          path: artifacts/redwood-component-cleanup/
+          retention-days: 14
+          if-no-files-found: warn
