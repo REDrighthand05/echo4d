@@ -1,0 +1,43 @@
+name: Real Fountain RGB-D measured Mesh plus labeled PRIOR
+on:
+  push:
+    branches: [research/fountain-measured-prior-fusion-20261031]
+    paths:
+      - tools/fountain_measured_prior_fusion.py
+      - .github/workflows/fountain-measured-prior-fusion.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  fountain-real-scene:
+    runs-on: ubuntu-latest
+    timeout-minutes: 70
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install mature reconstruction tools
+        run: |
+          python -m pip install -r requirements.lock
+          python -m pip install --no-deps -e .
+          python -m pip install 'open3d==0.19.0' 'trimesh>=4,<5'
+      - name: Download real Fountain RGB-D, fuse measured Mesh, align labeled PRIOR
+        env:
+          PYTHONPATH: tools
+          OPENBLAS_NUM_THREADS: '1'
+          OMP_NUM_THREADS: '2'
+        run: |
+          python tools/fountain_measured_prior_fusion.py \
+            --work "$RUNNER_TEMP/fountain-real" \
+            --output "$GITHUB_WORKSPACE/artifacts/fountain-real"
+      - name: Preserve actual GLBs real photos five views or failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fountain-real-measured-prior-mesh
+          path: artifacts/fountain-real/
+          retention-days: 14
+          if-no-files-found: warn
