@@ -1,0 +1,68 @@
+name: Real Fountain remove sensor depths 33 to 16 to 8, full prior separate
+on:
+  push:
+    branches: [research/fountain-depth-ladder-20261031]
+    paths:
+      - tools/fountain_depth_ladder.py
+      - tests/python/test_fountain_depth_ladder.py
+      - .github/workflows/fountain-depth-ladder.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  fountain-depth-ladder:
+    runs-on: ubuntu-latest
+    timeout-minutes: 100
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install existing Echo4D Open3D dependencies
+        run: |
+          python -m pip install -r requirements.lock
+          python -m pip install --no-deps -e .
+          python -m pip install 'open3d==0.19.0' 'trimesh>=4,<5' 'pytest==8.4.2'
+      - name: Test nested pose-only selection and compile
+        env:
+          PYTHONPATH: tools
+        run: |
+          python -m py_compile tools/fountain_depth_ladder.py
+          python -m pytest -q tests/python/test_fountain_depth_ladder.py
+      - name: Produce actual three reduced measured Meshes and separate scan PRIOR
+        env:
+          PYTHONPATH: tools
+          OPENBLAS_NUM_THREADS: '1'
+          OMP_NUM_THREADS: '2'
+        run: |
+          python tools/fountain_depth_ladder.py \
+            --work "$RUNNER_TEMP/fountain-depth-ladder" \
+            --output "$GITHUB_WORKSPACE/artifacts/fountain-depth-ladder"
+      - name: Reopen all actual colored GLBs and inspect source image dimensions
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          import trimesh
+          from PIL import Image
+          root = Path('artifacts/fountain-depth-ladder')
+          r = json.loads((root / 'result.json').read_text())
+          assert r['status'] == 'real_glbs_and_five_views_exported_visual_review_pending', r
+          assert {k: len(v) for k, v in r['cohorts'].items()} == {'measured33': 33, 'measured16': 16, 'measured8': 8}
+          assert len(r['views']) == 5
+          for m in r['meshes'].values():
+              mesh = trimesh.load(str(root / m['glb']), force='mesh', process=False)
+              assert len(mesh.faces) > 1000 and mesh.visual.kind == 'vertex'
+          assert Image.open(root / 'fountain-depth33-vs-16-vs-8-vs-PRIOR-five-views.png').size == (1600, 1335)
+          assert len(list(root.glob('source-*-native.png'))) == 3
+          PY
+      - name: Preserve original photos, actual models, five views and failures
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fountain-real-depth33-16-8-prior
+          path: artifacts/fountain-depth-ladder/
+          retention-days: 30
+          if-no-files-found: warn
