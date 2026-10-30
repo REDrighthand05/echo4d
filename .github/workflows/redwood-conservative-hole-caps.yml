@@ -1,0 +1,52 @@
+name: Redwood real conservative hole caps A/B
+on:
+  push:
+    branches: [research/redwood-conservative-hole-caps-20261030]
+    paths:
+      - tools/redwood_conservative_hole_patch.py
+      - tests/python/test_redwood_conservative_hole_patch.py
+      - .github/workflows/redwood-conservative-hole-caps.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  actual-redwood-mesh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install mesh dependencies
+        run: python -m pip install 'numpy>=1.26,<3' 'trimesh>=4,<5' pytest
+      - name: Validate conservative geometry logic
+        env:
+          PYTHONPATH: tools
+        run: python -m pytest -q tests/python/test_redwood_conservative_hole_patch.py
+      - name: Retrieve real Redwood PRIOR+measured RGB-D mesh
+        uses: actions/download-artifact@v4
+        with:
+          repository: REDrighthand05/echo4d
+          run-id: 40989895332
+          name: redwood-prior-measured-hybrid-40989895332
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: source
+      - name: Patch actual real-room mesh, label inferred caps
+        run: |
+          set -euo pipefail
+          source_mesh="$(find source -name 'PRIOR-plus-measured-detail.glb' -print -quit)"
+          test -n "$source_mesh"
+          mkdir -p artifacts
+          python tools/redwood_conservative_hole_patch.py \
+            --input "$source_mesh" \
+            --output artifacts/PRIOR-plus-measured-INFERRED-small-caps.glb
+      - name: Upload actual GLB and provenance
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: real-redwood-conservative-hole-caps-${{ github.run_id }}
+          path: artifacts/
+          retention-days: 14
+          if-no-files-found: warn
