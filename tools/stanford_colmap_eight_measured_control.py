@@ -17,8 +17,9 @@ from PIL import Image, ImageDraw
 
 from stanford_colmap_metric300 import original_pairs, read_model, depth_scale
 from stanford_colmap_nested_depth import render_rays
+from stanford_colmap_stereo6 import fuse_hybrid
 from stanford_colmap_pose_cover10 import (
-    UPSTREAM_RUN, sha256, select_pose_coverage, fuse, five_rays,
+    UPSTREAM_RUN, sha256, select_pose_coverage, five_rays,
 )
 
 
@@ -169,8 +170,8 @@ def run(upstream, stereo_artifact, output):
             comparison_glb_sha256=sha256(prior_glb))
         save()
 
-        measured8 = fuse(
-            o3d, trimesh, views, eight, scale, rgb_paths, depth_paths,
+        measured8 = fuse_hybrid(
+            o3d, trimesh, views, eight, {}, scale, rgb_paths, depth_paths,
             output / "measured8_only.glb")
         stereo8plus2 = old_mesh_to_open3d(o3d, trimesh, prior_glb)
         recorded, rays = five_rays(o3d, views, scale)
