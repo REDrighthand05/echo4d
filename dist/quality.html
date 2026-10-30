@@ -50,6 +50,9 @@
         </section>
         <section class="panel">
           <p class="eyebrow">REVIEW NOTES</p><h2>场景与证据说明</h2>
+          <label for="importManifest">继续上次审阅：导入本地证据清单 .json</label>
+          <input id="importManifest" type="file" accept=".json,application/json" aria-describedby="importStatus">
+          <p id="importStatus" class="subtle" aria-live="polite">只恢复场景备注与待核对 SHA；不会恢复图片、自动验真或上传文件。</p>
           <label for="sceneId">场景 / 实验标识</label><input id="sceneId" placeholder="例如：desk-v3-20261027" maxlength="100" autocomplete="off">
           <label for="meshSha">同一 Mesh SHA-256</label><input id="meshSha" placeholder="64位十六进制；来自实际输出" maxlength="64" spellcheck="false">
           <label for="reviewNotes">审核记录与未观测区域</label><textarea id="reviewNotes" rows="5" placeholder="可辨认的墙面/台面、碎片与失配、未知范围；注明所用相机位姿、出处和运行命令。"></textarea>
