@@ -1,0 +1,61 @@
+name: Real Lounge 144 sensor vs 72 sensor plus 24 CPU RGB Mesh
+on:
+  push:
+    branches: [research/lounge-72sensor-24rgb-cpu-20261031]
+    paths:
+      - tools/lounge_rgb_depth_adapter.py
+      - tools/lounge_sparse_rgb_real.py
+      - tests/python/test_lounge_sparse_rgb_real.py
+      - .github/workflows/lounge-72sensor-24rgb-cpu.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lounge-72sensor-24rgb-cpu
+  cancel-in-progress: false
+
+jobs:
+  lounge-real-depth-ablation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install existing reconstruction dependencies
+        run: |
+          python -m pip install -r requirements.lock
+          python -m pip install --no-deps -e .
+          python -m pip install 'open3d==0.19.0' 'trimesh==4.11.1' 'pytest==8.4.2'
+      - name: Test sensor/RGB split and known-depth metric fit
+        env:
+          PYTHONPATH: tools
+        run: |
+          python -m py_compile tools/lounge_rgb_depth_adapter.py tools/lounge_sparse_rgb_real.py
+          python -m pytest -q tests/python/test_lounge_sparse_rgb_real.py
+      - name: Install previously executed pinned CPU depth model runtime
+        run: |
+          python -m pip install 'torch==2.5.1+cpu' --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install 'transformers==4.53.3' 'huggingface_hub==0.34.4'
+      - name: Reconstruct real Stanford Lounge 144 vs 72 vs 72 plus RGB
+        env:
+          PYTHONPATH: tools
+          OPENBLAS_NUM_THREADS: '1'
+          OMP_NUM_THREADS: '2'
+          QT_QPA_PLATFORM: offscreen
+          HF_HUB_DISABLE_XET: '1'
+        run: |
+          python tools/lounge_sparse_rgb_real.py \
+            --work "$RUNNER_TEMP/lounge-72sensor-rgb" \
+            --output "$GITHUB_WORKSPACE/artifacts/lounge-72sensor-rgb"
+      - name: Upload actual GLBs native photos five views and failure receipt
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lounge-real-144-vs-72-vs-72plus24rgb
+          path: artifacts/lounge-72sensor-rgb/
+          retention-days: 14
+          if-no-files-found: warn
