@@ -1,0 +1,77 @@
+name: Stanford 300 RGB 10-depth observed SfM coverage versus pose frusta
+on:
+  push:
+    branches: [research/stanford-colmap300-depth10-sfm-cover-20261030]
+    paths:
+      - tools/stanford_colmap_sfm_cover10.py
+      - .github/workflows/stanford-colmap-sfm-cover10.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: stanford-colmap-sfm-cover10
+  cancel-in-progress: true
+jobs:
+  real-sfm-cover-ten-depth:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Download frozen original 300-RGB independent COLMAP result
+        uses: actions/download-artifact@v4
+        with:
+          name: stanford-300rgb-early-overlap-30depth-40970565394
+          run-id: 40970565394
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: REDrighthand05/echo4d
+          path: artifacts/early-colmap
+      - name: Install CPU reconstruction dependencies and run actual selector test
+        run: |
+          python -m pip install 'open3d==0.19.0' 'trimesh==4.11.1' 'pillow==11.3.0' 'scipy==1.16.2'
+          python -m py_compile tools/stanford_colmap_sfm_cover10.py
+          python tools/stanford_colmap_sfm_cover10.py --self-test
+      - name: Generate both real measured-depth Meshes and identical 3+2 views
+        env:
+          QT_QPA_PLATFORM: offscreen
+          OMP_NUM_THREADS: '2'
+          OPENBLAS_NUM_THREADS: '1'
+        run: |
+          python tools/stanford_colmap_sfm_cover10.py \
+            --upstream artifacts/early-colmap \
+            --output artifacts/stanford-300rgb-sfmcover10
+      - name: Confirm strict input budget and actual geometry outputs
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path('artifacts/stanford-300rgb-sfmcover10')
+          r=json.loads((p/'receipt.json').read_text())
+          print(json.dumps({k:r.get(k) for k in ('status','selected_rgb','registered_rgb','common_scale_depth_samples','pose_cover_depth_samples','sfm_cover_depth_samples','sfm_coverage','same_ray_hit_percent')},indent=2))
+          assert r['status']=='REAL_MESH_GENERATED_VISUAL_REVIEW_REQUIRED'
+          assert r['selected_rgb']==300 and r['registered_rgb']==287
+          assert r['measured_depth_per_mesh']==10
+          assert len(set(r['pose_cover_depth_samples']))==10
+          assert len(set(r['sfm_cover_depth_samples']))==10
+          assert len(set(r['common_scale_depth_samples']))==4
+          assert set(r['common_scale_depth_samples']).issubset(r['pose_cover_depth_samples'])
+          assert set(r['common_scale_depth_samples']).issubset(r['sfm_cover_depth_samples'])
+          assert set(r['pose_cover_depth_samples'])!=set(r['sfm_cover_depth_samples'])
+          for name in ('posecover10.glb','sfmcover10.glb','source-posecover10-vs-sfmcover10-3plus2.png'):
+              assert (p/name).stat().st_size>10000, name
+          assert all(len(r['same_ray_hit_percent'][n])==5 for n in ('posecover10','sfmcover10'))
+          PY
+      - name: Preserve real GLBs, five-view photo comparison and failure receipt
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stanford-300rgb-sfmcover10-${{ github.run_id }}
+          path: |
+            artifacts/stanford-300rgb-sfmcover10/receipt.json
+            artifacts/stanford-300rgb-sfmcover10/*.glb
+            artifacts/stanford-300rgb-sfmcover10/*.png
+          retention-days: 30
+          if-no-files-found: warn
