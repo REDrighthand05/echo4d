@@ -1,0 +1,48 @@
+name: Real Lounge visibility-aware scan PRIOR carving A-B
+on:
+  push:
+    branches: [research/lounge-visibility-prior-20261031]
+    paths:
+      - tools/lounge_visibility_prior_real.py
+      - tests/python/test_lounge_visibility_prior_real.py
+      - .github/workflows/lounge-visibility-prior-real.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  real-lounge-ray-carve:
+    runs-on: ubuntu-latest
+    timeout-minutes: 110
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install pinned reconstruction stack
+        run: |
+          python -m pip install -r requirements.lock
+          python -m pip install --no-deps -e .
+          python -m pip install 'open3d==0.19.0' 'trimesh>=4,<5'
+      - name: Check camera-ray decisions before real data
+        env:
+          PYTHONPATH: tools
+        run: python -m pytest -q tests/python/test_lounge_visibility_prior_real.py
+      - name: Fuse real Lounge RGB-D and retain scan PRIOR by measured rays
+        env:
+          PYTHONPATH: tools
+          OPENBLAS_NUM_THREADS: '1'
+          OMP_NUM_THREADS: '2'
+        run: |
+          python tools/lounge_visibility_prior_real.py \
+            --work "$RUNNER_TEMP/lounge-ray-prior" \
+            --output "$GITHUB_WORKSPACE/artifacts/lounge-ray-prior"
+      - name: Upload real GLBs three recorded and two free views or failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lounge-real-ray-prior-3plus2
+          path: artifacts/lounge-ray-prior/
+          retention-days: 14
+          if-no-files-found: warn
