@@ -1,0 +1,81 @@
+name: TUM Desk native640 24 measured versus 24 plus 12 CPU RGB depths
+on:
+  push:
+    branches: [research/tum-desk-native640-24-plus-da12-20261030]
+    paths:
+      - tools/tum_desk_native640_da12.py
+      - tests/python/test_tum_desk_native640_da12.py
+      - .github/workflows/tum-desk-native640-da12.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tum-desk-native640-da12
+  cancel-in-progress: false
+
+jobs:
+  real-desk-24-plus-da12:
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install same native640 Open3D stack as PR 171
+        run: |
+          python -m pip install -r requirements.lock
+          python -m pip install --no-deps -e .
+          python -m pip install 'open3d==0.19.0' 'trimesh==4.11.1' 'pytest==8.4.2'
+      - name: Check disjoint target cohort and measured-only metric calibration
+        env:
+          PYTHONPATH: tools
+        run: |
+          python -m py_compile tools/tum_desk_native640_da12.py
+          python -m pytest -q tests/python/test_tum_desk_native640_da12.py tests/python/test_tum_desk_native640_depth_ladder.py
+      - name: Install verified CPU Depth Anything V2 Small
+        run: |
+          python -m pip install 'torch==2.5.1+cpu' --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install 'transformers==4.53.3' 'huggingface_hub==0.34.4'
+      - name: Generate real Desk 24 measured and 24 plus 12 AI colored Meshes
+        env:
+          PYTHONPATH: tools
+          OPENBLAS_NUM_THREADS: '1'
+          OMP_NUM_THREADS: '2'
+          QT_QPA_PLATFORM: offscreen
+          HF_HUB_DISABLE_XET: '1'
+        run: |
+          python tools/tum_desk_native640_da12.py \
+            --work "$RUNNER_TEMP/tum-desk-native640-da12" \
+            --output "$GITHUB_WORKSPACE/artifacts/tum-desk-native640-da12"
+      - name: Reopen two GLBs and check five fixed views
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          import trimesh
+          from PIL import Image
+          p = Path("artifacts/tum-desk-native640-da12")
+          r = json.loads((p/"result.json").read_text())
+          assert r["status"] == "REAL_TWO_MESHES_EXPORTED_VISUAL_REVIEW_PENDING", r
+          assert len(r["measured_indices"]) == 24 and len(r["rgb_only_indices"]) == 12
+          assert not set(r["measured_indices"]) & set(r["rgb_only_indices"])
+          assert not set(r["holdout_indices"]) & (set(r["measured_indices"]) | set(r["rgb_only_indices"]))
+          assert r["target_sensor_depth_used_for_inference"] is False
+          assert len(r["views"]) == 5 and len(r["meshes"]) == 2
+          for spec in r["meshes"].values():
+              mesh = trimesh.load(str(p/spec["glb"]), force="mesh", process=False)
+              assert len(mesh.faces) > 100 and mesh.visual.kind == "vertex"
+          assert Image.open(p/"desk-24-sensor-vs-24-plus-ai-five-views.png").size == (960,1335)
+          assert len([x for x in r["predictions"] if x["used"]]) >= 4
+          PY
+      - name: Upload actual GLBs, source RGB, predicted depths and five-view A/B
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tum-desk-native640-24-plus-da12-${{ github.run_id }}
+          path: artifacts/tum-desk-native640-da12/
+          if-no-files-found: warn
+          retention-days: 30
