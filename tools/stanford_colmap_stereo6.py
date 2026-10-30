@@ -35,26 +35,33 @@ def camera_to_world(w2c, scale):
     return np.linalg.inv(metric_extrinsic(w2c, scale))
 
 
-def candidate_rights(left_name, views, scale, limit=14):
-    """Find horizontal, positive-disparity RGB baselines without using depth."""
+def candidate_pairs(target, views, scale, limit=14):
+    """Allow either lateral direction; the rectified LEFT view owns inferred Z.
+
+    A moving camera often has no later frame to its right. For a neighbour on
+    its left, swap the stereo order and integrate predicted depth at the
+    neighbour, rather than rejecting valid RGB parallax. No measured depth
+    participates in pairing.
+    """
     poses = {name: camera_to_world(w2c, scale) for name, w2c, _ in views}
-    left = poses[left_name]
+    anchor = poses[target]
     candidates = []
-    for name, right in poses.items():
-        if name == left_name:
+    for name, other in poses.items():
+        if name == target:
             continue
-        delta = left[:3, :3].T @ (right[:3, 3] - left[:3, 3])
+        delta = anchor[:3, :3].T @ (other[:3, 3] - anchor[:3, 3])
         baseline = float(np.linalg.norm(delta))
-        if not (0.040 <= baseline <= 0.29 and delta[0] > 0.035):
+        if not (0.040 <= baseline <= 0.29 and abs(delta[0]) > 0.035):
             continue
-        if abs(delta[1]) > 0.45 * delta[0] or abs(delta[2]) > 0.55 * delta[0]:
+        if abs(delta[1]) > 0.60 * abs(delta[0]) or abs(delta[2]) > 0.65 * abs(delta[0]):
             continue
-        rotation = right[:3, :3].T @ left[:3, :3]
+        rotation = other[:3, :3].T @ anchor[:3, :3]
         angle = math.degrees(math.acos(float(np.clip((np.trace(rotation)-1)/2, -1, 1))))
         if angle > 30:
             continue
-        score = abs(baseline - 0.13) + 0.45 * abs(delta[1]) + 0.15 * abs(delta[2]) + angle * 0.002
-        candidates.append((score, name, baseline, angle))
+        left, right = (target, name) if delta[0] > 0 else (name, target)
+        score = abs(baseline-0.12) + 0.45*abs(delta[1]) + 0.15*abs(delta[2]) + angle*0.002
+        candidates.append((score, left, right, baseline, angle))
     return sorted(candidates)[:limit]
 
 
@@ -96,14 +103,16 @@ def self_test():
     views = []
     for i in range(31):
         pose = np.eye(4)
-        pose[0, 3] = -i * 0.012
+        pose[0, 3] = -i*0.012
         views.append((f"{i:06d}.png", pose, []))
-    rights = candidate_rights("000000.png", views, 1.0)
-    assert rights and all(n != "000000.png" for _, n, _, _ in rights)
-    assert all(0.04 <= b <= 0.29 for _, _, b, _ in rights)
-    assert candidate_rights("000000.png", list(reversed(views)), 1.0) == rights
-    assert not candidate_rights("000030.png", views, 1.0)
-    print("PASS: deterministic metric horizontal RGB stereo pair candidates")
+    leftmost = candidate_pairs("000000.png", views, 1.0)
+    rightmost = candidate_pairs("000030.png", views, 1.0)
+    assert leftmost and rightmost
+    assert all(left == "000000.png" for _, left, _, _, _ in leftmost)
+    assert all(right == "000030.png" for _, _, right, _, _ in rightmost)
+    assert candidate_pairs("000030.png", list(reversed(views)), 1.0) == rightmost
+    assert all(0.04 <= b <= 0.29 for _, _, _, b, _ in rightmost)
+    print("PASS: bidirectional CPU RGB stereo pairing without depth or mesh")
 
 
 def run(upstream, output):
@@ -188,35 +197,41 @@ def run(upstream, output):
             return cache[name]
         for name in replace:
             best = None
-            rights = candidate_rights(name, views, scale)
-            for _, other, baseline_m, angle in rights:
+            pairs = candidate_pairs(name, views, scale)
+            for _, left, right, baseline_m, angle in pairs:
                 try:
+                    disparities = 64 if baseline_m < 0.15 else 128
                     rgb_l, dep, cam, pose, info = infer_stereo(
-                        rgb(name), rgb(other), CAMERA, poses[name], poses[other],
-                        num_disparities=64)
+                        rgb(left), rgb(right), CAMERA, poses[left], poses[right],
+                        num_disparities=disparities)
                     frac = info["valid_fraction"]
-                    trials.append(dict(left=name, right=other,
+                    trials.append(dict(target=name, left=left, right=right,
                                        baseline_m=baseline_m, angle_deg=angle,
+                                       num_disparities=disparities,
                                        valid_fraction=frac))
                     if best is None or frac > best[0]:
-                        best = (frac, other, rgb_l, dep, cam, pose, info)
+                        best = (frac, left, right, rgb_l, dep, cam, pose, info)
                     if frac >= 0.12:
                         break
                 except (ValueError, RuntimeError) as exc:
-                    trials.append(dict(left=name, right=other,
+                    trials.append(dict(target=name, left=left, right=right,
                                        error=f"{type(exc).__name__}: {exc}"))
             if best is None or best[0] < 0.003:
                 raise RuntimeError(
-                    f"No usable positive-disparity stereo for {name}: "
-                    f"{len(rights)} candidate rights; best fraction "
+                    f"No usable bilateral RGB stereo for {name}: "
+                    f"{len(pairs)} pairs; best valid fraction "
                     f"{0 if best is None else best[0]:.5f}")
-            frac, other, rgb_l, dep, cam, pose, info = best
-            inferred[name] = (rgb_l, dep, cam, pose)
+            frac, left, right, rgb_l, dep, cam, pose, info = best
+            if left in inferred:
+                raise RuntimeError(f"Stereo predicted left camera {left} twice")
+            inferred[left] = (rgb_l, dep, cam, pose)
             receipt.setdefault("inferred_frames", []).append(
-                dict(left_sample=int(Path(name).stem),
-                     right_sample=int(Path(other).stem),
+                dict(replaced_measured_sample=int(Path(name).stem),
+                     inferred_left_sample=int(Path(left).stem),
+                     paired_right_sample=int(Path(right).stem),
                      **info))
             save()
+
         hybrid = fuse_hybrid(o3d, trimesh, views, shared, inferred, scale,
                              rgb_paths, depth_paths, output / "measured4_stereo6.glb")
         receipt["stereo_trials"] = trials
