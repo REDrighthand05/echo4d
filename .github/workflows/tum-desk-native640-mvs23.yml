@@ -1,0 +1,79 @@
+name: TUM Desk replace one CPU AI depth with real RGB multi-view geometry
+on:
+  push:
+    branches: [research/tum-desk-native640-mvs23-20261031]
+    paths:
+      - tools/tum_desk_rgb_mvs.py
+      - tools/tum_desk_native640_mvs23.py
+      - tests/python/test_tum_desk_rgb_mvs.py
+      - .github/workflows/tum-desk-native640-mvs23.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tum-desk-native640-mvs23
+  cancel-in-progress: false
+
+jobs:
+  real-desk-mvs23:
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install actual Open3D, CPU geometry, and test dependencies
+        run: |
+          python -m pip install -r requirements.lock
+          python -m pip install --no-deps -e .
+          python -m pip install 'open3d==0.19.0' 'trimesh==4.11.1' 'pytest==8.4.2' 'opencv-python-headless==4.11.0.86'
+      - name: Test metric multi-view geometry without target sensor data
+        env:
+          PYTHONPATH: tools
+        run: |
+          python -m py_compile tools/tum_desk_rgb_mvs.py tools/tum_desk_native640_mvs23.py
+          python -m pytest -q tests/python/test_tum_desk_rgb_mvs.py tests/python/test_tum_desk_native640_da12.py
+      - name: Install pinned CPU Depth Anything V2 for unchanged eleven AI views
+        run: |
+          python -m pip install 'torch==2.5.1+cpu' --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install 'transformers==4.53.3' 'huggingface_hub==0.34.4'
+      - name: Reconstruct same real Desk scene with 24 measured, 12 AI versus 11 AI plus one RGB MVS
+        env:
+          PYTHONPATH: tools
+          OPENBLAS_NUM_THREADS: '1'
+          OMP_NUM_THREADS: '2'
+          QT_QPA_PLATFORM: offscreen
+          HF_HUB_DISABLE_XET: '1'
+        run: |
+          python tools/tum_desk_native640_mvs23.py \
+            --work "$RUNNER_TEMP/tum-desk-native640-mvs23" \
+            --output "$GITHUB_WORKSPACE/artifacts/tum-desk-native640-mvs23"
+      - name: Reopen real color GLBs and five fixed views
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          import trimesh
+          from PIL import Image
+          p=Path('artifacts/tum-desk-native640-mvs23')
+          r=json.loads((p/'result.json').read_text())
+          assert r['status']=='REAL_THREE_MESHES_EXPORTED_VISUAL_REVIEW_PENDING',r
+          assert r['mvs']['target_index']==23 and r['mvs']['valid_fraction']>=.005
+          assert r['mvs']['target_sensor_depth_read'] is False
+          assert len(r['meshes'])==3 and len(r['views'])==5
+          for spec in r['meshes'].values():
+              mesh=trimesh.load(str(p/spec['glb']),force='mesh',process=False)
+              assert len(mesh.faces)>100 and mesh.visual.kind=='vertex'
+          assert Image.open(p/'desk-ai-vs-mvs23-five-views.png').size==(960,1335)
+          PY
+      - name: Upload real three GLBs, RGB, MVS depth and five-view comparison
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tum-desk-native640-mvs23-${{ github.run_id }}
+          path: artifacts/tum-desk-native640-mvs23/
+          if-no-files-found: warn
+          retention-days: 30
