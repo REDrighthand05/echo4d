@@ -1,0 +1,43 @@
+name: Real Fountain FULL PRIOR color-map and measured TSDF A-B
+on:
+  push:
+    branches: [research/fountain-measured-prior-fusion-20261031]
+    paths:
+      - tools/fountain_full_prior_colormap.py
+      - .github/workflows/fountain-full-prior-colormap.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  fountain-prior-colormap:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install Open3D and geometry dependencies
+        run: |
+          python -m pip install -r requirements.lock
+          python -m pip install --no-deps -e .
+          python -m pip install 'open3d==0.19.0' 'trimesh>=4,<5'
+      - name: Fuse real measured depth and colorize COMPLETE existing scan PRIOR
+        env:
+          PYTHONPATH: tools
+          OPENBLAS_NUM_THREADS: '1'
+          OMP_NUM_THREADS: '2'
+        run: |
+          python tools/fountain_full_prior_colormap.py \
+            --work "$RUNNER_TEMP/fountain-prior" \
+            --output "$GITHUB_WORKSPACE/artifacts/fountain-prior"
+      - name: Preserve full colored prior and five views or failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fountain-full-prior-color-map
+          path: artifacts/fountain-prior/
+          retention-days: 14
+          if-no-files-found: warn
