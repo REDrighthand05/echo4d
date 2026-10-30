@@ -1,0 +1,43 @@
+name: Real Stanford Lounge wide RGB-D geometry and labeled scan PRIOR
+on:
+  push:
+    branches: [research/stanford-lounge-spatial-prior-20261031]
+    paths:
+      - tools/lounge_spatial_prior_real.py
+      - .github/workflows/lounge-spatial-prior-real.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  lounge-real-mesh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 110
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install mature RGB-D reconstruction dependencies
+        run: |
+          python -m pip install -r requirements.lock
+          python -m pip install --no-deps -e .
+          python -m pip install 'open3d==0.19.0' 'trimesh>=4,<5'
+      - name: Fuse real Stanford Lounge early vs wide camera coverage and explicit scan PRIOR
+        env:
+          PYTHONPATH: tools
+          OPENBLAS_NUM_THREADS: '1'
+          OMP_NUM_THREADS: '2'
+        run: |
+          python tools/lounge_spatial_prior_real.py \
+            --work "$RUNNER_TEMP/loungergbd" \
+            --output "$GITHUB_WORKSPACE/artifacts/lounge-real"
+      - name: Upload real colored GLBs and three recorded plus two free views (or failure)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lounge-real-wide-PRIOR-five-view
+          path: artifacts/lounge-real/
+          retention-days: 14
+          if-no-files-found: warn
