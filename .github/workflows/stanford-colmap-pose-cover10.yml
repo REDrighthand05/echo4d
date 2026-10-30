@@ -1,0 +1,77 @@
+name: Stanford 300 RGB 10-depth pose-frustum coverage versus temporal anchors
+on:
+  push:
+    branches: [research/stanford-colmap300-depth10-pose-cover-20261030]
+    paths:
+      - tools/stanford_colmap_pose_cover10.py
+      - .github/workflows/stanford-colmap-pose-cover10.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: stanford-colmap-pose-cover10
+  cancel-in-progress: true
+jobs:
+  real-pose-cover-ten-depth:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Download actual frozen independent 300-RGB COLMAP model
+        uses: actions/download-artifact@v4
+        with:
+          name: stanford-300rgb-early-overlap-30depth-40970565394
+          run-id: 40970565394
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: REDrighthand05/echo4d
+          path: artifacts/early-colmap
+      - name: Install CPU measured RGB-D reconstruction dependencies
+        run: |
+          python -m pip install 'open3d==0.19.0' 'trimesh==4.11.1' 'pillow==11.3.0' 'scipy==1.16.2'
+          python -m py_compile tools/stanford_colmap_pose_cover10.py
+          python tools/stanford_colmap_pose_cover10.py --self-test
+      - name: Reconstruct both real ten-depth Meshes using the same four-anchor scale
+        env:
+          QT_QPA_PLATFORM: offscreen
+          OMP_NUM_THREADS: '2'
+          OPENBLAS_NUM_THREADS: '1'
+        run: |
+          python tools/stanford_colmap_pose_cover10.py \
+            --upstream artifacts/early-colmap \
+            --output artifacts/stanford-300rgb-posecover10
+      - name: Verify two real GLBs and 3 recorded plus 2 free identical-ray views
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p = Path('artifacts/stanford-300rgb-posecover10')
+          r = json.loads((p / 'receipt.json').read_text())
+          print(json.dumps({k:r.get(k) for k in ('status','selected_rgb','registered_rgb','common_scale_depth_samples','temporal_depth_samples','pose_cover_depth_samples','same_ray_hit_percent')},indent=2))
+          assert r['status'] == 'REAL_MESH_GENERATED_VISUAL_REVIEW_REQUIRED'
+          assert r['selected_rgb'] == 300 and r['registered_rgb'] == 287
+          assert len(set(r['temporal_depth_samples'])) == 10
+          assert len(set(r['pose_cover_depth_samples'])) == 10
+          assert len(set(r['common_scale_depth_samples'])) == 4
+          assert set(r['common_scale_depth_samples']).issubset(r['temporal_depth_samples'])
+          assert set(r['common_scale_depth_samples']).issubset(r['pose_cover_depth_samples'])
+          assert set(r['temporal_depth_samples']) != set(r['pose_cover_depth_samples'])
+          for name in ('temporal10.glb','posecover10.glb','source-temporal10-vs-posecover10-3plus2.png'):
+              assert (p / name).stat().st_size > 10000, name
+          assert len(r['same_ray_hit_percent']['temporal10']) == 5
+          assert len(r['same_ray_hit_percent']['posecover10']) == 5
+          PY
+      - name: Preserve actual Meshes, five-view PNG and failure receipt
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stanford-300rgb-posecover10-${{ github.run_id }}
+          path: |
+            artifacts/stanford-300rgb-posecover10/receipt.json
+            artifacts/stanford-300rgb-posecover10/*.glb
+            artifacts/stanford-300rgb-posecover10/*.png
+          retention-days: 30
+          if-no-files-found: warn
