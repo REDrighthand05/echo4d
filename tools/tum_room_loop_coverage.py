@@ -1,4 +1,4 @@
-"""Real TUM Freiburg1 ROOM RGB-D Mesh: 8-stride vs 4-stride measured coverage.
+"""Real TUM Freiburg1 ROOM RGB-D Mesh: 291 measured frames with cross-view guard.
 
 Both meshes use measured RGB/depth, provided reference poses, calibrated 320x240,
 20mm TSDF. No existing scan prior, inferred depth, or geometry hallucination.
@@ -55,6 +55,85 @@ def sparse_reference_indices(train: tuple[int, ...]) -> tuple[int, ...]:
     i % 7 == 0, the sparse subset matches the previous 145-frame run.
     """
     return tuple(i for i in train if i % 2 == 0)
+
+
+
+# Reject only measured foreground contradicted by two other viewpoints.
+def depth_neighbors(i, poses):
+    here = poses[i][:3, 3]
+    choices = [j for j in range(max(0, i-22), min(len(poses), i+23))
+               if j != i and .07 <= np.linalg.norm(poses[j][:3, 3]-here) <= 1.]
+    selected = []
+    for side in (sorted((j for j in choices if j < i), reverse=True),
+                 sorted(j for j in choices if j > i)):
+        if side:
+            selected += [side[k] for k in sorted(set(np.linspace(
+                0, len(side)-1, min(3, len(side)), dtype=int)))]
+    return sorted(selected)
+
+
+def depth_local_min(depth):
+    """3x3 nearest valid measured surface; zeros mean unknown."""
+    d = np.where((depth > .2) & (depth < 4.), depth, np.inf).astype(np.float32)
+    p = np.pad(d, 1, constant_values=np.inf)
+    h, w = d.shape
+    return np.minimum.reduce([p[y:y+h, x:x+w] for y in range(3) for x in range(3)])
+
+
+def depth_conflict_mask(depth, pose, others, camera):
+    """Keep occluded, unobserved, and corroborated surfaces; remove 2x conflicts."""
+    h, w = depth.shape
+    mask = np.zeros((h, w), bool)
+    if len(others) < 2:
+        return mask
+    yy, xx = np.indices((h, w), dtype=np.float32)
+    valid = np.flatnonzero(((depth >= .2) & (depth <= 4.)).ravel())
+    if not len(valid):
+        return mask
+    z = depth.ravel()[valid]
+    xyz = np.stack(((xx.ravel()[valid]-camera.cx)*z/camera.fx,
+                    (yy.ravel()[valid]-camera.cy)*z/camera.fy, z))
+    world = pose[:3, :3] @ xyz + pose[:3, 3, None]
+    farther = np.zeros(len(valid), np.uint8)
+    agree = np.zeros(len(valid), np.uint8)
+    for other_pose, other_depth in others:
+        if other_depth.shape != (h, w):
+            raise DataError("Measured neighbor depth dimensions differ")
+        local = other_pose[:3, :3].T @ (world-other_pose[:3, 3, None])
+        zz = local[2]
+        safe = np.where(zz > .2, zz, 1.)
+        u = np.rint(camera.fx*local[0]/safe+camera.cx).astype(np.int32)
+        v = np.rint(camera.fy*local[1]/safe+camera.cy).astype(np.int32)
+        ok = np.flatnonzero((zz > .2) & (zz <= 4.) &
+                            (u >= 0) & (u < w) & (v >= 0) & (v < h))
+        if not len(ok):
+            continue
+        measured = other_depth[v[ok], u[ok]]
+        known = np.isfinite(measured)
+        farther[ok] += (known & (measured > zz[ok]+.12)).astype(np.uint8)
+        agree[ok] += (known & (np.abs(measured-zz[ok]) <= .055)).astype(np.uint8)
+    mask.ravel()[valid] = (farther >= 2) & (agree == 0)
+    return mask
+
+
+def guard_depth_frames(frames, camera):
+    """Simultaneous filtering against original real depth, never cascading."""
+    from dataclasses import replace
+    poses = [np.asarray(f.camera_to_world, dtype=np.float64) for f in frames]
+    mins = [depth_local_min(f.depth) for f in frames]
+    guarded, removed, neighbors = [], [], []
+    for i, f in enumerate(frames):
+        indices = depth_neighbors(i, poses)
+        mask = depth_conflict_mask(f.depth, poses[i],
+                                  [(poses[j], mins[j]) for j in indices], camera)
+        new_depth = np.array(f.depth, copy=True)
+        new_depth[mask] = 0.
+        guarded.append(replace(f, depth=new_depth))
+        removed.append(int(mask.sum()))
+        neighbors.append(len(indices))
+        if (i+1) % 40 == 0:
+            print(f"Checked {i+1}/{len(frames)} measured views", flush=True)
+    return guarded, removed, neighbors
 
 
 def safe_member(member: tarfile.TarInfo) -> tuple[str, ...]:
@@ -193,8 +272,12 @@ def run(args, result):
     rendered = {}
     result["meshes"] = {}
     frame_by_index = dict(zip(train, frames))
-    sparse_frames = [frame_by_index[i] for i in sparse]
-    for label, cohort in (("sparse", sparse_frames), ("dense", frames)):
+    guarded, removed, neighbors = guard_depth_frames(frames, camera)
+    result["crossview_guard"] = {"removed_pixels": sum(removed),
+                                 "frames_changed": sum(x > 0 for x in removed),
+                                 "per_frame_removed": removed, "neighbor_counts": neighbors,
+                                 "rule": "two measured views >12cm farther, no agreement within 5.5cm"}
+    for label, cohort in (("dense", frames), ("guarded", guarded)):
         mesh, _ = fuse(o3d, cohort, camera, pixel_stride=1, voxel=VOXEL_M)
         if len(mesh.triangles) > MAX_FACES:
             mesh = mesh.simplify_quadric_decimation(MAX_FACES)
@@ -219,24 +302,24 @@ def run(args, result):
             photo = img.convert("RGB")
             photo.save(args.output / f"real-room-{index:03d}-640x480.png")
             original = np.asarray(photo.resize((320, 240), Image.Resampling.LANCZOS))
-        filename = f"recorded-{index:03d}-sparse-vs-dense.png"
-        panels.append(panel(args.output / filename, [original, rendered["sparse"][n],
-                            rendered["dense"][n]],
-                            ["REAL RGB", f"SPARSE / {len(sparse_frames)}", f"DENSE / {len(frames)}"]))
+        filename = f"recorded-{index:03d}-dense-vs-guarded.png"
+        panels.append(panel(args.output / filename, [original, rendered["dense"][n],
+                            rendered["guarded"][n]],
+                            ["REAL RGB", f"BASE / {len(frames)}", f"GUARDED / {len(frames)}"]))
         result["views"].append({"kind": "recorded", "index": index, "file": filename})
     for j, index in enumerate(free):
         n = len(recorded) + j
-        filename = f"free-{j+1}-sparse-vs-dense.png"
-        blank = np.full_like(rendered["sparse"][n], 20)
+        filename = f"free-{j+1}-dense-vs-guarded.png"
+        blank = np.full_like(rendered["dense"][n], 20)
         panels.append(panel(args.output / filename,
-                            [blank, rendered["sparse"][n], rendered["dense"][n]],
-                            ["FREE / no photo", f"SPARSE / {len(sparse_frames)}", f"DENSE / {len(frames)}"]))
+                            [blank, rendered["dense"][n], rendered["guarded"][n]],
+                            ["FREE / no photo", f"BASE / {len(frames)}", f"GUARDED / {len(frames)}"]))
         result["views"].append({"kind": "free", "index": index, "file": filename,
                                 "shift_m": .22, "yaw_deg": 12 * (-1 if j == 0 else 1)})
     board = Image.new("RGB", (960, 267 * len(panels)))
     for n, item in enumerate(panels):
         board.paste(item, (0, 267*n))
-    board.save(args.output / "room-five-view-sparse-vs-dense.png")
+    board.save(args.output / "room-five-view-dense-vs-guarded.png")
     result["issue_74"] = "FAIL unchanged"
     result["historical_desk"] = "FAIL 16.7779cm > 15cm unchanged"
 

@@ -46,3 +46,45 @@ def test_reject_symlink_archive_members():
     entry.type = tarfile.SYMTYPE
     with pytest.raises(DataError, match="Unsafe"):
         safe_member(entry)
+
+def _translated(x):
+    import numpy as np
+    p = np.eye(4)
+    p[0, 3] = x
+    return p
+
+
+def test_two_measured_farther_views_remove_unsupported_foreground():
+    import numpy as np
+    from echo4d.model import Camera
+    from tum_room_loop_coverage import depth_conflict_mask, depth_local_min
+    cam = Camera(21, 21, 12., 12., 10., 10.)
+    source = np.ones((21, 21), np.float32)
+    source[10, 10] = .8
+    far = depth_local_min(np.full_like(source, 1.6))
+    mask = depth_conflict_mask(source, _translated(0),
+                               [(_translated(.1), far), (_translated(-.1), far)], cam)
+    assert mask[10, 10]
+
+
+def test_agreement_occlusion_unknown_and_single_conflict_are_preserved():
+    import numpy as np
+    from echo4d.model import Camera
+    from tum_room_loop_coverage import depth_conflict_mask, depth_local_min
+    cam = Camera(21, 21, 12., 12., 10., 10.)
+    source = np.ones((21, 21), np.float32)
+    agree = depth_local_min(source)
+    far = depth_local_min(np.full_like(source, 1.6))
+    closer = depth_local_min(np.full_like(source, .6))
+    missing = depth_local_min(np.zeros_like(source))
+    for other in (agree, closer, missing):
+        assert not depth_conflict_mask(source, _translated(0),
+            [(_translated(.1), other), (_translated(-.1), far)], cam).any()
+    assert not depth_conflict_mask(source, _translated(0),
+        [(_translated(.1), closer), (_translated(-.1), closer)], cam).any()
+
+
+def test_crossview_neighbors_require_actual_baseline():
+    from tum_room_loop_coverage import depth_neighbors
+    found = depth_neighbors(0, [_translated(x) for x in (0., .01, .09, .14, .25, .30, .4)])
+    assert 1 not in found and 2 in found and len(found) <= 6
