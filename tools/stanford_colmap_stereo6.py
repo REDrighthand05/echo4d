@@ -284,7 +284,8 @@ def run(upstream, output):
                         (("measured10", baseline), (candidate_name, candidate_mesh)), 1):
                     rendered, coverage = render_rays(o3d, mesh, ray)
                     panel.paste(rendered, (col*320, y+26))
-                    receipt["same_ray_hit_percent"].setdefault(label, []).append(coverage)
+                    if label != "measured10" or candidate_name == "measured4_stereo6":
+                        receipt["same_ray_hit_percent"].setdefault(label, []).append(coverage)
             panel.save(output / image_name)
         receipt.update(
             status="REAL_MESH_GENERATED_VISUAL_REVIEW_REQUIRED",
