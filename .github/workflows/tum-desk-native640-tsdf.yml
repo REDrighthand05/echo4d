@@ -1,0 +1,49 @@
+name: TUM Freiburg1 Desk native 640 measured Mesh A/B
+
+on:
+  push:
+    branches: [research/tum-desk-native640-tsdf-20261030]
+    paths:
+      - tools/tum_desk_native640_tsdf.py
+      - tests/python/test_tum_desk_native640_tsdf.py
+      - .github/workflows/tum-desk-native640-tsdf.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  real-desk-native640-mesh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install project and Open3D
+        run: |
+          python -m pip install -r requirements.lock
+          python -m pip install --no-deps -e .
+          python -m pip install 'open3d==0.19.0' 'trimesh>=4,<5'
+      - name: Test native intrinsics and even-pixel baseline
+        env:
+          PYTHONPATH: tools
+        run: python -m pytest -q tests/python/test_tum_desk_native640_tsdf.py
+      - name: Reconstruct actual TUM Desk RGB-D at native 640 and 320
+        env:
+          PYTHONPATH: tools
+          OPENBLAS_NUM_THREADS: '1'
+          OMP_NUM_THREADS: '2'
+        run: |
+          python tools/tum_desk_native640_tsdf.py \
+            --work "$RUNNER_TEMP/tum-desk-native640" \
+            --output "$GITHUB_WORKSPACE/artifacts/tum-desk-native640"
+      - name: Preserve real GLBs, three original photos, five same-view comparisons and failures
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tum-desk-native640-real
+          path: artifacts/tum-desk-native640/
+          retention-days: 14
+          if-no-files-found: warn
