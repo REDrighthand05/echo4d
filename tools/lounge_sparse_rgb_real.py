@@ -21,7 +21,8 @@ from PIL import Image
 
 from echo4d.model import Camera, DataError, Frame
 from lounge_spatial_prior_real import VOXEL_M, read_frames, select_views
-from lounge_rgb_gap_select import choose_gap_targets, score_gap_views
+from lounge_rgb_gap_select import (choose_gap_targets, score_gap_views,
+                                   conservative_hole_depth)
 from lounge_rgb_depth_adapter import (
     CPUDepthAnything, DEPTH_MIN, DEPTH_MAX, MODEL_ID, MODEL_REV,
     WEIGHTS_SHA256, file_sha256, metric_from_relative, project_sensor_anchors,
@@ -154,7 +155,7 @@ def run(work, output, receipt, gap_selection=False):
     gc.collect()
 
     predictor = CPUDepthAnything()
-    predictions, inferred_by_id = {}, {}
+    predictions, inferred_by_id, guarded_by_id = {}, {}, {}
     for i in sorted(set(targets) | set(gap_targets)):
         with Image.open(dataset.color_paths[i]) as image:
             rgb = np.asarray(image.convert("RGB"), dtype=np.uint8)
@@ -172,6 +173,15 @@ def run(work, output, receipt, gap_selection=False):
         inferred_by_id[i] = Frame(
             float(i), poses[i], metric,
             np.ascontiguousarray(rgb[::2, ::2])).validate(camera)
+        if gap_selection and i in gap_targets:
+            # Do not allow RGB-only predictions to re-fuse already measured
+            # surfaces or extrapolate large unsupported planar sheets.
+            guarded, guard_stats = conservative_hole_depth(metric, projected)
+            guarded_by_id[i] = Frame(
+                float(i), poses[i], guarded,
+                np.ascontiguousarray(rgb[::2, ::2])).validate(camera)
+            receipt.setdefault("guarded_gap_depth", []).append(
+                {"index": i, **guard_stats})
         predictions[i] = metric
         Image.fromarray(np.clip(metric*1000, 0, 65535).astype(np.uint16)).save(
             output / f"RGB-estimated-depth-{i:04d}-mm.png")
@@ -187,6 +197,8 @@ def run(work, output, receipt, gap_selection=False):
         raise RuntimeError(f"Only {len(inferred)} of 24 baseline RGB views calibrated")
     if gap_selection and len(gap_inferred) < 4:
         raise RuntimeError(f"Only {len(gap_inferred)} of 24 gap RGB views calibrated")
+    guarded_gap_inferred = [
+        guarded_by_id[i] for i in gap_targets if i in guarded_by_id]
 
     hybrid, _ = fuse(o3d, measured + inferred, camera,
                      pixel_stride=1, voxel=VOXEL_M)
@@ -210,6 +222,21 @@ def run(work, output, receipt, gap_selection=False):
             "file": gap_path.name, "sensor_frames":72,
             "predicted_frames":len(gap_inferred)}
         del gap_mesh
+        gc.collect()
+
+        guarded_mesh, _ = fuse(
+            o3d, measured + guarded_gap_inferred, camera,
+            pixel_stride=1, voxel=VOXEL_M)
+        guarded_path = output / "lounge-72-plus-24-measured-supported-gap.glb"
+        export_glb(guarded_mesh, guarded_path)
+        renders["guarded_gap"] = [
+            render(o3d, guarded_mesh, camera, pose) for pose in view_poses]
+        receipt["meshes"]["guarded_gap"] = {
+            "file": guarded_path.name, "sensor_frames":72,
+            "predicted_frames":len(guarded_gap_inferred),
+            "predicted_geometry_policy":
+                "only unmeasured rays near consistent retained sensor depths"}
+        del guarded_mesh
         gc.collect()
 
     # Only NOW may any withheld target depth be read, for the 144-depth
@@ -256,6 +283,7 @@ def run(work, output, receipt, gap_selection=False):
               "72 SENSOR", f"72 SENSOR + {len(inferred)} RGB"]
     if gap_selection:
         labels.append(f"72 SENSOR + {len(gap_inferred)} GAP RGB")
+        labels.append("72 + 24 SUPPORTED GAPS")
     for row, pose in enumerate(view_poses):
         if row < 3:
             i = source_ids[row]
@@ -274,6 +302,7 @@ def run(work, output, receipt, gap_selection=False):
                   renders["72"][row], renders["hybrid"][row]]
         if gap_selection:
             images.append(renders["gap"][row])
+            images.append(renders["guarded_gap"][row])
         boards.append(panel(output / name, images, labels))
         receipt["views"].append({"kind":kind, "index":i, "file":name})
     board = Image.new("RGB", (camera.width*len(labels), (camera.height+27)*5))
@@ -281,7 +310,7 @@ def run(work, output, receipt, gap_selection=False):
         board.paste(image, (0, row*(camera.height+27)))
     board.save(output / ("lounge-72-gap-rgb24-five-views.png" if gap_selection
                          else "lounge-144-vs-72-vs-72plus24rgb-five-views.png"))
-    receipt["status"] = "real_three_meshes_and_five_views_review_pending"
+    receipt["status"] = "real_meshes_and_five_views_review_pending"
     receipt["visual_verdict"] = "PENDING real five-view inspection; no room PASS"
 
 
