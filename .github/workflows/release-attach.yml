@@ -1,0 +1,58 @@
+name: Attach release package
+
+on:
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  attach:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download built artifact from run 41165870727
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh run download 41165870727 --repo "$GITHUB_REPOSITORY" --name EchoScene-windows --dir dl
+          echo "--- dl contents ---"
+          find dl -type f -exec ls -la {} \;
+
+      - name: Unwrap outer zip to get inner EchoScene-windows.zip
+        run: |
+          INNER=$(find dl -name 'EchoScene-windows.zip' | head -n 1)
+          if [ -z "$INNER" ]; then
+            OUTER=$(find dl -name '*.zip' | head -n 1)
+            echo "outer zip: $OUTER"
+            mkdir -p out
+            unzip -o "$OUTER" -d out
+            INNER=$(find out -name 'EchoScene-windows.zip' | head -n 1)
+          fi
+          echo "inner zip: $INNER"
+          test -n "$INNER"
+          cp "$INNER" ./EchoScene-windows.zip
+          ls -la ./EchoScene-windows.zip
+
+      - name: Verify inner zip contains EchoScene/EchoScene.exe
+        run: |
+          python3 - <<'EOF'
+          import zipfile
+          z = zipfile.ZipFile("EchoScene-windows.zip")
+          names = z.namelist()
+          print(f"entries: {len(names)}")
+          assert "EchoScene/EchoScene.exe" in names, "EchoScene/EchoScene.exe missing from inner zip"
+          print("OK: EchoScene/EchoScene.exe present")
+          EOF
+
+      - name: Upload package to release v0.1
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload v0.1 EchoScene-windows.zip --repo "$GITHUB_REPOSITORY" --clobber
+
+      - name: Verify asset present on release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view v0.1 --repo "$GITHUB_REPOSITORY" --json assets
