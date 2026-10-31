@@ -23,6 +23,7 @@ from echo4d.model import Camera, DataError, Frame
 from lounge_spatial_prior_real import VOXEL_M, read_frames, select_views
 from lounge_rgb_gap_select import (choose_gap_targets, score_gap_views,
                                    conservative_hole_depth)
+from lounge_rgb_crossview_support import corroborate_rgb_depths
 from lounge_rgb_depth_adapter import (
     CPUDepthAnything, DEPTH_MIN, DEPTH_MAX, MODEL_ID, MODEL_REV,
     WEIGHTS_SHA256, file_sha256, metric_from_relative, project_sensor_anchors,
@@ -60,7 +61,7 @@ def diverse_add(candidates, poses, count, seed=()):
     return sorted(new)
 
 
-def run(work, output, receipt, gap_selection=False):
+def run(work, output, receipt, gap_selection=False, crossview=False):
     import open3d as o3d
     import trimesh
 
@@ -106,7 +107,7 @@ def run(work, output, receipt, gap_selection=False):
         full_rgb_resolution=[full.width, full.height],
         fusion_resolution=[camera.width, camera.height],
         measured_sensor_indices=anchors, rgb_only_target_indices=targets,
-        gap_selection_enabled=gap_selection,
+        gap_selection_enabled=gap_selection, crossview_enabled=crossview,
         withheld_sensor_indices=sorted(set(selected)-set(anchors)),
         reference_pose="Supplied Stanford Lounge trajectory",
         metric_scale="72 retained measured depth frames, known metric poses",
@@ -200,6 +201,42 @@ def run(work, output, receipt, gap_selection=False):
     guarded_gap_inferred = [
         guarded_by_id[i] for i in gap_targets if i in guarded_by_id]
 
+    crossview_inferred, crossview_guarded_inferred = [], []
+    if crossview:
+        if not gap_selection:
+            raise ValueError("RGB crossview requires gap-selection cohort")
+        # Compare ONLY the 24 predicted RGB depth maps. Independent camera
+        # centers and parallax are mandatory; no withheld target depth, scan
+        # or reference Mesh enters the corroboration.
+        crossview_masks, crossview_stats = corroborate_rgb_depths(
+            {i: predictions[i] for i in gap_targets if i in predictions},
+            poses, camera, min_baseline_m=.16, min_parallax_deg=3.,
+            abs_tolerance_m=.12, rel_tolerance=.07, min_other_views=1)
+        receipt["crossview_depth"] = []
+        for i in gap_targets:
+            if i not in crossview_masks:
+                continue
+            mask = crossview_masks[i]
+            source = inferred_by_id[i]
+            checked = np.where(mask, source.depth, 0).astype(np.float32)
+            checked_guarded = np.where(
+                mask, guarded_by_id[i].depth, 0).astype(np.float32)
+            crossview_inferred.append(
+                Frame(float(i), poses[i], checked, source.color).validate(camera))
+            crossview_guarded_inferred.append(
+                Frame(float(i), poses[i], checked_guarded,
+                      source.color).validate(camera))
+            receipt["crossview_depth"].append({
+                "index":i, **crossview_stats[i],
+                "measured_hole_and_crossview_pixels":
+                    int(np.count_nonzero(checked_guarded))})
+            Image.fromarray(
+                np.clip(checked*1000, 0, 65535).astype(np.uint16)).save(
+                    output / f"RGB-crossview-depth-{i:04d}-mm.png")
+        print("Independent RGB corroboration kept "
+              f"{sum(int(np.count_nonzero(f.depth)) for f in crossview_inferred)} "
+              "predicted depth pixels", flush=True)
+
     hybrid, _ = fuse(o3d, measured + inferred, camera,
                      pixel_stride=1, voxel=VOXEL_M)
     hybrid_path = output / "lounge-72-measured-plus-24-rgb.glb"
@@ -239,6 +276,28 @@ def run(work, output, receipt, gap_selection=False):
         del guarded_mesh
         gc.collect()
 
+        if crossview:
+            for key, frames, name, policy in [
+                ("crossview", crossview_inferred,
+                 "lounge-72-plus-24-rgb-crossview.glb",
+                 "target RGB depth corroborated by another independent RGB camera"),
+                ("crossview_guarded", crossview_guarded_inferred,
+                 "lounge-72-plus-24-rgb-crossview-measured-holes.glb",
+                 "independent RGB agreement AND local retained-measured hole support"),
+            ]:
+                mesh, _ = fuse(o3d, measured + frames, camera,
+                               pixel_stride=1, voxel=VOXEL_M)
+                path = output / name
+                export_glb(mesh, path)
+                renders[key] = [
+                    render(o3d, mesh, camera, pose) for pose in view_poses]
+                receipt["meshes"][key] = {
+                    "file": name, "sensor_frames":72,
+                    "predicted_frames":len(frames),
+                    "predicted_geometry_policy":policy}
+                del mesh
+                gc.collect()
+
     # Only NOW may any withheld target depth be read, for the 144-depth
     # independent upper control and post-hoc depth error.
     all_by_id, _, _ = read_frames(dataset, selected, poses, full, camera)
@@ -253,7 +312,7 @@ def run(work, output, receipt, gap_selection=False):
     gc.collect()
     receipt["posthoc_target_checks"] = []
     # The gap-selected RGB frames can be outside the 144-depth upper set.
-    # Their real depth is opened only AFTER BOTH reduced-input GLBs exist.
+    # Their real depth is opened only AFTER ALL reduced-input GLBs exist.
     gap_outside_upper = sorted(set(predictions) - set(all_by_id))
     if gap_outside_upper:
         heldout_by_id, _, _ = read_frames(
@@ -284,6 +343,8 @@ def run(work, output, receipt, gap_selection=False):
     if gap_selection:
         labels.append(f"72 SENSOR + {len(gap_inferred)} GAP RGB")
         labels.append("72 + 24 SUPPORTED GAPS")
+    if crossview:
+        labels += ["72 + RGB2 AGREEMENT", "72 + RGB2 + SENSOR HOLES"]
     for row, pose in enumerate(view_poses):
         if row < 3:
             i = source_ids[row]
@@ -303,13 +364,18 @@ def run(work, output, receipt, gap_selection=False):
         if gap_selection:
             images.append(renders["gap"][row])
             images.append(renders["guarded_gap"][row])
+        if crossview:
+            images.extend([renders["crossview"][row],
+                           renders["crossview_guarded"][row]])
         boards.append(panel(output / name, images, labels))
         receipt["views"].append({"kind":kind, "index":i, "file":name})
     board = Image.new("RGB", (camera.width*len(labels), (camera.height+27)*5))
     for row, image in enumerate(boards):
         board.paste(image, (0, row*(camera.height+27)))
-    board.save(output / ("lounge-72-gap-rgb24-five-views.png" if gap_selection
-                         else "lounge-144-vs-72-vs-72plus24rgb-five-views.png"))
+    board.save(output / (
+        "lounge-rgb-crossview24-five-views.png" if crossview else
+        "lounge-72-gap-rgb24-five-views.png" if gap_selection else
+        "lounge-144-vs-72-vs-72plus24rgb-five-views.png"))
     receipt["status"] = "real_meshes_and_five_views_review_pending"
     receipt["visual_verdict"] = "PENDING real five-view inspection; no room PASS"
 
@@ -320,13 +386,17 @@ def main():
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--gap-selection", action="store_true",
                         help="Compare original pose-spread RGB24 with 24 measured-gap RGB views")
+    parser.add_argument("--crossview", action="store_true",
+                        help="Fuse only independent two-RGB-view corroborated gap surfaces")
     args = parser.parse_args()
     receipt = {
         "status":"running",
         "run_url":(f"https://github.com/{os.getenv('GITHUB_REPOSITORY')}/actions/runs/"
                    f"{os.getenv('GITHUB_RUN_ID')}" if os.getenv("GITHUB_RUN_ID") else None)}
     try:
-        run(args.work, args.output, receipt, gap_selection=args.gap_selection)
+        run(args.work, args.output, receipt,
+            gap_selection=args.gap_selection or args.crossview,
+            crossview=args.crossview)
         code = 0
     except Exception as exc:
         traceback.print_exc()
