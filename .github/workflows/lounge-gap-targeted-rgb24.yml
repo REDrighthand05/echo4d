@@ -14,7 +14,7 @@ permissions:
 
 concurrency:
   group: lounge-gap-targeted-rgb24
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   lounge-real-gap-rgb:
@@ -52,7 +52,7 @@ jobs:
             --work "$RUNNER_TEMP/lounge-gap-rgb24" \
             --output "$GITHUB_WORKSPACE/artifacts/lounge-gap-rgb24" \
             --gap-selection
-      - name: Upload four actual colored GLBs five-view image original photos and failure receipt
+      - name: Upload five actual colored GLBs five-view image original photos and failure receipt
         if: always()
         uses: actions/upload-artifact@v4
         with:
