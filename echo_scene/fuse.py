@@ -25,6 +25,84 @@ def _quat_xyzw_to_matrix(q):
     )
 
 
+def _robust_mean_direction(vectors: np.ndarray) -> np.ndarray | None:
+    """Robust central direction of unit vectors (deterministic).
+
+    Component-wise median first (immune to the minority of frames where
+    the camera was tilted hard up/down), then a 35-degree cone filter,
+    then a plain mean of the survivors. This estimates ONE direction --
+    no geometry is averaged or merged anywhere.
+    """
+    v = np.asarray(vectors, dtype=np.float64)
+    if len(v) == 0:
+        return None
+    norms = np.linalg.norm(v, axis=1, keepdims=True)
+    v = v / np.where(norms > 0, norms, 1.0)
+    ref = np.median(v, axis=0)
+    ref_norm = float(np.linalg.norm(ref))
+    if ref_norm < 1e-9:
+        ref = v.mean(axis=0)
+        ref_norm = float(np.linalg.norm(ref))
+        if ref_norm < 1e-9:
+            return None
+    ref = ref / ref_norm
+    keep = (v @ ref) > math.cos(math.radians(35.0))
+    if keep.sum() >= max(3, len(v) // 4):
+        v = v[keep]
+    out = v.mean(axis=0)
+    out_norm = float(np.linalg.norm(out))
+    if out_norm < 1e-9:
+        return None
+    return out / out_norm
+
+
+def _rotation_mapping(a: np.ndarray, b: np.ndarray) -> np.ndarray:
+    """Rigid rotation (column convention) taking unit vector a to b.
+
+    Rodrigues' formula, the same construction the marker leveling uses;
+    the antiparallel case is a 180-degree turn about X.
+    """
+    axis = np.cross(a, b)
+    axis_len = float(np.linalg.norm(axis))
+    cosang = float(np.clip(a @ b, -1.0, 1.0))
+    if axis_len <= 1e-9:
+        if cosang > 0:
+            return np.eye(3)
+        return np.diag([1.0, -1.0, -1.0])
+    axis = axis / axis_len
+    angle = math.acos(cosang)
+    kx = np.array(
+        [
+            [0.0, -axis[2], axis[1]],
+            [axis[2], 0.0, -axis[0]],
+            [-axis[1], axis[0], 0.0],
+        ]
+    )
+    return np.eye(3) + math.sin(angle) * kx + (1.0 - math.cos(angle)) * (kx @ kx)
+
+
+def _estimate_world_up(poses: dict) -> np.ndarray | None:
+    """World up from the job's camera poses.
+
+    COLMAP cameras use the OpenCV convention (x right, y DOWN, z
+    forward), so a camera's image-down axis in world coordinates is the
+    second row of its cam_from_world rotation. A walkthrough is filmed
+    roughly level, so the robust average of those axes is world down;
+    up is its negation. Returns a unit vector or None.
+    """
+    downs = []
+    for pose in poses.values():
+        q = pose.get("cam_from_world_quat_xyzw")
+        if q is None:
+            continue
+        rot = _quat_xyzw_to_matrix(q)
+        downs.append(rot[1])
+    down = _robust_mean_direction(np.array(downs)) if downs else None
+    if down is None:
+        return None
+    return -down
+
+
 def _collect_anchor_pairs(job_dir: Path, depth_dir: Path):
     """Return (rel_values, inv_z_values, per_frame) sampled at COLMAP points.
 
@@ -360,6 +438,12 @@ def stage_fuse(job_dir: Path, stride: int = 4) -> dict:
     # (the viewer's up axis, see markers.py) and scale it into meters.
     # Without markers.json this block never runs and output is unchanged.
     marker_info = {}
+    # Total rigid rotation applied to the points on export (marker
+    # leveling below, or the camera-pose up alignment after it). Written
+    # to alignment.json so downstream stages that also read poses.json
+    # (the mesh stage's camera centres) can express them in the same
+    # exported frame as the points.
+    export_rot = None
     markers_file = job_dir / "markers.json"
     if markers_file.exists():
         try:
@@ -389,13 +473,61 @@ def stage_fuse(job_dir: Path, stride: int = 4) -> dict:
                     + (1.0 - math.cos(angle)) * (kx @ kx)
                 )
                 points = points @ rot_align.T
+                export_rot = rot_align
             elif float(n @ up) < 0:
-                points = points * np.array([1.0, -1.0, -1.0])
+                flip = np.diag([1.0, -1.0, -1.0])
+                points = points @ flip.T
+                export_rot = flip
             marker_info["marker_leveled"] = True
         marker_scale = markers.get("scale_to_meters")
         if marker_scale:
             points = points * float(marker_scale)
             marker_info["marker_scale_to_meters"] = float(marker_scale)
+
+    # Up alignment (camera-estimated): the COLMAP world frame is
+    # arbitrary, so without this step the exported scene can sit upside
+    # down in the viewer (whose up is +Y) and in every other tool. When
+    # the marker stage did not already level the cloud from a measured
+    # floor, estimate world up from the camera poses (a roughly level
+    # walk makes the cameras' image-down axes cluster around gravity)
+    # and rotate the whole cloud rigidly so that up lands on +Y. One
+    # rotation applied to every point -- nothing is moved relative to
+    # anything else, and the trim / voxel_pick results above are
+    # untouched. Runs after voxel_pick, so the mesh and voxel stages
+    # (which consume points.bin) inherit the upright frame.
+    align_info = {}
+    if export_rot is None:
+        up_est = _estimate_world_up(poses)
+        if up_est is not None:
+            export_rot = _rotation_mapping(up_est, np.array([0.0, 1.0, 0.0]))
+            points = points @ export_rot.T
+            align_info = {
+                "up_alignment": "camera_poses",
+                "estimated_up_world": [float(v) for v in up_est],
+            }
+    alignment_file = job_dir / "alignment.json"
+    if export_rot is not None:
+        alignment_file.write_text(
+            json.dumps(
+                {
+                    "rotation": [
+                        [float(v) for v in row] for row in export_rot
+                    ],
+                    "convention": (
+                        "column-convention rotation mapping the COLMAP "
+                        "world frame to the exported frame; row-vector "
+                        "points transform as p @ rotation.T"
+                    ),
+                },
+                ensure_ascii=False,
+                indent=2,
+            )
+        )
+        align_info["alignment_json"] = str(alignment_file)
+    elif alignment_file.exists():
+        # No rotation this run -- a stale sidecar would silently tilt
+        # the mesh stage's camera centres against the new points.
+        alignment_file.unlink()
 
     _write_binary_ply(points, colors, job_dir / "scene_points.ply")
     _write_points_bin(points, colors, job_dir / "points.bin")
@@ -411,6 +543,7 @@ def stage_fuse(job_dir: Path, stride: int = 4) -> dict:
         "scene_points_ply": str(job_dir / "scene_points.ply"),
         "points_bin": str(job_dir / "points.bin"),
         **marker_info,
+        **align_info,
     }
     (job_dir / "job.json").write_text(json.dumps(info, ensure_ascii=False, indent=2))
     return info

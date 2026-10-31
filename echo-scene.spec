@@ -15,7 +15,13 @@ datas = [("viewer.html", "."),
          ("assets/ffmpeg/ffprobe.exe", "assets/ffmpeg")]
 binaries = []
 hiddenimports = []
-for pkg in ("pycolmap", "onnxruntime"):
+# open3d is a HARD dependency of the mesh stage (echo_scene/mesh.py
+# Poisson reconstruction); it imports lazily behind a guard, so a
+# missing bundle does not fail the build -- v0.1 shipped without it
+# and died on the user's machine at the mesh step. It must be
+# collected here, and requirements-app.txt must install it, or the
+# freeze is broken by construction.
+for pkg in ("pycolmap", "onnxruntime", "open3d"):
     d, b, h = collect_all(pkg)
     datas += d
     binaries += b

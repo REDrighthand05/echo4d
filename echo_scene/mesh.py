@@ -63,7 +63,13 @@ def _voxel_decimate(points, colors, max_points=MAX_INPUT_POINTS):
 
 def _camera_centers(job_dir: Path):
     """World-space camera centres from poses.json. fuse's convention is
-    world = (cam - t) @ R, so the centre (cam = 0) is (-t) @ R."""
+    world = (cam - t) @ R, so the centre (cam = 0) is (-t) @ R.
+
+    When the fuse stage exported the cloud in an aligned frame
+    (alignment.json: marker leveling or the camera-pose up alignment),
+    the centres are rotated by the same rigid transform so they stay
+    registered with points.bin -- normal orientation depends on it.
+    """
     poses = json.loads((job_dir / "poses.json").read_text())
     centers = []
     for pose in poses.values():
@@ -72,7 +78,18 @@ def _camera_centers(job_dir: Path):
         centers.append((-t) @ rot)
     if not centers:
         raise ValueError("poses.json contains no camera poses")
-    return np.array(centers)
+    centers = np.array(centers)
+    align_file = job_dir / "alignment.json"
+    if align_file.exists():
+        try:
+            export_rot = np.array(
+                json.loads(align_file.read_text())["rotation"],
+                dtype=np.float64,
+            )
+            centers = centers @ export_rot.T
+        except (OSError, ValueError, KeyError, TypeError):
+            pass
+    return centers
 
 
 def _orient_normals(points, normals, centers):

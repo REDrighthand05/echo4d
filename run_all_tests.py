@@ -23,6 +23,7 @@ SUITES = [
     ("routes", [sys.executable, "-m", "unittest", "tests.test_echo_super", "-v"]),
     ("frozen", [sys.executable, "tests/test_voxel_frozen.py"]),
     ("frozen", [sys.executable, "tests/test_markers_synth.py"]),
+    ("align", [sys.executable, "tests/test_up_alignment.py"]),
 ]
 
 

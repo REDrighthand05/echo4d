@@ -42,6 +42,17 @@ jobs:
           HF_HUB_DISABLE_SYMLINKS_WARNING: "1"
       - name: Build exe
         run: pyinstaller echo-scene.spec --noconfirm
+      - name: Verify mesh dependency (open3d) is inside the frozen bundle
+        # Regression guard for the v0.1 breakage: the exe built green
+        # while open3d was missing, and only failed on the user's
+        # machine at the mesh stage. Fail the build instead if the
+        # frozen tree does not carry the library and its native module.
+        run: |
+          $o3d = "dist/EchoScene/_internal/open3d"
+          if (-not (Test-Path $o3d)) { throw "open3d package missing from frozen bundle: $o3d" }
+          $pyd = Get-ChildItem -Path $o3d -Recurse -Filter *.pyd | Select-Object -First 1
+          if (-not $pyd) { throw "open3d native extension (*.pyd) missing from frozen bundle" }
+          Write-Host "open3d bundled OK: $($pyd.FullName)"
       - name: Package
         run: Compress-Archive -Path dist/EchoScene -DestinationPath EchoScene-windows.zip
       - uses: actions/upload-artifact@v4
