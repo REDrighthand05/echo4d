@@ -2,6 +2,9 @@ name: Attach release package
 
 on:
   workflow_dispatch:
+  push:
+    branches: [product/echo-scene]
+    paths: [.github/workflows/release-attach.yml]
 
 permissions:
   actions: read
