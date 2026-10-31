@@ -1,0 +1,48 @@
+name: Real Lounge global measured-plane TSDF A/B
+on:
+  push:
+    branches: [research/lounge-global-plane-tsdf-20261031]
+    paths:
+      - tools/lounge_global_plane_tsdf_real.py
+      - tests/python/test_lounge_global_plane_tsdf_real.py
+      - .github/workflows/lounge-global-plane-tsdf-real.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  lounge-global-plane:
+    runs-on: ubuntu-latest
+    timeout-minutes: 110
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install geometry dependencies
+        run: |
+          python -m pip install -r requirements.lock
+          python -m pip install --no-deps -e .
+          python -m pip install 'open3d==0.19.0' 'trimesh>=4,<5'
+      - name: Protect original sensor depths and silhouettes
+        env:
+          PYTHONPATH: tools
+        run: python -m pytest -q tests/python/test_lounge_global_plane_tsdf_real.py
+      - name: Run real 144-frame Lounge depth-plane TSDF comparison
+        env:
+          PYTHONPATH: tools
+          OPENBLAS_NUM_THREADS: '1'
+          OMP_NUM_THREADS: '2'
+        run: |
+          python tools/lounge_global_plane_tsdf_real.py \
+            --work "$RUNNER_TEMP/lounge-global-plane" \
+            --output "$GITHUB_WORKSPACE/artifacts/lounge-global-plane"
+      - name: Upload actual GLBs and 3 recorded plus 2 free views
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lounge-real-global-plane-tsdf-ab
+          path: artifacts/lounge-global-plane/
+          retention-days: 14
+          if-no-files-found: warn
