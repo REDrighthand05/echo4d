@@ -2,7 +2,7 @@
 import numpy as np
 import pytest
 
-from lounge_rgb_gap_select import choose_gap_targets
+from lounge_rgb_gap_select import choose_gap_targets, conservative_hole_depth
 
 
 def make_poses(n):
@@ -43,3 +43,24 @@ def test_no_depth_or_rgb_needed_for_camera_choice():
     chosen = choose_gap_targets(rows, poses, 5)
     assert len(chosen) == 5
     assert all(i in range(12) for i in chosen)
+
+
+def test_conservative_hole_fusion_never_overwrites_measured_rays():
+    metric = np.full((15, 15), 2., np.float32)
+    anchors = np.full((15, 15), np.inf, np.float32)
+    anchors[7, 7] = 2.
+    guarded, stats = conservative_hole_depth(metric, anchors, radius=3)
+    assert guarded[7, 7] == 0  # known surface belongs to the sensor, not AI
+    assert guarded[7, 8] == 2.  # local missing pixel is a supported fill
+    assert guarded[0, 0] == 0   # no large extrapolated wall
+    assert stats["added_pixels"] > 0
+    assert stats["guarded_valid_fraction"] < .2
+
+
+def test_conservative_hole_fusion_rejects_conflicting_geometry():
+    metric = np.full((9, 9), 3., np.float32)
+    anchors = np.full((9, 9), np.inf, np.float32)
+    anchors[4, 4] = 1.
+    guarded, stats = conservative_hole_depth(metric, anchors, radius=3)
+    assert not np.any(guarded)
+    assert stats["added_pixels"] == 0
