@@ -1,6 +1,7 @@
 pycolmap>=3.10
 onnxruntime>=1.17
 open3d>=0.18
+scipy>=1.11
 numpy>=1.26
 Pillow>=10.0
 opencv-contrib-python-headless>=4.8

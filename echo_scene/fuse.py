@@ -262,7 +262,7 @@ def _corroboration_trim(points, colors, frame_ids, lo, voxel):
         "trim_points_before": int(len(points)),
         "trim_points_after": int(keep.sum()),
     }
-    return points[keep], colors[keep], stats
+    return points[keep], colors[keep], keep, stats
 
 
 def stage_fuse(job_dir: Path, stride: int = 4) -> dict:
@@ -399,12 +399,30 @@ def stage_fuse(job_dir: Path, stride: int = 4) -> dict:
         "trim_yardstick_voxels": 0,
         "trim_voxels_with_min_frames": 0,
     }
+    trim_dropped = 0
     if trim_info["trim_voxel_size"] is not None:
-        points, colors, trim_stats = _corroboration_trim(
+        pre_points, pre_colors, pre_ids = points, colors, frame_ids
+        points, colors, trim_keep, trim_stats = _corroboration_trim(
             points, colors, frame_ids, lo, trim_info["trim_voxel_size"]
         )
+        frame_ids = frame_ids[trim_keep]
         trim_info.update(trim_stats)
-    del frame_ids, yardstick_chunks
+        # Keep the trim's dropped set on disk: it is the visible fringe
+        # the corroboration rule cut, kept as evidence next to the kept
+        # cloud (one small sidecar pair).
+        dropped = ~trim_keep
+        trim_dropped = int(dropped.sum())
+        if trim_dropped:
+            _write_points_bin(
+                pre_points[dropped],
+                pre_colors[dropped],
+                job_dir / "points_trim_dropped.bin",
+            )
+            np.save(
+                job_dir / "points_trim_dropped_frame_ids.npy",
+                pre_ids[dropped].astype(np.int32),
+            )
+    del yardstick_chunks
     # Voxel reduction by deterministic selection (voxel_pick, DS-written
     # and reviewed 2026-10-31): each voxel keeps the single real measured
     # point closest to the voxel centroid. The previous implementation
@@ -432,6 +450,7 @@ def stage_fuse(job_dir: Path, stride: int = 4) -> dict:
     pick = np.sort(order[first])
     assert len(pick) == len(counts), (len(pick), len(counts))
     points, colors = points[pick], colors[pick]
+    frame_ids = frame_ids[pick]
 
     # Printed-marker calibration (optional): when the markers stage found
     # the printed sheet, level the cloud so the floor normal becomes +Y
@@ -529,6 +548,21 @@ def stage_fuse(job_dir: Path, stride: int = 4) -> dict:
         # the mesh stage's camera centres against the new points.
         alignment_file.unlink()
 
+    # Per-point source-frame provenance for the process preview: the id
+    # of the frame each exported point came from, in points.bin order,
+    # plus the id -> frame-stem table. Ids are assigned in fused order
+    # and only to frames that contributed points, so the table cannot
+    # be re-derived reliably afterwards -- it is written here, once.
+    np.save(job_dir / "points_frame_ids.npy", frame_ids.astype(np.int32))
+    frame_index_path = job_dir / "frame_index.json"
+    frame_index_path.write_text(
+        json.dumps(
+            {str(fid): stem for stem, fid in frame_index.items()},
+            ensure_ascii=False,
+            indent=2,
+        )
+    )
+
     _write_binary_ply(points, colors, job_dir / "scene_points.ply")
     _write_points_bin(points, colors, job_dir / "points.bin")
     info = {
@@ -539,6 +573,9 @@ def stage_fuse(job_dir: Path, stride: int = 4) -> dict:
         "per_frame_fits": int(len(frame_fits)),
         "frames_used": used,
         "points": int(len(points)),
+        "trim_dropped_points": trim_dropped,
+        "points_frame_ids": str(job_dir / "points_frame_ids.npy"),
+        "frame_index": str(frame_index_path),
         **trim_info,
         "scene_points_ply": str(job_dir / "scene_points.ply"),
         "points_bin": str(job_dir / "points.bin"),

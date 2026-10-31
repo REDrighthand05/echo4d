@@ -15,7 +15,10 @@ result. Detailed progress text goes to a collapsible terminal panel
 docked on the right (the 日志 edge tab); the main area only ever shows
 the plain-language status line. All heavy lifting lives in
 echo_scene.pipeline / echo_scene.fuse; this file only wires the stages
-together and serves the viewer over localhost.
+together. A finished scene is plain files in its job folder -- the
+standalone scene page, the model files, the process preview -- and the
+window says where they are and opens the files directly (no server,
+no localhost page; that was the v0.1 design the user rejected).
 """
 import json
 import os
@@ -24,10 +27,7 @@ import subprocess
 import sys
 import threading
 import traceback
-import webbrowser
 from datetime import datetime
-from functools import partial
-from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 try:
@@ -50,9 +50,11 @@ PLAIN_STATUS = {
     "正在认标记纸": "正在认标记纸",
     "正在算每帧的远近": "正在量每处的远近",
     "正在拼场景": "正在拼场景",
+    "正在清噪": "正在把场景收拾干净",
     "正在生成网格": "正在生成表面",
     "正在生成像素模型": "正在把场景变成一个个小方块",
-    "正在准备查看器": "马上就好",
+    "正在收尾": "马上就好",
+    "正在生成过程回放": "正在做一段过程回放",
 }
 STAGE_COUNT = len(PLAIN_STATUS)
 
@@ -84,7 +86,7 @@ def open_marker_sheet() -> Path:
 def run_pipeline(video: Path, jobs_root: Path, log) -> Path:
     """Run every stage in order. log(str) receives human progress lines."""
     from echo_scene.pipeline import stage_depth, stage_extract, stage_present, stage_select
-    from echo_scene.pipeline import stage_mesh, stage_poses, stage_voxel
+    from echo_scene.pipeline import stage_clean, stage_mesh, stage_poses, stage_preview, stage_voxel
     from echo_scene.markers import stage_markers
     from echo_scene.fuse import stage_fuse
 
@@ -103,9 +105,11 @@ def run_pipeline(video: Path, jobs_root: Path, log) -> Path:
         ("正在认标记纸", lambda: stage_markers(job)),
         ("正在算每帧的远近", lambda: stage_depth(job)),
         ("正在拼场景", lambda: stage_fuse(job)),
+        ("正在清噪", lambda: stage_clean(job)),
         ("正在生成网格", lambda: stage_mesh(job)),
         ("正在生成像素模型", lambda: stage_voxel(job)),
-        ("正在准备查看器", lambda: stage_present(job)),
+        ("正在收尾", lambda: stage_present(job)),
+        ("正在生成过程回放", lambda: stage_preview(job)),
     ]
     for label, fn in steps:
         log(label + "…")
@@ -145,23 +149,30 @@ def play_file(path: Path):
         subprocess.Popen(["xdg-open", str(path)])
 
 
-def serve_and_open(job: Path):
-    handler = partial(SimpleHTTPRequestHandler, directory=str(job))
-    server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
-    port = server.server_address[1]
-    threading.Thread(target=server.serve_forever, daemon=True).start()
-    webbrowser.open(f"http://127.0.0.1:{port}/viewer.html")
-    return server
+def scene_file(job: Path) -> Path:
+    """The job's standalone scene page. Jobs finished by older versions
+    only hold viewer.html + points.bin, so build scene.html on demand;
+    it is a pure file either way."""
+    scene = job / "scene.html"
+    if not scene.exists() and (job / "points.bin").exists():
+        try:
+            from echo_scene.pipeline import stage_present
+
+            stage_present(job)
+        except Exception:
+            pass
+    return scene
 
 
 def list_previous_jobs(jobs_root: Path):
     """Finished scenes under jobs_root, newest first. A job counts as
-    finished once its viewer.html exists."""
+    finished once it holds a scene page (scene.html, or viewer.html
+    for jobs finished by older versions)."""
     if not jobs_root.exists():
         return []
     jobs = [
         d for d in jobs_root.iterdir()
-        if d.is_dir() and (d / "viewer.html").exists()
+        if d.is_dir() and ((d / "scene.html").exists() or (d / "viewer.html").exists())
     ]
     jobs.sort(key=lambda d: d.stat().st_mtime, reverse=True)
     return jobs
@@ -238,7 +249,7 @@ def main():
     root.geometry("860x700")
     root.minsize(700, 620)
     root.configure(fg_color=C_BG)
-    state = {"job": None, "server": None, "busy": False, "history": [],
+    state = {"job": None, "busy": False, "history": [],
              "depth_video": None, "panel_open": False}
     ui_queue = queue.Queue()
 
@@ -366,6 +377,10 @@ def main():
     btn_pick.pack(side="left")
     btn_open = pill(hero_btn_row, "打开场景", font_size=12, state="disabled")
     btn_open.pack(side="left", padx=(8, 0))
+    btn_folder = pill(hero_btn_row, "打开文件夹", font_size=12, state="disabled")
+    btn_folder.pack(side="left", padx=(8, 0))
+    btn_preview = pill(hero_btn_row, "过程回放", font_size=12, state="disabled")
+    btn_preview.pack(side="left", padx=(8, 0))
 
     def hero_bg(color):
         # CTk labels/rows are transparent, so tinting the card is enough.
@@ -380,8 +395,14 @@ def main():
                            selectbackground=C_ACCENT,
                            selectforeground="#FFFFFF")
     hist_list.pack(fill="both", expand=True, padx=14, pady=(2, 6))
-    btn_hist_open = pill(hist_tile, "打开", font_size=11, state="disabled")
-    btn_hist_open.pack(anchor="e", padx=14, pady=(0, 12))
+    hist_btn_row = ctk.CTkFrame(hist_tile, fg_color="transparent")
+    hist_btn_row.pack(anchor="e", padx=14, pady=(0, 12))
+    btn_hist_open = pill(hist_btn_row, "打开场景", font_size=11, state="disabled")
+    btn_hist_open.pack(side="left")
+    btn_hist_folder = pill(hist_btn_row, "打开文件夹", font_size=11, state="disabled")
+    btn_hist_folder.pack(side="left", padx=(6, 0))
+    btn_hist_preview = pill(hist_btn_row, "过程回放", font_size=11, state="disabled")
+    btn_hist_preview.pack(side="left", padx=(6, 0))
 
     # Depth-video tile.
     depth_tile = make_tile(1, 1, padx=(4, 0), pady=(0, 8))
@@ -424,12 +445,18 @@ def main():
         hist_list.delete(0, "end")
         for job in jobs:
             hist_list.insert("end", _job_display_name(job))
-        btn_hist_open.configure(state="disabled")
+        for b in (btn_hist_open, btn_hist_folder, btn_hist_preview):
+            b.configure(state="disabled")
 
     def open_job(job):
         state["job"] = job
-        state["server"] = serve_and_open(job)
+        scene = scene_file(job)
         btn_open.configure(text="重新打开场景", state="normal")
+        btn_folder.configure(state="normal")
+        btn_preview.configure(
+            state="normal" if (job / "preview.html").exists() else "disabled")
+        if scene.exists():
+            play_file(scene)
 
     def handle_log(text):
         line = text.rstrip("…").strip()
@@ -448,7 +475,13 @@ def main():
         set_busy(False)
         refresh_history()
         open_job(job)
-        status.configure(text="做好了，场景已经打开。")
+        status.configure(text=f"做好了。文件都在这个文件夹里：{job}")
+        append_log(f"做好了。文件都在这个文件夹里：{job}")
+        for name in ("scene.html", "voxel_model.glb", "voxel_model.ply",
+                     "mesh.ply", "scene_points.ply", "preview.html"):
+            p = job / name
+            if p.exists():
+                append_log(f"  {p}")
 
     def handle_error(detail):
         set_busy(False)
@@ -528,6 +561,8 @@ def main():
         bar.set(0)
         status.configure(text="开始了。")
         btn_open.configure(state="disabled")
+        btn_folder.configure(state="disabled")
+        btn_preview.configure(state="disabled")
         set_busy(True)
         threading.Thread(target=worker, args=(video,), daemon=True).start()
 
@@ -569,8 +604,20 @@ def main():
             play_file(out)
 
     def open_scene():
+        job = state["job"]
+        if job:
+            scene = scene_file(job)
+            if scene.exists():
+                play_file(scene)
+
+    def open_folder():
         if state["job"]:
-            state["server"] = serve_and_open(state["job"])
+            play_file(state["job"])
+
+    def open_preview():
+        job = state["job"]
+        if job and (job / "preview.html").exists():
+            play_file(job / "preview.html")
 
     def print_markers():
         try:
@@ -586,17 +633,35 @@ def main():
         return None
 
     def on_history_select(_event=None):
-        btn_hist_open.configure(
-            state="normal" if selected_history_job() else "disabled")
+        job = selected_history_job()
+        btn_hist_open.configure(state="normal" if job else "disabled")
+        btn_hist_folder.configure(state="normal" if job else "disabled")
+        btn_hist_preview.configure(
+            state="normal" if job and (job / "preview.html").exists()
+            else "disabled")
 
     def open_history(_event=None):
         job = selected_history_job()
         if job:
             open_job(job)
-            status.configure(text="已经打开。")
+            status.configure(text=f"已经打开。文件在这个文件夹里：{job}")
+
+    def open_history_folder():
+        job = selected_history_job()
+        if job:
+            play_file(job)
+
+    def open_history_preview():
+        job = selected_history_job()
+        if job and (job / "preview.html").exists():
+            play_file(job / "preview.html")
 
     btn_pick.configure(command=pick)
     btn_open.configure(command=open_scene)
+    btn_folder.configure(command=open_folder)
+    btn_preview.configure(command=open_preview)
+    btn_hist_folder.configure(command=open_history_folder)
+    btn_hist_preview.configure(command=open_history_preview)
     btn_markers.configure(command=print_markers)
     btn_depth.configure(command=pick_depth)
     btn_depth_play.configure(command=play_depth)

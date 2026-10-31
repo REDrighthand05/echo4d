@@ -7,15 +7,22 @@ Stages (each writes into the job dir and updates job.json):
   3. markers  - printed AprilTag sheet -> metric scale + floor level
                 (optional; writes markers.json, no-op without markers)
   4. depth    - per-frame metric-aligned depth           (later milestone)
-  5. fuse     - TSDF fusion via the echo4d kernel        (later milestone)
-  6. present  - scene.ply / scene.glb + viewer page
+  5. fuse     - per-frame depth fusion + corroboration trim
+  6. clean    - continuity cleanup: keep the connected main body
+  7. present  - standalone scene.html (data embedded, opens as a file)
   mesh        - optional surface mesh via echo_scene.mesh, after fuse;
                 best-effort, skipped quietly when the module is absent
+  voxel       - frozen voxel solidification, after mesh; best-effort
+  preview     - process-preview page (preview.html) in the job folder
+
+Everything a job produces is a plain local file in the job folder --
+no server, no localhost page (v0.2 outputs-as-files rule).
 
 Usage:
   python3 -m echo_scene.pipeline extract <video> <job_dir>
   python3 -m echo_scene.pipeline poses <job_dir>
 """
+import base64
 import json
 import shutil
 import subprocess
@@ -332,16 +339,97 @@ def stage_voxel(job_dir: Path) -> dict:
         return info
 
 
-def stage_present(job_dir: Path) -> dict:
-    import shutil
+def stage_clean(job_dir: Path) -> dict:
+    """Continuity cleanup over the fused cloud, between fuse and mesh.
 
+    Non-fatal by design (same contract as mesh/voxel): the scene is
+    already complete before this stage, so a cleanup failure falls back
+    to the uncleaned cloud instead of failing the job; the returned
+    clean_applied flag records the truth. The clean module itself
+    writes job.json when it runs.
+    """
+    try:
+        from echo_scene.clean import stage_clean as _stage_clean
+
+        info = _stage_clean(job_dir)
+    except Exception as e:
+        info = {"stage": "clean", "ok": False,
+                "reason": f"clean stage failed: {e}"}
+        print(json.dumps(info, ensure_ascii=False), flush=True)
+    info = dict(info)
+    applied = bool(info.get("ok"))
+    info["ok"] = True
+    info["clean_applied"] = applied
+    return info
+
+
+def stage_present(job_dir: Path) -> dict:
+    """Write the standalone scene page into the job folder.
+
+    scene.html is ONE self-contained file: the point cloud is embedded
+    as base64 (the viewer then never fetches points.bin) and the mesh
+    buffers ride as data: URLs, so the page opens by double-click with
+    no server -- the v0.1 localhost viewer page is gone; the user gets
+    files, not addresses. The universal model files (voxel GLB/PLY,
+    mesh PLY, points PLY) already sit in the same folder as plain
+    files; their paths are reported in the info dict.
+    """
+    points_bin = job_dir / "points.bin"
+    if not points_bin.exists():
+        info = {"stage": "present", "ok": False, "reason": "points.bin missing"}
+        (job_dir / "job.json").write_text(json.dumps(info, ensure_ascii=False, indent=2))
+        return info
     template = Path(__file__).resolve().parent.parent / "viewer.html"
-    shutil.copyfile(template, job_dir / "viewer.html")
-    info = {
-        "stage": "present",
-        "ok": (job_dir / "points.bin").exists(),
-        "viewer": str(job_dir / "viewer.html"),
-    }
+    html = template.read_text(encoding="utf-8")
+    points_b64 = base64.b64encode(points_bin.read_bytes()).decode()
+    html = html.replace(
+        "<script>\n",
+        f'<script>window.POINTS_B64 = "{points_b64}";</script>\n<script>\n',
+        1,
+    )
+    if "window.POINTS_B64" not in html:
+        info = {"stage": "present", "ok": False,
+                "reason": "viewer template seam not found"}
+        (job_dir / "job.json").write_text(json.dumps(info, ensure_ascii=False, indent=2))
+        return info
+    for name in ("mesh_vertices.bin", "mesh_indices.bin"):
+        buf = job_dir / name
+        if buf.exists():
+            uri = ("data:application/octet-stream;base64,"
+                   + base64.b64encode(buf.read_bytes()).decode())
+            html = html.replace(f"fetch('{name}')", f"fetch('{uri}')")
+    scene_path = job_dir / "scene.html"
+    scene_path.write_text(html, encoding="utf-8")
+    files = {"scene_html": str(scene_path)}
+    for key, name in (("voxel_glb", "voxel_model.glb"),
+                      ("voxel_ply", "voxel_model.ply"),
+                      ("mesh_ply", "mesh.ply"),
+                      ("points_ply", "scene_points.ply")):
+        candidate = job_dir / name
+        if candidate.exists():
+            files[key] = str(candidate)
+    info = {"stage": "present", "ok": True, "scene_html": str(scene_path),
+            "files": files}
+    (job_dir / "job.json").write_text(json.dumps(info, ensure_ascii=False, indent=2))
+    return info
+
+
+def stage_preview(job_dir: Path) -> dict:
+    """Process-preview page (preview.html) as a file in the job folder.
+
+    Garnish like the mesh: a failure here never fails a finished
+    scene, so the wrapper reports ok with preview_applied=False.
+    """
+    try:
+        from echo_scene.preview import write_preview
+
+        result = write_preview(job_dir, job_dir / "preview.html")
+        info = {"stage": "preview", "preview_applied": True, **result}
+    except Exception as e:
+        info = {"stage": "preview", "preview_applied": False,
+                "reason": f"preview failed: {e}"}
+        print(json.dumps(info, ensure_ascii=False), flush=True)
+    info["ok"] = True
     (job_dir / "job.json").write_text(json.dumps(info, ensure_ascii=False, indent=2))
     return info
 
@@ -363,12 +451,16 @@ def main(argv):
         from echo_scene.fuse import stage_fuse
 
         info = stage_fuse(Path(argv[2]).resolve())
+    elif len(argv) >= 2 and argv[1] == "clean" and len(argv) == 3:
+        info = stage_clean(Path(argv[2]).resolve())
     elif len(argv) >= 2 and argv[1] == "mesh" and len(argv) == 3:
         info = stage_mesh(Path(argv[2]).resolve())
     elif len(argv) >= 2 and argv[1] == "voxel" and len(argv) == 3:
         info = stage_voxel(Path(argv[2]).resolve())
     elif len(argv) >= 2 and argv[1] == "present" and len(argv) == 3:
         info = stage_present(Path(argv[2]).resolve())
+    elif len(argv) >= 2 and argv[1] == "preview" and len(argv) == 3:
+        info = stage_preview(Path(argv[2]).resolve())
     else:
         print(__doc__)
         return 2

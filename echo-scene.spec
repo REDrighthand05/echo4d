@@ -20,8 +20,10 @@ hiddenimports = []
 # missing bundle does not fail the build -- v0.1 shipped without it
 # and died on the user's machine at the mesh step. It must be
 # collected here, and requirements-app.txt must install it, or the
-# freeze is broken by construction.
-for pkg in ("pycolmap", "onnxruntime", "open3d"):
+# freeze is broken by construction. scipy joined the list in v0.2:
+# the continuity-cleanup stage (echo_scene/clean.py) runs its
+# connected components, also behind a lazy import.
+for pkg in ("pycolmap", "onnxruntime", "open3d", "scipy"):
     d, b, h = collect_all(pkg)
     datas += d
     binaries += b

@@ -24,6 +24,7 @@ SUITES = [
     ("frozen", [sys.executable, "tests/test_voxel_frozen.py"]),
     ("frozen", [sys.executable, "tests/test_markers_synth.py"]),
     ("align", [sys.executable, "tests/test_up_alignment.py"]),
+    ("clean", [sys.executable, "tests/test_continuity_clean.py"]),
 ]
 
 

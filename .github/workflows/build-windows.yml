@@ -53,6 +53,17 @@ jobs:
           $pyd = Get-ChildItem -Path $o3d -Recurse -Filter *.pyd | Select-Object -First 1
           if (-not $pyd) { throw "open3d native extension (*.pyd) missing from frozen bundle" }
           Write-Host "open3d bundled OK: $($pyd.FullName)"
+      - name: Verify clean-stage dependency (scipy) is inside the frozen bundle
+        # v0.2: the continuity-cleanup stage (echo_scene/clean.py) runs
+        # scipy connected components behind a lazy import -- the same
+        # silent-missing failure mode as open3d in v0.1. Guard it the
+        # same way.
+        run: |
+          $sp = "dist/EchoScene/_internal/scipy"
+          if (-not (Test-Path $sp)) { throw "scipy package missing from frozen bundle: $sp" }
+          $pyd = Get-ChildItem -Path $sp -Recurse -Filter *.pyd | Select-Object -First 1
+          if (-not $pyd) { throw "scipy native extension (*.pyd) missing from frozen bundle" }
+          Write-Host "scipy bundled OK: $($pyd.FullName)"
       - name: Package
         run: Compress-Archive -Path dist/EchoScene -DestinationPath EchoScene-windows.zip
       - uses: actions/upload-artifact@v4
