@@ -81,3 +81,29 @@ def choose_gap_targets(rows, poses, count):
                 best, best_value = i, value
         chosen.append(best)
     return sorted(chosen)
+
+
+def conservative_hole_depth(metric, sensor_projection, *, radius=14):
+    """Add ONLY small locally supported missing surfaces, never refusion of known rays.
+
+    The 72 retained sensor depths define known rays. At each RGB-only camera,
+    find the nearest projected real depth for a missing pixel; permit predicted
+    geometry only in a narrow band where it continues that measured surface.
+    This rejects free-floating planar sheets far from any measured support.
+    It is deliberately conservative: truly unseen walls remain UNKNOWN.
+    """
+    if metric.shape != sensor_projection.shape or metric.ndim != 2:
+        raise ValueError("Predicted and sensor depth sizes differ")
+    known = np.isfinite(sensor_projection) & (sensor_projection > 0)
+    result = np.zeros(metric.shape, np.float32)
+    if not known.any():
+        return result, {"guarded_valid_fraction": 0., "added_pixels": 0}
+    distance, indices = distance_transform_edt(
+        ~known, return_indices=True)
+    nearest = sensor_projection[tuple(indices)]
+    tolerance = np.maximum(.15, .12 * nearest)
+    allowed = ((~known) & (distance <= radius) & np.isfinite(metric)
+               & (metric > 0) & (np.abs(metric - nearest) <= tolerance))
+    result[allowed] = metric[allowed]
+    return result, {"guarded_valid_fraction": float(allowed.mean()),
+                    "added_pixels": int(allowed.sum())}
