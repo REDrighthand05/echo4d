@@ -6,11 +6,15 @@
   `.gitignore` 中排除。仓库只存代码、查看器和配置。
 - CI 出 exe 时由 workflow 的 “Fetch depth model” 步骤从 Hugging Face
   现场下载，与 `echo-scene.spec` 的 `datas` 保持一致。
-- **当前只下 small**：打包代码路径 `echo_scene/pipeline.py` 的
-  `stage_depth` 写死加载 `models/depth_anything_v2_small.onnx`，
-  spec 也只打包 small，两边一致。base 模型目前只被服务器端实验脚本
-  用过，没有进主线。若以后主线换 base，必须同时改 spec 的 datas 和
-  workflow 的下载步骤，且安装包体积约 +371MB。
+- **当前下 Base（中号）**：用户 2026-10-31 拍板 exe 带 Base。
+  `echo_scene/pipeline.py` 的 `stage_depth` 本就优先加载
+  `models/depth_anything_v2_base.onnx`、缺失时才回退 small（已核对
+  代码）；spec 的 datas 与 workflow 的下载步骤已同步换成 Base。
+  下载源：Hugging Face `onnx-community/depth-anything-v2-base` 的
+  `onnx/model.onnx`，workflow 里按大小 388,917,010 B 与 SHA-256
+  `dab40f67…7289` 双重校验后才打包。代价：安装包体积约 +371MB
+  （相比只带 small）。本地验证过的大号 Large 不进 exe（实测无可见
+  收益，experiments/large_depth_report.md）。
 
 ## 依赖核对（已完成）
 
@@ -40,9 +44,14 @@
   冒烟必须真跑一段短视频走通全链，不能只看窗口能打开。
 - **ffmpeg（额外发现，非上述两库）**：`stage_extract` 是以裸命令
   `ffmpeg` 调外部程序的，exe 目前**没有打包 ffmpeg**。用户机器上
-  若没装 ffmpeg，第一步抽帧就会失败。出正式版前要么把 ffmpeg
+  若没装 ffmpeg，第一步抽帧就会失败。~~出正式版前要么把 ffmpeg
   二进制作为 datas 打进包并改成相对路径调用，要么在说明里写明
-  前置依赖——建议前者，发版前处理。
+  前置依赖——建议前者，发版前处理。~~
+  **已解决（2026-10-31，提交 5444654）**：gyan.dev 静态版 ffmpeg.exe
+  + ffprobe.exe 已放入 assets/ffmpeg/ 并作为 datas 打包（`_ffprobe_duration`
+  同样依赖 ffprobe，一并处理）；pipeline 新增 `_tool_path()` 解析：
+  打包内 → exe 同级 → 源码树 assets → PATH。开发模式行为不变，
+  冻结布局模拟验证通过。代价：安装包增大约 210MB。
 
 ## 不进安装包的东西
 

@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>ECHO 场景查看器</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #0b0e13; overflow: hidden; }
+  #gl { display: block; width: 100%; height: 100%; touch-action: none; cursor: grab; }
+  #gl:active { cursor: grabbing; }
+  #overlay {
+    position: fixed; left: 12px; top: 10px; color: #e8ecf1;
+    font: 13px/1.5 ui-monospace, Menlo, Consolas, monospace;
+    text-shadow: 0 1px 3px #000; pointer-events: none; white-space: pre-line;
+  }
+  #bar {
+    position: fixed; left: 50%; bottom: 12px; transform: translateX(-50%);
+    display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 8px;
+    max-width: calc(100vw - 16px); box-sizing: border-box;
+    background: rgba(10, 13, 18, 0.78); border: 1px solid rgba(232, 236, 241, 0.16);
+    border-radius: 12px; padding: 8px 10px;
+    font: 13px/1.4 ui-monospace, Menlo, Consolas, monospace; color: #e8ecf1;
+    user-select: none; -webkit-user-select: none; touch-action: manipulation;
+  }
+  #bar button {
+    font: inherit; color: #e8ecf1; background: rgba(232, 236, 241, 0.08);
+    border: 1px solid rgba(232, 236, 241, 0.18); border-radius: 8px;
+    padding: 7px 11px; cursor: pointer; min-height: 34px; white-space: nowrap;
+  }
+  #bar button.on { background: rgba(96, 156, 255, 0.38); border-color: rgba(96, 156, 255, 0.65); }
+  #bar button:active { background: rgba(232, 236, 241, 0.22); }
+  #bar .seg { display: flex; gap: 4px; }
+  #sizeWrap { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+  #sizeWrap.dim { opacity: 0.4; }
+  #sizeSlider { width: 96px; accent-color: #609cff; }
+</style>
+</head>
+<body>
+<canvas id="gl"></canvas>
+<div id="overlay">加载中…</div>
+<div id="bar">
+  <span class="seg">
+    <button id="btnPoints" class="on">点云</button><button id="btnMesh" style="display:none">网格</button>
+  </span>
+  <label id="sizeWrap">点大小 <input id="sizeSlider" type="range" min="0.5" max="6" step="0.5" value="2"></label>
+  <button id="btnRot" aria-pressed="false">自动旋转</button>
+  <button id="btnReset">复位视角</button>
+  <button id="btnTop">俯视</button>
+</div>
+<script>
+'use strict';
+const overlay = document.getElementById('overlay');
+const canvas = document.getElementById('gl');
+const gl = canvas.getContext('webgl2', { antialias: true }) ||
+           canvas.getContext('webgl', { antialias: true });
+if (!gl) { overlay.textContent = '此设备不支持 WebGL，无法显示场景。'; throw new Error('no webgl'); }
+const isGL2 = (typeof WebGL2RenderingContext !== 'undefined') && (gl instanceof WebGL2RenderingContext);
+/* Mesh path needs uint indices and fragment derivatives for face normals:
+   core in WebGL2; extensions in WebGL1. Without them, mesh stays disabled
+   and the viewer behaves exactly as the points-only version. */
+let meshGLok = isGL2;
+if (!isGL2) {
+  meshGLok = !!gl.getExtension('OES_element_index_uint') &&
+             !!gl.getExtension('OES_standard_derivatives');
+}
+
+/* ---------------- shaders ---------------- */
+const vsrc = `
+attribute vec3 aPos;
+attribute vec3 aCol;
+uniform mat4 uMVP;
+uniform float uSize;
+varying vec3 vCol;
+void main() {
+  vCol = aCol;
+  vec4 mv = uMVP * vec4(aPos, 1.0);
+  gl_Position = mv;
+  gl_PointSize = uSize;
+}`;
+const fsrc = `
+precision mediump float;
+varying vec3 vCol;
+void main() { gl_FragColor = vec4(vCol, 1.0); }`;
+const mVsrc2 = `#version 300 es
+in vec3 aPos;
+in vec3 aCol;
+uniform mat4 uMVP;
+out vec3 vCol;
+out vec3 vWp;
+void main() {
+  vCol = aCol;
+  vWp = aPos;
+  gl_Position = uMVP * vec4(aPos, 1.0);
+}`;
+const mFsrc2 = `#version 300 es
+precision mediump float;
+in vec3 vCol;
+in vec3 vWp;
+out vec4 oColor;
+void main() {
+  vec3 n = normalize(cross(dFdx(vWp), dFdy(vWp)));
+  vec3 L = normalize(vec3(0.45, 0.75, 0.55));
+  float d = abs(dot(n, L));
+  oColor = vec4(vCol * (0.38 + 0.62 * d), 1.0);
+}`;
+const mVsrc1 = `
+attribute vec3 aPos;
+attribute vec3 aCol;
+uniform mat4 uMVP;
+varying vec3 vCol;
+varying vec3 vWp;
+void main() {
+  vCol = aCol;
+  vWp = aPos;
+  gl_Position = uMVP * vec4(aPos, 1.0);
+}`;
+const mFsrc1 = `#extension GL_OES_standard_derivatives : enable
+precision mediump float;
+varying vec3 vCol;
+varying vec3 vWp;
+void main() {
+  vec3 n = normalize(cross(dFdx(vWp), dFdy(vWp)));
+  vec3 L = normalize(vec3(0.45, 0.75, 0.55));
+  float d = abs(dot(n, L));
+  gl_FragColor = vec4(vCol * (0.38 + 0.62 * d), 1.0);
+}`;
+function shader(type, src) {
+  const s = gl.createShader(type);
+  gl.shaderSource(s, src); gl.compileShader(s);
+  if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
+  return s;
+}
+function makeProgram(v, f) {
+  const p = gl.createProgram();
+  gl.attachShader(p, shader(gl.VERTEX_SHADER, v));
+  gl.attachShader(p, shader(gl.FRAGMENT_SHADER, f));
+  gl.linkProgram(p);
+  if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error('link failed');
+  return p;
+}
+let prog;
+try {
+  prog = makeProgram(vsrc, fsrc);
+} catch (e) {
+  overlay.textContent = '着色器初始化失败。'; throw e;
+}
+const aPos = gl.getAttribLocation(prog, 'aPos');
+const aCol = gl.getAttribLocation(prog, 'aCol');
+const uMVP = gl.getUniformLocation(prog, 'uMVP');
+const uSize = gl.getUniformLocation(prog, 'uSize');
+let meshProg = null, mPos = -1, mCol = -1, mMVP = null;
+if (meshGLok) {
+  try {
+    meshProg = makeProgram(isGL2 ? mVsrc2 : mVsrc1, isGL2 ? mFsrc2 : mFsrc1);
+    mPos = gl.getAttribLocation(meshProg, 'aPos');
+    mCol = gl.getAttribLocation(meshProg, 'aCol');
+    mMVP = gl.getUniformLocation(meshProg, 'uMVP');
+  } catch (e) {
+    meshProg = null; meshGLok = false;
+  }
+}
+
+/* ---------------- mat4 helpers (column-major) ---------------- */
+function perspective(fovy, aspect, near, far) {
+  const f = 1 / Math.tan(fovy / 2), nf = 1 / (near - far);
+  return new Float32Array([f / aspect, 0, 0, 0, 0, f, 0, 0,
+    0, 0, (far + near) * nf, -1, 0, 0, 2 * far * near * nf, 0]);
+}
+function lookAt(eye, center, up) {
+  let zx = eye[0] - center[0], zy = eye[1] - center[1], zz = eye[2] - center[2];
+  let l = Math.hypot(zx, zy, zz); zx /= l; zy /= l; zz /= l;
+  let xx = up[1] * zz - up[2] * zy, xy = up[2] * zx - up[0] * zz, xz = up[0] * zy - up[1] * zx;
+  l = Math.hypot(xx, xy, xz) || 1; xx /= l; xy /= l; xz /= l;
+  const yx = zy * xz - zz * xy, yy = zz * xx - zx * xz, yz = zx * xy - zy * xx;
+  return new Float32Array([
+    xx, yx, zx, 0, xy, yy, zy, 0, xz, yz, zz, 0,
+    -(xx * eye[0] + xy * eye[1] + xz * eye[2]),
+    -(yx * eye[0] + yy * eye[1] + yz * eye[2]),
+    -(zx * eye[0] + zy * eye[1] + zz * eye[2]), 1]);
+}
+function multiply(a, b) {
+  const o = new Float32Array(16);
+  for (let c = 0; c < 4; c++) for (let r = 0; r < 4; r++) {
+    let s = 0; for (let k = 0; k < 4; k++) s += a[k * 4 + r] * b[c * 4 + k];
+    o[c * 4 + r] = s;
+  }
+  return o;
+}
+
+/* ---------------- state ---------------- */
+let pointCount = 0, posBuf = null, colBuf = null;
+let meshData = null; // { posBuf, colBuf, idxBuf, indexCount, triCount }
+let mode = 'points';
+const views = { points: null, mesh: null }; // { target:[x,y,z], diag } per dataset
+let az = 0.6, el = 0.35, dist = 10, target = [0, 0, 0], diag = 1;
+let minDist = 0.01, maxDist = 1000;
+let pointSize = 2.0;
+function bboxView(mn, mx) {
+  return {
+    target: [(mn[0] + mx[0]) / 2, (mn[1] + mx[1]) / 2, (mn[2] + mx[2]) / 2],
+    diag: Math.hypot(mx[0] - mn[0], mx[1] - mn[1], mx[2] - mn[2]) || 1
+  };
+}
+function frameView(v) {
+  target = v.target.slice();
+  diag = v.diag;
+  dist = 1.8 * diag;
+  minDist = diag / 500; maxDist = diag * 30;
+  az = 0.6; el = 0.35;
+}
+function resize() {
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  canvas.width = Math.floor(canvas.clientWidth * dpr);
+  canvas.height = Math.floor(canvas.clientHeight * dpr);
+  gl.viewport(0, 0, canvas.width, canvas.height);
+}
+window.addEventListener('resize', resize);
+
+function render() {
+  resize();
+  gl.clearColor(0.043, 0.055, 0.075, 1);
+  gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+  const ce = Math.cos(el), se = Math.sin(el);
+  const eye = [
+    target[0] + dist * ce * Math.sin(az),
+    target[1] + dist * se,
+    target[2] + dist * ce * Math.cos(az)];
+  const view = lookAt(eye, target, [0, 1, 0]);
+  const proj = perspective(Math.PI / 3, canvas.width / canvas.height,
+    Math.max(diag / 1000, 0.001), diag * 20 + dist * 4);
+  const mvp = multiply(proj, view);
+  gl.enable(gl.DEPTH_TEST);
+  if (mode === 'mesh' && meshData && meshProg) {
+    gl.useProgram(meshProg);
+    gl.uniformMatrix4fv(mMVP, false, mvp);
+    gl.bindBuffer(gl.ARRAY_BUFFER, meshData.posBuf);
+    gl.enableVertexAttribArray(mPos);
+    gl.vertexAttribPointer(mPos, 3, gl.FLOAT, false, 0, 0);
+    gl.bindBuffer(gl.ARRAY_BUFFER, meshData.colBuf);
+    gl.enableVertexAttribArray(mCol);
+    gl.vertexAttribPointer(mCol, 3, gl.UNSIGNED_BYTE, true, 0, 0);
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, meshData.idxBuf);
+    gl.drawElements(gl.TRIANGLES, meshData.indexCount, gl.UNSIGNED_INT, 0);
+    return;
+  }
+  if (!posBuf) return;
+  gl.useProgram(prog);
+  gl.uniformMatrix4fv(uMVP, false, mvp);
+  gl.uniform1f(uSize, pointSize * Math.min(window.devicePixelRatio || 1, 2));
+  gl.bindBuffer(gl.ARRAY_BUFFER, posBuf);
+  gl.enableVertexAttribArray(aPos);
+  gl.vertexAttribPointer(aPos, 3, gl.FLOAT, false, 0, 0);
+  gl.bindBuffer(gl.ARRAY_BUFFER, colBuf);
+  gl.enableVertexAttribArray(aCol);
+  gl.vertexAttribPointer(aCol, 3, gl.UNSIGNED_BYTE, true, 0, 0);
+  gl.drawArrays(gl.POINTS, 0, pointCount);
+}
+
+/* ---------------- data ---------------- */
+function parseBuffer(buf) {
+  const n = Math.floor(buf.byteLength / 15);
+  if (n === 0) throw new Error('empty');
+  const dv = new DataView(buf);
+  const pos = new Float32Array(n * 3);
+  const col = new Uint8Array(n * 3);
+  let mn = [1e30, 1e30, 1e30], mx = [-1e30, -1e30, -1e30];
+  for (let i = 0; i < n; i++) {
+    const o = i * 15;
+    for (let k = 0; k < 3; k++) {
+      const v = dv.getFloat32(o + k * 4, true);
+      pos[i * 3 + k] = v;
+      if (v < mn[k]) mn[k] = v;
+      if (v > mx[k]) mx[k] = v;
+    }
+    col[i * 3] = dv.getUint8(o + 12);
+    col[i * 3 + 1] = dv.getUint8(o + 13);
+    col[i * 3 + 2] = dv.getUint8(o + 14);
+  }
+  return { pos, col, n, mn, mx };
+}
+function uploadArray(data) {
+  const b = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, b);
+  gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
+  return b;
+}
+function pointsOverlayText() {
+  return pointCount.toLocaleString('zh-CN') + ' 个点\n拖动旋转 · 滚轮缩放 · 右键拖动平移';
+}
+function meshOverlayText() {
+  return meshData.triCount.toLocaleString('zh-CN') + ' 个三角面\n拖动旋转 · 滚轮缩放 · 右键拖动平移';
+}
+const _load = window.POINTS_B64
+  ? Promise.resolve(Uint8Array.from(atob(window.POINTS_B64), c => c.charCodeAt(0)).buffer)
+  : fetch('points.bin').then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.arrayBuffer(); });
+_load.then(buf => {
+  const d = parseBuffer(buf);
+  posBuf = uploadArray(d.pos);
+  colBuf = uploadArray(d.col);
+  pointCount = d.n;
+  views.points = bboxView(d.mn, d.mx);
+  if (mode === 'points') {
+    frameView(views.points);
+    overlay.textContent = pointsOverlayText();
+  }
+  render();
+}).catch(err => {
+  if (!meshData) overlay.textContent = '场景数据加载失败（points.bin 缺失或不可读）。';
+});
+if (meshGLok) {
+  Promise.all([fetch('mesh_vertices.bin'), fetch('mesh_indices.bin')]).then(res => {
+    if (!res[0].ok || !res[1].ok) throw new Error('no mesh');
+    return Promise.all([res[0].arrayBuffer(), res[1].arrayBuffer()]);
+  }).then(([vb, ib]) => {
+    const d = parseBuffer(vb);
+    const indexCount = Math.floor(ib.byteLength / 4);
+    if (indexCount < 3) throw new Error('no mesh');
+    const idx = new Uint32Array(ib, 0, indexCount);
+    const idxBuf = gl.createBuffer();
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, idxBuf);
+    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, idx, gl.STATIC_DRAW);
+    meshData = {
+      posBuf: uploadArray(d.pos),
+      colBuf: uploadArray(d.col),
+      idxBuf, indexCount,
+      triCount: Math.floor(indexCount / 3)
+    };
+    views.mesh = bboxView(d.mn, d.mx);
+    document.getElementById('btnMesh').style.display = '';
+    setMode('mesh');
+  }).catch(err => { /* no mesh files: points-only behavior, unchanged */ });
+}
+
+/* ---------------- controls ---------------- */
+const btnPoints = document.getElementById('btnPoints');
+const btnMesh = document.getElementById('btnMesh');
+const sizeWrap = document.getElementById('sizeWrap');
+const sizeSlider = document.getElementById('sizeSlider');
+const btnRot = document.getElementById('btnRot');
+function setMode(m) {
+  if (m === 'mesh' && !meshData) return;
+  mode = m;
+  btnPoints.classList.toggle('on', m === 'points');
+  btnMesh.classList.toggle('on', m === 'mesh');
+  sizeSlider.disabled = (m !== 'points');
+  sizeWrap.classList.toggle('dim', m !== 'points');
+  const v = views[m];
+  if (v) frameView(v);
+  overlay.textContent = (m === 'points') ? pointsOverlayText() : meshOverlayText();
+  render();
+}
+btnPoints.addEventListener('click', () => setMode('points'));
+btnMesh.addEventListener('click', () => setMode('mesh'));
+sizeSlider.addEventListener('input', () => {
+  pointSize = parseFloat(sizeSlider.value);
+  if (mode === 'points') render();
+});
+let autoRot = false, rafId = 0, lastT = 0;
+function tick(t) {
+  if (!autoRot) return;
+  const dt = Math.min((t - lastT) / 1000, 0.05);
+  lastT = t;
+  az += dt * 0.3;
+  render();
+  rafId = requestAnimationFrame(tick);
+}
+btnRot.addEventListener('click', () => {
+  autoRot = !autoRot;
+  btnRot.classList.toggle('on', autoRot);
+  btnRot.setAttribute('aria-pressed', String(autoRot));
+  if (autoRot) { lastT = performance.now(); rafId = requestAnimationFrame(tick); }
+  else cancelAnimationFrame(rafId);
+});
+document.getElementById('btnReset').addEventListener('click', () => {
+  const v = views[mode];
+  if (v) frameView(v);
+  render();
+});
+document.getElementById('btnTop').addEventListener('click', () => {
+  el = 1.5;
+  render();
+});
+
+/* ---------------- interaction ---------------- */
+const pointers = new Map();
+let lastPinch = 0;
+canvas.addEventListener('pointerdown', e => {
+  canvas.setPointerCapture(e.pointerId);
+  pointers.set(e.pointerId, [e.clientX, e.clientY, e.button]);
+});
+canvas.addEventListener('pointermove', e => {
+  if (!pointers.has(e.pointerId)) return;
+  const prev = pointers.get(e.pointerId);
+  const dx = e.clientX - prev[0], dy = e.clientY - prev[1];
+  pointers.set(e.pointerId, [e.clientX, e.clientY, prev[2]]);
+  if (pointers.size === 2) {
+    const [p1, p2] = [...pointers.values()];
+    const d = Math.hypot(p1[0] - p2[0], p1[1] - p2[1]);
+    if (lastPinch > 0 && d > 0) dist *= lastPinch / d;
+    lastPinch = d;
+  } else if (prev[2] === 2 || e.shiftKey) {
+    const s = dist / 600;
+    const ce = Math.cos(el), se = Math.sin(el);
+    const fwd = [-ce * Math.sin(az), -se, -ce * Math.cos(az)];
+    const right = [Math.cos(az), 0, -Math.sin(az)];
+    const upv = [
+      fwd[1] * right[2] - fwd[2] * right[1],
+      fwd[2] * right[0] - fwd[0] * right[2],
+      fwd[0] * right[1] - fwd[1] * right[0]];
+    for (let k = 0; k < 3; k++) target[k] += (-dx * right[k] + dy * upv[k]) * s;
+  } else {
+    az -= dx * 0.005;
+    el += dy * 0.005;
+    el = Math.max(-1.5, Math.min(1.5, el));
+  }
+  dist = Math.max(minDist, Math.min(maxDist, dist));
+  render();
+});
+function endPointer(e) { pointers.delete(e.pointerId); if (pointers.size < 2) lastPinch = 0; }
+canvas.addEventListener('pointerup', endPointer);
+canvas.addEventListener('pointercancel', endPointer);
+canvas.addEventListener('wheel', e => {
+  e.preventDefault();
+  dist *= Math.exp(e.deltaY * 0.001);
+  dist = Math.max(minDist, Math.min(maxDist, dist));
+  render();
+}, { passive: false });
+canvas.addEventListener('contextmenu', e => e.preventDefault());
+render();
+</script>
+</body>
+</html>
