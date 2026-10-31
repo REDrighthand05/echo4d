@@ -14,11 +14,11 @@ jobs:
   attach:
     runs-on: ubuntu-latest
     steps:
-      - name: Download built artifact from run 41173787544
+      - name: Download built artifact from run 41179780935
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh run download 41173787544 --repo "$GITHUB_REPOSITORY" --name EchoScene-windows --dir dl
+          gh run download 41179780935 --repo "$GITHUB_REPOSITORY" --name EchoScene-windows --dir dl
           echo "--- dl contents ---"
           find dl -type f -exec ls -la {} \;
 
@@ -48,14 +48,14 @@ jobs:
           print("OK: EchoScene/EchoScene.exe present")
           EOF
 
-      - name: Upload package to release v0.1.1
+      - name: Upload package to release v0.2
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release upload v0.1.1 EchoScene-windows.zip --repo "$GITHUB_REPOSITORY" --clobber
+          gh release upload v0.2 EchoScene-windows.zip --repo "$GITHUB_REPOSITORY" --clobber
 
       - name: Verify asset present on release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release view v0.1.1 --repo "$GITHUB_REPOSITORY" --json assets
+          gh release view v0.2 --repo "$GITHUB_REPOSITORY" --json assets
