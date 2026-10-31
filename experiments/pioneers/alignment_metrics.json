@@ -1,0 +1,62 @@
+{
+  "scale": 2.1286911233542676,
+  "yaw_deg": 51.43106110191942,
+  "translation": [
+    -15.750798146961557,
+    -4.998037862946835,
+    -0.4894181804335549
+  ],
+  "R": [
+    [
+      0.6068218876828749,
+      0.22945285381145164,
+      0.7609984129462903
+    ],
+    [
+      -0.1381885354793022,
+      0.9733009542633834,
+      -0.1832735144314997
+    ],
+    [
+      -0.7827331124279068,
+      0.00605312380247612,
+      0.6223280761794007
+    ]
+  ],
+  "coarse_best": {
+    "score": 0.04864091559370529,
+    "yaw_deg": 46
+  },
+  "room_size_A_units": 39.82763560295105,
+  "inlier_frac_B_within_5pct_room": 0.43919885550786836,
+  "inlier_frac_A_within_5pct_room": 0.16252821670428894,
+  "chamfer_median_BtoA_pct_room": 5.766500774989311,
+  "chamfer_p90_BtoA_pct_room": 19.535681679937085,
+  "chamfer_median_AtoB_pct_room": 16.064138146282016,
+  "plane_offsets": [
+    {
+      "plane": "floor(y-low)",
+      "note": "too few points"
+    },
+    {
+      "plane": "ceiling(y-high)",
+      "note": "too few points"
+    },
+    {
+      "plane": "wall(x-low)",
+      "note": "too few points"
+    },
+    {
+      "plane": "wall(x-high)",
+      "note": "too few points"
+    },
+    {
+      "plane": "wall(z-low)",
+      "note": "too few points"
+    },
+    {
+      "plane": "wall(z-high)",
+      "note": "too few points"
+    }
+  ]
+}

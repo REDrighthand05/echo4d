@@ -1,0 +1,34 @@
+{
+  "method": "sparse-scaffold PCA24 + similarity ICP, applied to fused clouds",
+  "sfm_scale": 1.7742758319967937,
+  "fused_scale": 1.7742758319967937,
+  "fused_R": [
+    [
+      -0.40158415801975517,
+      0.8096597531623383,
+      0.42799678519431217
+    ],
+    [
+      0.4825629184341007,
+      -0.21012373717220256,
+      0.8502829204618613
+    ],
+    [
+      0.7783721435020196,
+      0.547995528436035,
+      -0.30632940935238795
+    ]
+  ],
+  "fused_t": [
+    -18.4361200006782,
+    -1.21413837821996,
+    -3.9278027692912465
+  ],
+  "room_size_A_units": 39.82763560295105,
+  "inlier_frac_B_within_5pct_room": 0.194452728899493,
+  "inlier_frac_A_within_5pct_room": 0.09480812641083522,
+  "chamfer_median_BtoA_pct_room": 8.25424107821178,
+  "chamfer_p90_BtoA_pct_room": 17.6425872791954,
+  "chamfer_median_AtoB_pct_room": 17.751811010541825,
+  "chamfer_p90_AtoB_pct_room": 37.18034185082737
+}

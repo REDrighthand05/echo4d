@@ -1,0 +1,250 @@
+{
+ "resolution": [
+  1280,
+  720
+ ],
+ "cold_first_update_ms": 4477.807997999889,
+ "rows": [
+  {
+   "stage": "extract / cards",
+   "note": "30/230 cards visible, base-res",
+   "prep_ms": 13.340628999912951,
+   "operator_ms": 76.65529000018978,
+   "composite_ms": 0.0,
+   "total_ms": 89.99591900010273,
+   "n_points": 120960.0,
+   "reps_total_ms": [
+    97.4,
+    90.0,
+    35.1
+   ]
+  },
+  {
+   "stage": "extract / cards",
+   "note": "120/230 cards visible, base-res",
+   "prep_ms": 194.54722899990884,
+   "operator_ms": 96.65738400008195,
+   "composite_ms": 0.0,
+   "total_ms": 291.3490879998335,
+   "n_points": 483840.0,
+   "reps_total_ms": [
+    293.1,
+    291.3,
+    288.8
+   ]
+  },
+  {
+   "stage": "extract / cards",
+   "note": "230/230 cards visible, base-res",
+   "prep_ms": 131.1344299999746,
+   "operator_ms": 380.47773400012375,
+   "composite_ms": 0.0,
+   "total_ms": 511.61216400009835,
+   "n_points": 927360.0,
+   "reps_total_ms": [
+    295.0,
+    685.0,
+    511.6
+   ]
+  },
+  {
+   "stage": "poses / route",
+   "note": "route fraction 0.5, nodes only",
+   "prep_ms": 0.35637499991025834,
+   "operator_ms": 6.464479999976902,
+   "composite_ms": 0.0,
+   "total_ms": 6.807786000081251,
+   "n_points": 120.0,
+   "reps_total_ms": [
+    6.7,
+    6.8,
+    72.7
+   ]
+  },
+  {
+   "stage": "poses / route",
+   "note": "route fraction 1.0, nodes only",
+   "prep_ms": 0.6108879999828787,
+   "operator_ms": 9.565368000039598,
+   "composite_ms": 0.0,
+   "total_ms": 10.176256000022477,
+   "n_points": 230.0,
+   "reps_total_ms": [
+    10.2,
+    61.0,
+    10.0
+   ]
+  },
+  {
+   "stage": "depth / points landing",
+   "note": "settled 0/208,666 pts (frame 1/229 crushing, g=1)",
+   "prep_ms": 0.6896359998336266,
+   "operator_ms": 72.68691900003432,
+   "composite_ms": 0.0,
+   "total_ms": 73.37655499986795,
+   "n_points": 1069.0,
+   "reps_total_ms": [
+    73.4,
+    19.9,
+    78.4
+   ]
+  },
+  {
+   "stage": "depth / points landing",
+   "note": "settled 25,331/208,666 pts (frame 39/229 crushing, g=1)",
+   "prep_ms": 1.7048510001131945,
+   "operator_ms": 20.178829000087717,
+   "composite_ms": 83.83290999995552,
+   "total_ms": 138.16268700020373,
+   "n_points": 26737.0,
+   "reps_total_ms": [
+    138.2,
+    163.0,
+    128.0
+   ]
+  },
+  {
+   "stage": "depth / points landing",
+   "note": "settled 50,236/208,666 pts (frame 67/229 crushing, g=1)",
+   "prep_ms": 2.4691290000191657,
+   "operator_ms": 11.304128999881868,
+   "composite_ms": 110.34382200000437,
+   "total_ms": 128.43432299973756,
+   "n_points": 51416.0,
+   "reps_total_ms": [
+    124.1,
+    191.6,
+    128.4
+   ]
+  },
+  {
+   "stage": "depth / points landing",
+   "note": "settled 103,002/208,666 pts (frame 97/229 crushing, g=1)",
+   "prep_ms": 4.759278999927119,
+   "operator_ms": 11.978171999999176,
+   "composite_ms": 426.7872630000511,
+   "total_ms": 506.4743670000098,
+   "n_points": 106365.0,
+   "reps_total_ms": [
+    423.8,
+    506.5,
+    563.9
+   ]
+  },
+  {
+   "stage": "depth / points landing",
+   "note": "settled 150,157/208,666 pts (frame 124/229 crushing, g=1)",
+   "prep_ms": 79.18695199987269,
+   "operator_ms": 18.554579999999987,
+   "composite_ms": 683.8736370000333,
+   "total_ms": 788.5375580001437,
+   "n_points": 151009.0,
+   "reps_total_ms": [
+    691.6,
+    796.5,
+    788.5
+   ]
+  },
+  {
+   "stage": "depth / points landing",
+   "note": "settled 208,435/208,666 pts (frame 229/229 crushing, g=1)",
+   "prep_ms": 8.837944999868341,
+   "operator_ms": 74.87444399998822,
+   "composite_ms": 493.3807089998936,
+   "total_ms": 516.1287470000389,
+   "n_points": 208896.0,
+   "reps_total_ms": [
+    577.6,
+    516.1,
+    509.5
+   ]
+  },
+  {
+   "stage": "depth / photo landing",
+   "note": "settled 103,002 pts + photo of frame 97 intact (163k px)",
+   "prep_ms": 16.61785099986446,
+   "operator_ms": 216.76233700009107,
+   "composite_ms": 715.570186999912,
+   "total_ms": 926.5505179998854,
+   "n_points": 266432.0,
+   "reps_total_ms": [
+    922.8,
+    926.6,
+    1187.3
+   ]
+  },
+  {
+   "stage": "depth / photo landing",
+   "note": "settled 208,435 pts + photo of frame 229 intact (163k px)",
+   "prep_ms": 81.33500799999638,
+   "operator_ms": 13.171193999824027,
+   "composite_ms": 690.6803910001145,
+   "total_ms": 779.3847099997038,
+   "n_points": 371865.0,
+   "reps_total_ms": [
+    1078.6,
+    724.6,
+    779.4
+   ]
+  },
+  {
+   "stage": "fuse / finale",
+   "note": "all 208,666 pts settled+solid, wide view",
+   "prep_ms": 8.906168000066828,
+   "operator_ms": 9.726108999984717,
+   "composite_ms": 589.0826669999569,
+   "total_ms": 607.4637359997723,
+   "n_points": 208896.0,
+   "reps_total_ms": [
+    697.2,
+    597.3,
+    607.5
+   ]
+  },
+  {
+   "stage": "fallback / solid stride 2",
+   "note": "settled solid layer at every 2nd point",
+   "prep_ms": 6.8848119999529445,
+   "operator_ms": 13.972698000088712,
+   "composite_ms": 293.4668599998531,
+   "total_ms": 314.32436999989477,
+   "n_points": 104563.0,
+   "reps_total_ms": [
+    394.7,
+    314.3,
+    303.6
+   ]
+  },
+  {
+   "stage": "fallback / solid stride 3",
+   "note": "settled solid layer at every 3rd point",
+   "prep_ms": 5.054051000115578,
+   "operator_ms": 14.96631999998499,
+   "composite_ms": 203.39305500010596,
+   "total_ms": 216.66145499989398,
+   "n_points": 69786.0,
+   "reps_total_ms": [
+    216.7,
+    211.1,
+    232.0
+   ]
+  },
+  {
+   "stage": "fallback / points only",
+   "note": "settled drawn as operator points, no swell",
+   "prep_ms": 84.03189000000566,
+   "operator_ms": 106.98695900009625,
+   "composite_ms": 0.0,
+   "total_ms": 200.26432500003466,
+   "n_points": 208896.0,
+   "reps_total_ms": [
+    202.7,
+    200.3,
+    186.0
+   ]
+  }
+ ],
+ "points_total": 208666,
+ "frames_used": 229,
+ "cards": 230
+}
