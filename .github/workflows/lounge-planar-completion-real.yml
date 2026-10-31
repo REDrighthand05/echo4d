@@ -1,0 +1,48 @@
+name: Real Stanford Lounge measured planar hole completion A/B
+on:
+  push:
+    branches: [research/lounge-planar-measured-holes-20261031]
+    paths:
+      - tools/lounge_planar_completion_real.py
+      - tests/python/test_lounge_planar_completion_real.py
+      - .github/workflows/lounge-planar-completion-real.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  real-lounge-planar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 110
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install reconstruction dependencies
+        run: |
+          python -m pip install -r requirements.lock
+          python -m pip install --no-deps -e .
+          python -m pip install 'open3d==0.19.0' 'trimesh>=4,<5'
+      - name: Test bounded metric planar geometry
+        env:
+          PYTHONPATH: tools
+        run: python -m pytest -q tests/python/test_lounge_planar_completion_real.py
+      - name: Generate actual Stanford Lounge measured and inferred planar Mesh
+        env:
+          PYTHONPATH: tools
+          OPENBLAS_NUM_THREADS: '1'
+          OMP_NUM_THREADS: '2'
+        run: |
+          python tools/lounge_planar_completion_real.py \
+            --work "$RUNNER_TEMP/lounge-planar" \
+            --output "$GITHUB_WORKSPACE/artifacts/lounge-planar"
+      - name: Preserve GLBs, real photos and five A/B views on failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lounge-real-planar-measured-144-ab
+          path: artifacts/lounge-planar/
+          retention-days: 14
+          if-no-files-found: warn
