@@ -27,6 +27,15 @@ numpy 2.5.4 — pairing verified compatible) so the shared app .venv
 was not mutated while another agent renders from it; adding
 numba>=0.68 to the app venv is the remaining integration step.
 
+Rename + integration (2026-10-31): the local package is now
+echo_super/kernels/echo_render/ (matching the public repo
+REDrighthand05/echo-render; MUS remains the engine codename), the
+registry wrapper was renamed with it (register_echo_render_kernels,
+kernel id echo_render_frame), tests moved to
+tests/test_echo_render.py, and numba>=0.68 was added to
+requirements-app.txt and installed into the app .venv. Behaviour
+unchanged — renders verified byte-identical pre/post rename.
+
 ## Why
 
 Promo/preview frames are currently produced by screenshotting a WebGL

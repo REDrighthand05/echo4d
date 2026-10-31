@@ -1,12 +1,22 @@
-__pycache__/
-*.py[cod]
-.pytest_cache/
+# Python / venv
 .venv/
-*.egg-info/
+__pycache__/
+*.pyc
+
+# Runtime data (large, regenerable)
+jobs/
+models/*.onnx
+models_tmp/
+models_tmp_base/
+.tmp/
+
+# Worker scratch (DeepSeek raw I/O, prompts, logs)
+ds_*_response.json
+ds_*_raw.txt
+ds_*_err.log
+spec_*_prompt.txt
+*.log
+
+# PyInstaller output
 build/
-artifacts/
-outputs/
-datasets/
-*.tar.gz
-.openai/local*
-node_modules/
+dist/

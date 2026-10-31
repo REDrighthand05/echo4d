@@ -46,7 +46,15 @@
 | IMU 预积分（Forster） | 2013/2016 | 开源，GTSAM | CPU轻 | imu + poses → poses | 实测 | 待审（眼镜路线） | 外部接入 |
 | 声呐占据栅格（逆传感器模型，确定性对数几率更新） | 1985 | 开源，Moravec/Elfes 法，本项目实现 | CPU轻 | sonar → occupancy | 实测 | 待审（远期，眼镜碰撞盒/体积扫描） | Muse写 |
 | WebGL 点云查看器 | 2026 本项目 | 开源，本项目 viewer.html | CPU轻 | points → scene | 实测 | 主线在用（stage_present） | Muse写 |
+| 特征物比例标定核心 estimate_scale | 2026 本项目 | 开源，本项目工单 WO-scale-core | CPU轻 | points + known_size → scale | 估计 | 已注册（DS 批一，台架已验） | DS写 |
+| 回放路径构建 build_replay_path | 2026 本项目 | 开源，本项目工单 WO-replay-path | CPU轻 | poses → path | 实测 | 已注册（DS 批一，台架已验） | DS写 |
+| 体素表面下标 surface_voxel_indices | 2026 本项目 | 开源，本项目工单 WO-surface-voxels | CPU轻 | points → points | 实测 | 已注册（DS 批一，台架已验） | DS写 |
+| 路径等弧长重采样 resample_path_even | 经典 | 开源，本项目工单 WO-resample-path | CPU轻 | path → path | 实测 | 已注册（DS 批二，台架已验） | DS写 |
+| 向心 Catmull-Rom 样条 catmull_rom_path | 1974/1988 | 开源，Barry–Goldman 法，本项目工单 WO-catmull-rom | CPU轻 | path → path | 实测 | 已注册（DS 批二，台架已验） | DS写 |
+| 视锥选取 frustum_select_points | 经典 | 开源，本项目工单 WO-frustum-select | CPU轻 | points → points（只选取不动点） | 实测 | 已注册（DS 批二，台架已验） | DS写 |
+| 平面拟合＋逐点有符号距离 plane_fit_lsq | 经典 | 开源，本项目工单 WO-plane-fit-lsq | CPU轻 | points → points（平面参数存 meta、距离随 data） | 实测 | 已注册（DS 批二，台架已验） | DS写 |
+| 体素代表点选取 voxel_select_representative | 经典规则 | 开源，本项目工单 WO-voxel-representative | CPU轻 | points → points（每 cell 只留离中心最近的实测点，绝不平均） | 实测 | 已注册（DS 批二，台架已验；体素平均合并的确定性替代件之一） | DS写 |
 
 | 特征物比例标定（已知尺寸物 → 全场缩放） | 2026 本项目 | 本项目，用户提出 | CPU轻 | frames + points + 已知尺寸 → scaled points | 估计 | 待建（用户点名方案，2026-10-31：画面里找到标准尺寸的特征物，如农夫山泉瓶身，按其真实尺寸反推整个场景的缩放比例；证据标「估计」） | Muse写 |
 
-计数：共 38 条。主线在用 8（抽帧、清晰度挑选、SIFT、自定义配对、增量 SfM、单目深度、逐帧对齐、查看器）；已注册 3（orient_normals、平面拟合、泊松重建，均经 echo_super.adapters.register_real_kernels 注册）；待审 23；待替换 1（体素平均合并）；排除 3（RANSAC、TSDF、Hough）。
+计数：共 47 条。主线在用 8（抽帧、清晰度挑选、SIFT、自定义配对、增量 SfM、单目深度、逐帧对齐、查看器）；已注册 11（orient_normals、平面拟合、泊松重建经 register_real_kernels 注册；estimate_scale、build_replay_path、surface_voxel_indices 为 DS 批一；resample_path_even、catmull_rom_path、frustum_select_points、plane_fit_lsq、voxel_select_representative 为 DS 批二——两批均 DS 写、Muse 逐个台架验过才注册）；待审 20；已验不采用／方法不适用／环境不可行 3（逐帧形变场、SGBM、PatchMatch）；待替换 1（体素平均合并）；排除 3（RANSAC、TSDF、Hough）；待建 1（特征物比例标定，其核心 estimate_scale 已注册）。

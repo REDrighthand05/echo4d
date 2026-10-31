@@ -1,2 +1,0 @@
-[console_scripts]
-echo4d = echo4d.cli:main

@@ -9,11 +9,16 @@ Stages (each writes into the job dir and updates job.json):
   4. depth    - per-frame metric-aligned depth           (later milestone)
   5. fuse     - per-frame depth fusion + corroboration trim
   6. clean    - continuity cleanup: keep the connected main body
+  6b. scale   - true-scale anchoring: find a standard-size reference
+                object (catalogue in echo_scene/scale.py) and rescale
+                the scene to metres; unknown scale never blocks a job
   7. present  - standalone scene.html (data embedded, opens as a file)
   mesh        - optional surface mesh via echo_scene.mesh, after fuse;
                 best-effort, skipped quietly when the module is absent
   voxel       - frozen voxel solidification, after mesh; best-effort
   preview     - process-preview page (preview.html) in the job folder
+  replay      - route-replay page (replay.html): a stand-in figure
+                glides the recovered camera route over the scene
 
 Everything a job produces is a plain local file in the job folder --
 no server, no localhost page (v0.2 outputs-as-files rule).
@@ -363,6 +368,39 @@ def stage_clean(job_dir: Path) -> dict:
     return info
 
 
+def stage_scale(job_dir: Path) -> dict:
+    """True-scale anchoring between clean and mesh (Pioneer A).
+
+    Non-fatal by design (same contract as clean): a job whose scale
+    stays unknown is still a complete job, so any failure here --
+    including the scale module being unavailable -- only means the
+    scene keeps its arbitrary units; scale.json records the outcome
+    whenever the stage ran (the wrapper writes a minimal unknown
+    record when the module itself could not).
+    """
+    try:
+        from echo_scene.scale import stage_scale as _stage_scale
+
+        info = _stage_scale(job_dir)
+    except Exception as e:
+        info = {"stage": "scale", "status": "unknown",
+                "scale_to_meters": None, "evidence": "未知",
+                "reason": f"scale stage failed: {e}"}
+        print(json.dumps(info, ensure_ascii=False), flush=True)
+        try:
+            (job_dir / "scale.json").write_text(
+                json.dumps(info, ensure_ascii=False, indent=2))
+            (job_dir / "job.json").write_text(
+                json.dumps(info, ensure_ascii=False, indent=2))
+        except OSError:
+            pass
+    info = dict(info)
+    info["ok"] = True
+    info["scale_applied"] = bool(
+        info.get("status") == "set" and info.get("applied"))
+    return info
+
+
 def stage_present(job_dir: Path) -> dict:
     """Write the standalone scene page into the job folder.
 
@@ -410,6 +448,18 @@ def stage_present(job_dir: Path) -> dict:
             files[key] = str(candidate)
     info = {"stage": "present", "ok": True, "scene_html": str(scene_path),
             "files": files}
+    scale_path = job_dir / "scale.json"
+    if scale_path.exists():
+        try:
+            scale_rec = json.loads(scale_path.read_text())
+            info["scale"] = {
+                "status": scale_rec.get("status"),
+                "scale_to_meters": scale_rec.get("scale_to_meters"),
+                "evidence": scale_rec.get("evidence"),
+                "error_pct": scale_rec.get("error_pct"),
+            }
+        except (OSError, ValueError):
+            pass
     (job_dir / "job.json").write_text(json.dumps(info, ensure_ascii=False, indent=2))
     return info
 
@@ -428,6 +478,29 @@ def stage_preview(job_dir: Path) -> dict:
     except Exception as e:
         info = {"stage": "preview", "preview_applied": False,
                 "reason": f"preview failed: {e}"}
+        print(json.dumps(info, ensure_ascii=False), flush=True)
+    info["ok"] = True
+    (job_dir / "job.json").write_text(json.dumps(info, ensure_ascii=False, indent=2))
+    return info
+
+
+def stage_replay(job_dir: Path) -> dict:
+    """Route-replay page (replay.html) as a file in the job folder.
+
+    Garnish like the preview: a failure here never fails a finished
+    scene, so the wrapper reports ok with replay_applied=False. The
+    page needs only points.bin + poses.json (alignment.json when the
+    fuse stage wrote one), so it can also be generated on demand for
+    jobs finished by older versions.
+    """
+    try:
+        from echo_scene.replay import write_replay
+
+        result = write_replay(job_dir, job_dir / "replay.html")
+        info = {"stage": "replay", "replay_applied": True, **result}
+    except Exception as e:
+        info = {"stage": "replay", "replay_applied": False,
+                "reason": f"replay failed: {e}"}
         print(json.dumps(info, ensure_ascii=False), flush=True)
     info["ok"] = True
     (job_dir / "job.json").write_text(json.dumps(info, ensure_ascii=False, indent=2))
@@ -453,6 +526,8 @@ def main(argv):
         info = stage_fuse(Path(argv[2]).resolve())
     elif len(argv) >= 2 and argv[1] == "clean" and len(argv) == 3:
         info = stage_clean(Path(argv[2]).resolve())
+    elif len(argv) >= 2 and argv[1] == "scale" and len(argv) == 3:
+        info = stage_scale(Path(argv[2]).resolve())
     elif len(argv) >= 2 and argv[1] == "mesh" and len(argv) == 3:
         info = stage_mesh(Path(argv[2]).resolve())
     elif len(argv) >= 2 and argv[1] == "voxel" and len(argv) == 3:
@@ -461,6 +536,8 @@ def main(argv):
         info = stage_present(Path(argv[2]).resolve())
     elif len(argv) >= 2 and argv[1] == "preview" and len(argv) == 3:
         info = stage_preview(Path(argv[2]).resolve())
+    elif len(argv) >= 2 and argv[1] == "replay" and len(argv) == 3:
+        info = stage_replay(Path(argv[2]).resolve())
     else:
         print(__doc__)
         return 2

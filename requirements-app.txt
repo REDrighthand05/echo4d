@@ -7,3 +7,6 @@ Pillow>=10.0
 opencv-contrib-python-headless>=4.8
 tkinterdnd2>=0.4
 customtkinter>=5.2
+numba>=0.68
+pystray>=0.19
+winotify>=1.1; sys_platform == 'win32'
