@@ -71,3 +71,41 @@ jobs:
           name: EchoScene-windows
           path: EchoScene-windows.zip
           retention-days: 30
+      # --- Installer (Inno Setup) -------------------------------------
+      # The zip above stays as the portable option; the setup exe is the
+      # primary route (per-user, no admin, Start-menu entry, upgrade in
+      # place, clean uninstall -- see installer/README.md). Payload is
+      # the same dist/EchoScene folder the zip is made from.
+      - name: Resolve installer version
+        id: ver
+        shell: pwsh
+        run: |
+          # Single source of truth: the release tag (vX.Y.Z) when this
+          # build runs from one, else installer/version.inc.
+          if ("${{ github.ref_name }}" -match '^v(\d+\.\d+\.\d+)$') {
+            $ver = $Matches[1]
+          } else {
+            $line = Get-Content installer/version.inc |
+              Where-Object { $_ -match '#define AppVersion "' } |
+              Select-Object -First 1
+            if (-not $line) { throw "AppVersion not found in installer/version.inc" }
+            $ver = [regex]::Match($line, '"([0-9.]+)"').Groups[1].Value
+          }
+          "version=$ver" >> $env:GITHUB_OUTPUT
+          Write-Host "Installer version: $ver"
+      - name: Install Inno Setup
+        run: choco install innosetup -y --no-progress
+      - name: Build installer (Inno Setup)
+        shell: pwsh
+        run: |
+          $iscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { throw "ISCC.exe not found after Inno Setup install: $iscc" }
+          & $iscc "/DAppVersion=${{ steps.ver.outputs.version }}" installer\EchoScene.iss
+          if ($LASTEXITCODE -ne 0) { throw "Inno Setup compile failed with exit code $LASTEXITCODE" }
+          $setup = Get-Item EchoScene-Setup.exe
+          Write-Host "Installer built: $($setup.FullName) ($($setup.Length) bytes)"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: EchoScene-setup
+          path: EchoScene-Setup.exe
+          retention-days: 30

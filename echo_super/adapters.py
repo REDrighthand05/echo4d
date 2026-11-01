@@ -257,3 +257,127 @@ def register_ds_batch1(registry: Registry | None = None) -> Registry:
     reg.add(Kernel("surface_voxel_indices", ("points",), "points",
                    _surface_voxel_kernel, cost=1.0))
     return reg
+
+
+# ---------------------------------------------------------------------------
+# DS batch 2 (2026-10-31): five more verified kernels, registered after
+# Muse's bench verification (echo_super/ds_batch2.py holds the code,
+# echo_super/test_ds_batch2.py the benches; specs in workorders/WO-*.md):
+#   resample_path_even         path -> path     实测 · 已验
+#   catmull_rom_path           path -> path     实测 · 已验
+#   frustum_select_points      points -> points 实测 · 已验
+#   plane_fit_lsq              points -> points 实测 · 已验
+#   voxel_select_representative points -> points 实测 · 已验
+# Bench results: all 19 bench tests green on the first DS attempt for
+# every kernel (zero retries). Resample exact on the L-path (total
+# length 7 preserved to <1e-9); centripetal Catmull-Rom passes every
+# knot exactly (segment starts forced to the knots) and keeps collinear
+# knots collinear; frustum selection matches the hand-placed index set
+# exactly, incl. near/far/pixel-edge cases and a rotated camera; TLS
+# plane fit exact on noiseless planes and <1 deg under sigma=0.01 noise;
+# voxel representative matches the hand fixture and an independent
+# brute-force reimplementation, and is idempotent.
+
+from .ds_batch2 import (  # noqa: E402
+    catmull_rom_path as _catmull_rom_fn,
+    frustum_select_points as _frustum_select_fn,
+    plane_fit_lsq as _plane_fit_lsq_fn,
+    resample_path_even as _resample_path_fn,
+    voxel_select_representative as _voxel_representative_fn,
+)
+
+KERNEL_META.update({
+    "resample_path_even": {"evidence": "实测", "status": "已验"},
+    "catmull_rom_path": {"evidence": "实测", "status": "已验"},
+    "frustum_select_points": {"evidence": "实测", "status": "已验"},
+    "plane_fit_lsq": {"evidence": "实测", "status": "已验"},
+    "voxel_select_representative": {"evidence": "实测", "status": "已验"},
+})
+
+
+def _path_array(obj: EchoObject):
+    """(N,3) array from a path object: data dict's 'path' or bare array."""
+    data = obj.data
+    if isinstance(data, dict):
+        return np.asarray(data["path"])
+    return np.asarray(data)
+
+
+def _resample_path_kernel(path_obj: EchoObject):
+    spacing = path_obj.meta.get("spacing")
+    if spacing is None:
+        raise ValueError("resample_path_even needs path.meta['spacing']")
+    out = _resample_path_fn(_path_array(path_obj), float(spacing))
+    return path_obj.derive(
+        "path", {"path": out}, source="kernel:resample_path_even",
+        **KERNEL_META["resample_path_even"])
+
+
+def _catmull_rom_kernel(path_obj: EchoObject):
+    s = int(path_obj.meta.get("samples_per_segment", 10))
+    out = _catmull_rom_fn(_path_array(path_obj), s)
+    return path_obj.derive(
+        "path", {"path": out}, source="kernel:catmull_rom_path",
+        **KERNEL_META["catmull_rom_path"])
+
+
+_FRUSTUM_META_KEYS = ("cam_position", "cam_rotation", "fx", "fy", "cx",
+                      "cy", "image_width", "image_height", "near", "far")
+
+
+def _frustum_select_kernel(points_obj: EchoObject):
+    pts, _colors, _cams = _points_array(points_obj)
+    missing = [k for k in _FRUSTUM_META_KEYS if k not in points_obj.meta]
+    if missing:
+        raise ValueError(
+            f"frustum_select_points needs points.meta keys {missing}")
+    m = points_obj.meta
+    idx = _frustum_select_fn(
+        pts, np.asarray(m["cam_position"], dtype=float),
+        np.asarray(m["cam_rotation"], dtype=float),
+        float(m["fx"]), float(m["fy"]), float(m["cx"]), float(m["cy"]),
+        int(m["image_width"]), int(m["image_height"]),
+        float(m["near"]), float(m["far"]))
+    return points_obj.derive(
+        "points", pts[idx], source="kernel:frustum_select_points",
+        selected_indices=idx, **KERNEL_META["frustum_select_points"])
+
+
+def _plane_fit_lsq_kernel(points_obj: EchoObject):
+    pts, _colors, _cams = _points_array(points_obj)
+    normal, offset, distances = _plane_fit_lsq_fn(pts)
+    data = points_obj.data
+    out_data = dict(data) if isinstance(data, dict) else {"points": pts}
+    out_data["signed_distances"] = distances
+    return points_obj.derive(
+        "points", out_data, source="kernel:plane_fit_lsq",
+        plane_normal=[float(v) for v in normal], plane_offset=float(offset),
+        **KERNEL_META["plane_fit_lsq"])
+
+
+def _voxel_representative_kernel(points_obj: EchoObject):
+    pts, _colors, _cams = _points_array(points_obj)
+    cell = points_obj.meta.get("cell_size")
+    if cell is None:
+        raise ValueError(
+            "voxel_select_representative needs points.meta['cell_size']")
+    idx = _voxel_representative_fn(pts, float(cell))
+    return points_obj.derive(
+        "points", pts[idx], source="kernel:voxel_select_representative",
+        kept_indices=idx, **KERNEL_META["voxel_select_representative"])
+
+
+def register_ds_batch2(registry: Registry | None = None) -> Registry:
+    """Register the DS batch-2 kernels; returns the registry."""
+    reg = registry if registry is not None else Registry()
+    reg.add(Kernel("resample_path_even", ("path",), "path",
+                   _resample_path_kernel, cost=1.0))
+    reg.add(Kernel("catmull_rom_path", ("path",), "path",
+                   _catmull_rom_kernel, cost=1.0))
+    reg.add(Kernel("frustum_select_points", ("points",), "points",
+                   _frustum_select_kernel, cost=1.0))
+    reg.add(Kernel("plane_fit_lsq", ("points",), "points",
+                   _plane_fit_lsq_kernel, cost=1.0))
+    reg.add(Kernel("voxel_select_representative", ("points",), "points",
+                   _voxel_representative_kernel, cost=1.0))
+    return reg

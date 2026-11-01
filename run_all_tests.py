@@ -25,6 +25,11 @@ SUITES = [
     ("frozen", [sys.executable, "tests/test_markers_synth.py"]),
     ("align", [sys.executable, "tests/test_up_alignment.py"]),
     ("clean", [sys.executable, "tests/test_continuity_clean.py"]),
+    ("replay", [sys.executable, "tests/test_replay.py"]),
+    ("scale", [sys.executable, "tests/test_scale.py"]),
+    ("desktop", [sys.executable, "tests/test_desktop.py"]),
+    ("sensor", [sys.executable, "tests/test_sensor_record.py"]),
+    ("tethered", [sys.executable, "tests/test_tethered.py"]),
 ]
 
 
