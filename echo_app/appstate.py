@@ -35,7 +35,6 @@ OPEN_SCENE = "open_scene"
 OPEN_FOLDER = "open_folder"
 OPEN_PREVIEW = "open_preview"
 OPEN_REPLAY = "open_replay"
-OPEN_STUDIO = "open_studio"
 HIST_OPEN = "hist_open"
 HIST_FOLDER = "hist_folder"
 HIST_PREVIEW = "hist_preview"
@@ -49,7 +48,7 @@ TRAY_QUIT = "tray_quit"
 
 ALL_ACTIONS = (
     PICK_VIDEO, PICK_DEPTH, PLAY_DEPTH,
-    OPEN_SCENE, OPEN_FOLDER, OPEN_PREVIEW, OPEN_REPLAY, OPEN_STUDIO,
+    OPEN_SCENE, OPEN_FOLDER, OPEN_PREVIEW, OPEN_REPLAY,
     HIST_OPEN, HIST_FOLDER, HIST_PREVIEW, HIST_REPLAY,
     OPEN_SETTINGS, CHANGE_JOBS_FOLDER, CHECK_UPDATE, DOWNLOAD_UPDATE,
     TRAY_OPEN, TRAY_QUIT,
@@ -63,7 +62,6 @@ class FileFlags:
     folder: bool = False    # the job folder itself exists
     preview: bool = False   # preview.html exists
     replay: bool = False    # replay.html exists, or buildable on demand
-    studio: bool = False    # poses + selected + fused points: Studio can direct it
 
 
 @dataclass
@@ -90,7 +88,6 @@ def compute_actions(ctx: ActionContext) -> dict:
         OPEN_FOLDER: cur.folder,
         OPEN_PREVIEW: cur.preview,
         OPEN_REPLAY: cur.replay,
-        OPEN_STUDIO: not busy and cur.studio,
         # Selected history job: same rule, its own files.
         HIST_OPEN: hist.scene,
         HIST_FOLDER: hist.folder,

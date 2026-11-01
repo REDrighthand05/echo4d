@@ -298,9 +298,6 @@ def job_file_flags(job):
         folder=job.exists(),
         preview=(job / "preview.html").exists(),
         replay=_replay_available(job),
-        studio=(job / "poses.json").exists()
-        and (job / "selected_frames.json").exists()
-        and (job / "scene_points.ply").exists(),
     )
 
 
@@ -522,24 +519,17 @@ def main():
     hero_parts = tile_header(hero, "✦", "生成场景", zone_idle)
     hero_desc = hero_parts[2]
     hero_btn_row = ctk.CTkFrame(hero, fg_color="transparent")
-    hero_btn_row.pack(anchor="w", padx=14, pady=(0, 6))
+    hero_btn_row.pack(anchor="w", padx=14, pady=(0, 12))
     btn_pick = pill(hero_btn_row, "选择视频", primary=True, font_size=12)
     btn_pick.pack(side="left")
     btn_open = pill(hero_btn_row, "打开场景", font_size=12, state="disabled")
     btn_open.pack(side="left", padx=(8, 0))
     btn_folder = pill(hero_btn_row, "打开文件夹", font_size=12, state="disabled")
     btn_folder.pack(side="left", padx=(8, 0))
-    # Second hero row: the viewing/directing actions. Six pills no
-    # longer fit one row at full size; two rows of three keep every
-    # label whole.
-    hero_btn_row2 = ctk.CTkFrame(hero, fg_color="transparent")
-    hero_btn_row2.pack(anchor="w", padx=14, pady=(0, 12))
-    btn_preview = pill(hero_btn_row2, "过程回放", font_size=12, state="disabled")
-    btn_preview.pack(side="left")
-    btn_replay = pill(hero_btn_row2, "路线回放", font_size=12, state="disabled")
+    btn_preview = pill(hero_btn_row, "过程回放", font_size=12, state="disabled")
+    btn_preview.pack(side="left", padx=(8, 0))
+    btn_replay = pill(hero_btn_row, "路线回放", font_size=12, state="disabled")
     btn_replay.pack(side="left", padx=(8, 0))
-    btn_studio = pill(hero_btn_row2, "渲染 Studio", font_size=12, state="disabled")
-    btn_studio.pack(side="left", padx=(8, 0))
 
     def hero_bg(color):
         # CTk labels/rows are transparent, so tinting the card is enough.
@@ -990,7 +980,7 @@ def main():
             CHANGE_JOBS_FOLDER, CHECK_UPDATE, DOWNLOAD_UPDATE,
             HIST_FOLDER, HIST_OPEN, HIST_PREVIEW, HIST_REPLAY,
             OPEN_FOLDER, OPEN_PREVIEW, OPEN_REPLAY, OPEN_SCENE,
-            OPEN_STUDIO, PICK_DEPTH, PICK_VIDEO, PLAY_DEPTH)
+            PICK_DEPTH, PICK_VIDEO, PLAY_DEPTH)
         on(btn_pick, acts[PICK_VIDEO])
         on(btn_depth, acts[PICK_DEPTH])
         on(btn_depth_play, acts[PLAY_DEPTH])
@@ -998,7 +988,6 @@ def main():
         on(btn_folder, acts[OPEN_FOLDER])
         on(btn_preview, acts[OPEN_PREVIEW])
         on(btn_replay, acts[OPEN_REPLAY])
-        on(btn_studio, acts[OPEN_STUDIO])
         on(btn_hist_open, acts[HIST_OPEN])
         on(btn_hist_folder, acts[HIST_FOLDER])
         on(btn_hist_preview, acts[HIST_PREVIEW])
@@ -1286,21 +1275,6 @@ def main():
     def open_replay():
         ensure_and_open("replay", state["job"])
 
-    def open_studio():
-        """Open the Render Studio on the current job. Guard mirrors
-        the state matrix (OPEN_STUDIO): a finished job with poses,
-        selected frames and fused points."""
-        job = state["job"]
-        if job is None or not job_file_flags(job).studio:
-            return
-        from echo_app.studio_window import StudioWindow
-        style = {"font": F, "bg": C_BG, "surface": C_SURFACE,
-                 "ink": C_INK, "subink": C_SUBINK, "accent": C_ACCENT,
-                 "accent_hover": C_ACCENT_HOVER, "btn2": C_BTN2,
-                 "btn2_hover": C_BTN2_HOVER, "preview_bg": C_PREVIEW_BG,
-                 "corner": CORNER}
-        StudioWindow(root, job, style)
-
     def print_markers():
         try:
             open_marker_sheet()
@@ -1566,7 +1540,6 @@ def main():
     btn_folder.configure(command=open_folder)
     btn_preview.configure(command=open_preview)
     btn_replay.configure(command=open_replay)
-    btn_studio.configure(command=open_studio)
     btn_hist_folder.configure(command=open_history_folder)
     btn_hist_preview.configure(command=open_history_preview)
     btn_hist_replay.configure(command=open_history_replay)
