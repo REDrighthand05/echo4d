@@ -2,6 +2,13 @@ name: Attach release package
 
 on:
   workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to attach to (e.g. v0.3)"
+        required: true
+      build_run:
+        description: "build-windows-exe run id holding the artifacts"
+        required: true
   push:
     branches: [product/echo-scene]
     paths: [.github/workflows/release-attach.yml]
@@ -12,21 +19,22 @@ permissions:
 
 jobs:
   attach:
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
-      - name: Download built artifact from run 41179780935
+      - name: Download built artifacts from the build run
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh run download 41179780935 --repo "$GITHUB_REPOSITORY" --name EchoScene-windows --dir dl
+          gh run download "${{ inputs.build_run }}" --repo "$GITHUB_REPOSITORY" --dir dl
           echo "--- dl contents ---"
           find dl -type f -exec ls -la {} \;
 
-      - name: Unwrap outer zip to get inner EchoScene-windows.zip
+      - name: Locate package files
         run: |
           INNER=$(find dl -name 'EchoScene-windows.zip' | head -n 1)
           if [ -z "$INNER" ]; then
-            OUTER=$(find dl -name '*.zip' | head -n 1)
+            OUTER=$(find dl -name '*.zip' ! -name 'EchoScene-Setup*' | head -n 1)
             echo "outer zip: $OUTER"
             mkdir -p out
             unzip -o "$OUTER" -d out
@@ -35,7 +43,11 @@ jobs:
           echo "inner zip: $INNER"
           test -n "$INNER"
           cp "$INNER" ./EchoScene-windows.zip
-          ls -la ./EchoScene-windows.zip
+          SETUP=$(find dl out -name 'EchoScene-Setup.exe' 2>/dev/null | head -n 1)
+          echo "setup exe: $SETUP"
+          test -n "$SETUP"
+          cp "$SETUP" ./EchoScene-Setup.exe
+          ls -la ./EchoScene-windows.zip ./EchoScene-Setup.exe
 
       - name: Verify inner zip contains EchoScene/EchoScene.exe
         run: |
@@ -48,14 +60,14 @@ jobs:
           print("OK: EchoScene/EchoScene.exe present")
           EOF
 
-      - name: Upload package to release v0.2
+      - name: Upload packages to the release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release upload v0.2 EchoScene-windows.zip --repo "$GITHUB_REPOSITORY" --clobber
+          gh release upload "${{ inputs.tag }}" EchoScene-windows.zip EchoScene-Setup.exe --repo "$GITHUB_REPOSITORY" --clobber
 
-      - name: Verify asset present on release
+      - name: Verify assets present on release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release view v0.2 --repo "$GITHUB_REPOSITORY" --json assets
+          gh release view "${{ inputs.tag }}" --repo "$GITHUB_REPOSITORY" --json assets
