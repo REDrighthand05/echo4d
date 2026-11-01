@@ -1,0 +1,9 @@
+# Frozen promo pipeline: generated + oversized data stays on disk only.
+# data.npz / v3_assets.npz exceed comfortable git size and are
+# regenerable from the app jobs via the prep_*.py chain (see README).
+__pycache__/
+work/
+output/
+assets/data.npz
+assets/v3_assets.npz
+assets/scene_still.png

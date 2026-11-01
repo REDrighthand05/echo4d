@@ -1,0 +1,69 @@
+{
+  "device": {
+    "name": "ECHO Collector",
+    "board": "simulated",
+    "firmware": "sim-1"
+  },
+  "simulated": true,
+  "provenance": "Fabricated from jobs/room2 reconstruction (poses + fused cloud) by experiments/sensor_sim/simulate_capture.py. No video.mp4: the job's extracted frames are the stand-in pictures.",
+  "clock": {
+    "type": "monotonic",
+    "unit": "s",
+    "origin_note": "t=0 is capture start on the device monotonic clock"
+  },
+  "duration_s": 159.496,
+  "streams": {
+    "video": {
+      "fps_nominal": 2.006319907709284,
+      "frames_csv": "frames.csv"
+    },
+    "imu": {
+      "hz": 100.0,
+      "quat_order": "wxyz",
+      "accel_unit": "m/s^2 (device frame, incl. gravity)",
+      "gyro_unit": "rad/s (device frame)"
+    },
+    "tof": {
+      "hz": 5.0,
+      "grid": [
+        8,
+        8
+      ],
+      "fov_deg": 45.0,
+      "max_range_mm": 4000,
+      "invalid": -1,
+      "unit": "mm"
+    }
+  },
+  "calibration": {
+    "cam_from_device": [
+      [
+        1.0,
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        -1.0,
+        0.0
+      ],
+      [
+        0.0,
+        0.0,
+        -1.0
+      ]
+    ],
+    "camera": {
+      "model": "CameraModelId.SIMPLE_RADIAL",
+      "width": 1080,
+      "height": 1920,
+      "params": [
+        1663.8191741224693,
+        540.0,
+        960.0,
+        0.006127538755572635
+      ]
+    }
+  },
+  "format_version": 1
+}

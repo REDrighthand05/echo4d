@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <!-- >200 Hz sensor sampling on Android 12+ -->
+    <uses-permission android:name="android.permission.HIGH_SAMPLING_RATE_SENSORS" />
+
+    <uses-feature android:name="android.hardware.camera" android:required="true" />
+    <uses-feature android:name="android.hardware.camera.ar" android:required="false" />
+    <uses-feature android:glEsVersion="0x00020000" android:required="false" />
+
+    <!-- Merged from the ARCore AAR manifest: package visibility for the
+         Play Services for AR install flow. -->
+    <queries>
+        <package android:name="com.google.ar.core" />
+        <package android:name="com.android.vending" />
+        <intent>
+            <action android:name="com.google.android.play.core.install.BIND_INSTALL_SERVICE" />
+        </intent>
+    </queries>
+
+    <application
+        android:label="ECHO Collector"
+        android:theme="@android:style/Theme.Material.NoActionBar">
+        <!-- ARCore is optional: the app runs fully without Play
+             Services for AR; the ARCore backend simply stays unused. -->
+        <meta-data android:name="com.google.ar.core" android:value="optional" />
+        <!-- Merged from the ARCore AAR manifest. -->
+        <meta-data android:name="com.google.ar.core.min_apk_version" android:value="240920000" />
+        <activity
+            android:name="com.google.ar.core.InstallActivity"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:launchMode="singleTop"
+            android:configChanges="keyboardHidden|orientation|screenSize" />
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:screenOrientation="portrait"
+            android:configChanges="orientation|screenSize|keyboardHidden">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>

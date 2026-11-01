@@ -15,6 +15,15 @@ Layout
       imu.csv       t_s,qw,qx,qy,qz,ax,ay,az,gx,gy,gz
       tof.csv       t_s,z00,z01,...,z63   8x8 zones, millimetres, -1 = no target
 
+Optional streams (added 2026-11-01 for the expanded collection head;
+absent in earlier captures, readers expose None when missing):
+
+      env.csv       t_s,temp_c,humidity_pct,pressure_hpa,gas_ohm
+                    (BME680 class; gas is the raw sensor resistance)
+      mag.csv       t_s,mx,my,mz          raw magnetometer counts, device frame
+      spec.csv      t_s,f1,...,f8,clear,nir,flicker
+                    (AS7341 class raw channel counts)
+
 Conventions (fixed by this module; the Pi capture program in device/
 writes exactly this, and the importer below reads exactly this):
 
@@ -73,6 +82,9 @@ __all__ = [
     "write_frames",
     "write_imu",
     "write_tof",
+    "write_env",
+    "write_mag",
+    "write_spec",
     "Capture",
     "read_capture",
     "zone_distances_from_points",
@@ -89,6 +101,10 @@ _FRAMES_HEADER = ["frame", "t_s", "file"]
 _IMU_HEADER = ["t_s", "qw", "qx", "qy", "qz", "ax", "ay", "az", "gx", "gy", "gz"]
 _TOF_HEADER = ["t_s"] + [f"z{r * TOF_GRID + c}" for r in range(TOF_GRID)
                          for c in range(TOF_GRID)]
+_ENV_HEADER = ["t_s", "temp_c", "humidity_pct", "pressure_hpa", "gas_ohm"]
+_MAG_HEADER = ["t_s", "mx", "my", "mz"]
+_SPEC_HEADER = (["t_s"] + [f"f{i}" for i in range(1, 9)]
+                + ["clear", "nir", "flicker"])
 
 
 # ---------------------------------------------------------------------------
@@ -152,6 +168,35 @@ def write_tof(folder: Path, t_s: np.ndarray, zones_mm: np.ndarray) -> Path:
     return path
 
 
+def _write_wide(folder: Path, name: str, header: list, t_s: np.ndarray,
+                data: np.ndarray) -> Path:
+    data = np.asarray(data, dtype=np.float64)
+    if data.ndim != 2 or data.shape[1] != len(header) - 1:
+        raise ValueError(f"{name} data must be (N,{len(header) - 1})")
+    path = Path(folder) / name
+    with open(path, "w", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(header)
+        for t, row in zip(t_s, data):
+            w.writerow([_fmt(float(t))] + [_fmt(float(v)) for v in row])
+    return path
+
+
+def write_env(folder: Path, t_s: np.ndarray, env: np.ndarray) -> Path:
+    """env: (N,4) temp_c, humidity_pct, pressure_hpa, gas_ohm (raw)."""
+    return _write_wide(folder, "env.csv", _ENV_HEADER, t_s, env)
+
+
+def write_mag(folder: Path, t_s: np.ndarray, mag: np.ndarray) -> Path:
+    """mag: (N,3) raw magnetometer counts in the device frame."""
+    return _write_wide(folder, "mag.csv", _MAG_HEADER, t_s, mag)
+
+
+def write_spec(folder: Path, t_s: np.ndarray, counts: np.ndarray) -> Path:
+    """counts: (N,11) AS7341-order raw counts [F1..F8, Clear, NIR, Flicker]."""
+    return _write_wide(folder, "spec.csv", _SPEC_HEADER, t_s, counts)
+
+
 # ---------------------------------------------------------------------------
 # Reader.
 # ---------------------------------------------------------------------------
@@ -162,6 +207,8 @@ class Capture:
     frames: dict file name -> t_s (plus .frame_t / .frame_files arrays)
     imu_t, imu_quat (N,4 wxyz world-from-device), imu_accel, imu_gyro
     tof_t, tof_mm (M,64)
+    Optional streams: env_t/env (N,4), mag_t/mag (N,3), spec_t/spec (N,11)
+    -- each pair is None when the capture predates that stream.
     cam_from_device: (3,3) from meta calibration, or None.
     """
 
@@ -198,14 +245,38 @@ class Capture:
         self.tof_mm = np.array([[int(v) for v in r[1:]] for r in rows[1:]],
                                dtype=np.int32)
 
+        # Optional streams (2026-11-01): present on the expanded head,
+        # absent in earlier captures -> attributes stay None.
+        self.env_t = self.env = None
+        self.mag_t = self.mag = None
+        self.spec_t = self.spec = None
+        for fname, header, t_attr, d_attr in (
+                ("env.csv", _ENV_HEADER, "env_t", "env"),
+                ("mag.csv", _MAG_HEADER, "mag_t", "mag"),
+                ("spec.csv", _SPEC_HEADER, "spec_t", "spec")):
+            path = folder / fname
+            if not path.exists():
+                continue
+            with open(path, newline="") as f:
+                rows = list(csv.reader(f))
+            assert rows[0] == header, f"{fname} header mismatch"
+            arr = np.array([[float(v) for v in r] for r in rows[1:]])
+            setattr(self, t_attr, arr[:, 0])
+            setattr(self, d_attr, arr[:, 1:])
+
         cal = self.meta.get("calibration", {})
         R = cal.get("cam_from_device")
         self.cam_from_device = (np.array(R, dtype=np.float64)
                                 if R is not None else None)
         self.tof_fov_deg = float(self.meta.get("tof", {}).get("fov_deg", 45.0))
 
-        for name, arr in (("frames", self.frame_t), ("imu", self.imu_t),
-                          ("tof", self.tof_t)):
+        stamp_sets = [("frames", self.frame_t), ("imu", self.imu_t),
+                      ("tof", self.tof_t)]
+        for name, t in (("env", self.env_t), ("mag", self.mag_t),
+                        ("spec", self.spec_t)):
+            if t is not None:
+                stamp_sets.append((name, t))
+        for name, arr in stamp_sets:
             if len(arr) > 1 and np.any(np.diff(arr) <= 0):
                 raise ValueError(f"{name} timestamps not strictly increasing")
 

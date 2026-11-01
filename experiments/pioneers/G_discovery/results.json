@@ -1,0 +1,752 @@
+{
+  "frame_00310.jpg": {
+    "seconds": 295.5,
+    "hits": [
+      {
+        "label": "electrical outlet panel",
+        "score": 0.654,
+        "box": {
+          "xmin": 394,
+          "ymin": 1568,
+          "xmax": 925,
+          "ymax": 1763
+        }
+      },
+      {
+        "label": "power socket",
+        "score": 0.559,
+        "box": {
+          "xmin": 394,
+          "ymin": 1568,
+          "xmax": 925,
+          "ymax": 1763
+        }
+      },
+      {
+        "label": "power socket",
+        "score": 0.402,
+        "box": {
+          "xmin": 748,
+          "ymin": 1568,
+          "xmax": 928,
+          "ymax": 1746
+        }
+      },
+      {
+        "label": "bottle",
+        "score": 0.396,
+        "box": {
+          "xmin": 734,
+          "ymin": 741,
+          "xmax": 1063,
+          "ymax": 1068
+        }
+      },
+      {
+        "label": "electrical outlet panel",
+        "score": 0.378,
+        "box": {
+          "xmin": 748,
+          "ymin": 1568,
+          "xmax": 928,
+          "ymax": 1746
+        }
+      },
+      {
+        "label": "book",
+        "score": 0.335,
+        "box": {
+          "xmin": 0,
+          "ymin": 671,
+          "xmax": 542,
+          "ymax": 1086
+        }
+      },
+      {
+        "label": "power socket",
+        "score": 0.329,
+        "box": {
+          "xmin": 611,
+          "ymin": 1578,
+          "xmax": 754,
+          "ymax": 1757
+        }
+      },
+      {
+        "label": "power socket",
+        "score": 0.316,
+        "box": {
+          "xmin": 443,
+          "ymin": 1621,
+          "xmax": 557,
+          "ymax": 1749
+        }
+      },
+      {
+        "label": "electrical outlet panel",
+        "score": 0.277,
+        "box": {
+          "xmin": 611,
+          "ymin": 1578,
+          "xmax": 754,
+          "ymax": 1757
+        }
+      },
+      {
+        "label": "power socket",
+        "score": 0.24,
+        "box": {
+          "xmin": 402,
+          "ymin": 1581,
+          "xmax": 744,
+          "ymax": 1767
+        }
+      },
+      {
+        "label": "desk",
+        "score": 0.239,
+        "box": {
+          "xmin": -1,
+          "ymin": 944,
+          "xmax": 1078,
+          "ymax": 1204
+        }
+      },
+      {
+        "label": "electrical outlet panel",
+        "score": 0.21,
+        "box": {
+          "xmin": 402,
+          "ymin": 1581,
+          "xmax": 744,
+          "ymax": 1767
+        }
+      }
+    ]
+  },
+  "frame_00180.jpg": {
+    "seconds": 285.1,
+    "hits": [
+      {
+        "label": "bed",
+        "score": 0.553,
+        "box": {
+          "xmin": 0,
+          "ymin": 1196,
+          "xmax": 1072,
+          "ymax": 1906
+        }
+      },
+      {
+        "label": "door",
+        "score": 0.535,
+        "box": {
+          "xmin": 229,
+          "ymin": 12,
+          "xmax": 745,
+          "ymax": 1401
+        }
+      },
+      {
+        "label": "bookshelf",
+        "score": 0.404,
+        "box": {
+          "xmin": 812,
+          "ymin": 681,
+          "xmax": 1067,
+          "ymax": 897
+        }
+      },
+      {
+        "label": "book",
+        "score": 0.376,
+        "box": {
+          "xmin": 812,
+          "ymin": 681,
+          "xmax": 1067,
+          "ymax": 897
+        }
+      },
+      {
+        "label": "bed",
+        "score": 0.342,
+        "box": {
+          "xmin": 0,
+          "ymin": 1445,
+          "xmax": 1073,
+          "ymax": 1920
+        }
+      },
+      {
+        "label": "bookshelf",
+        "score": 0.299,
+        "box": {
+          "xmin": 807,
+          "ymin": 25,
+          "xmax": 1078,
+          "ymax": 1273
+        }
+      },
+      {
+        "label": "book",
+        "score": 0.296,
+        "box": {
+          "xmin": 995,
+          "ymin": 316,
+          "xmax": 1076,
+          "ymax": 469
+        }
+      },
+      {
+        "label": "book",
+        "score": 0.25,
+        "box": {
+          "xmin": 1015,
+          "ymin": 320,
+          "xmax": 1032,
+          "ymax": 469
+        }
+      },
+      {
+        "label": "book",
+        "score": 0.246,
+        "box": {
+          "xmin": 996,
+          "ymin": 315,
+          "xmax": 1020,
+          "ymax": 468
+        }
+      },
+      {
+        "label": "book",
+        "score": 0.242,
+        "box": {
+          "xmin": 834,
+          "ymin": 690,
+          "xmax": 998,
+          "ymax": 735
+        }
+      },
+      {
+        "label": "bed",
+        "score": 0.233,
+        "box": {
+          "xmin": 3,
+          "ymin": 1356,
+          "xmax": 439,
+          "ymax": 1696
+        }
+      },
+      {
+        "label": "book",
+        "score": 0.232,
+        "box": {
+          "xmin": 926,
+          "ymin": 728,
+          "xmax": 1003,
+          "ymax": 885
+        }
+      }
+    ]
+  },
+  "frame_00194.jpg": {
+    "seconds": 275.9,
+    "hits": [
+      {
+        "label": "laptop",
+        "score": 0.627,
+        "box": {
+          "xmin": 541,
+          "ymin": 692,
+          "xmax": 758,
+          "ymax": 883
+        }
+      },
+      {
+        "label": "desk",
+        "score": 0.615,
+        "box": {
+          "xmin": -8,
+          "ymin": 846,
+          "xmax": 1049,
+          "ymax": 1460
+        }
+      },
+      {
+        "label": "chair",
+        "score": 0.458,
+        "box": {
+          "xmin": 441,
+          "ymin": 1050,
+          "xmax": 942,
+          "ymax": 1759
+        }
+      },
+      {
+        "label": "book",
+        "score": 0.366,
+        "box": {
+          "xmin": 1,
+          "ymin": 712,
+          "xmax": 157,
+          "ymax": 879
+        }
+      },
+      {
+        "label": "power socket",
+        "score": 0.358,
+        "box": {
+          "xmin": 875,
+          "ymin": 667,
+          "xmax": 929,
+          "ymax": 723
+        }
+      },
+      {
+        "label": "electrical outlet panel",
+        "score": 0.344,
+        "box": {
+          "xmin": 432,
+          "ymin": 640,
+          "xmax": 562,
+          "ymax": 696
+        }
+      },
+      {
+        "label": "book",
+        "score": 0.342,
+        "box": {
+          "xmin": 564,
+          "ymin": 400,
+          "xmax": 711,
+          "ymax": 444
+        }
+      },
+      {
+        "label": "electrical outlet panel",
+        "score": 0.321,
+        "box": {
+          "xmin": 875,
+          "ymin": 667,
+          "xmax": 929,
+          "ymax": 723
+        }
+      },
+      {
+        "label": "bookshelf",
+        "score": 0.316,
+        "box": {
+          "xmin": 8,
+          "ymin": 6,
+          "xmax": 1081,
+          "ymax": 537
+        }
+      },
+      {
+        "label": "book",
+        "score": 0.316,
+        "box": {
+          "xmin": 82,
+          "ymin": 308,
+          "xmax": 277,
+          "ymax": 455
+        }
+      },
+      {
+        "label": "laptop screen",
+        "score": 0.314,
+        "box": {
+          "xmin": 548,
+          "ymin": 694,
+          "xmax": 757,
+          "ymax": 844
+        }
+      },
+      {
+        "label": "bookshelf",
+        "score": 0.281,
+        "box": {
+          "xmin": 1,
+          "ymin": 712,
+          "xmax": 157,
+          "ymax": 879
+        }
+      }
+    ]
+  },
+  "frame_00016.jpg": {
+    "seconds": 278.4,
+    "hits": [
+      {
+        "label": "laptop",
+        "score": 0.515,
+        "box": {
+          "xmin": 0,
+          "ymin": 1414,
+          "xmax": 195,
+          "ymax": 1902
+        }
+      },
+      {
+        "label": "power socket",
+        "score": 0.477,
+        "box": {
+          "xmin": 315,
+          "ymin": 1292,
+          "xmax": 411,
+          "ymax": 1396
+        }
+      },
+      {
+        "label": "electrical outlet panel",
+        "score": 0.417,
+        "box": {
+          "xmin": 315,
+          "ymin": 1292,
+          "xmax": 411,
+          "ymax": 1396
+        }
+      },
+      {
+        "label": "desk",
+        "score": 0.414,
+        "box": {
+          "xmin": 3,
+          "ymin": 1672,
+          "xmax": 883,
+          "ymax": 1915
+        }
+      },
+      {
+        "label": "power socket",
+        "score": 0.31,
+        "box": {
+          "xmin": 344,
+          "ymin": 1307,
+          "xmax": 394,
+          "ymax": 1383
+        }
+      },
+      {
+        "label": "power socket",
+        "score": 0.306,
+        "box": {
+          "xmin": 472,
+          "ymin": 1281,
+          "xmax": 564,
+          "ymax": 1382
+        }
+      },
+      {
+        "label": "bookshelf",
+        "score": 0.273,
+        "box": {
+          "xmin": 0,
+          "ymin": 18,
+          "xmax": 797,
+          "ymax": 1029
+        }
+      },
+      {
+        "label": "electrical outlet panel",
+        "score": 0.271,
+        "box": {
+          "xmin": 472,
+          "ymin": 1281,
+          "xmax": 564,
+          "ymax": 1382
+        }
+      },
+      {
+        "label": "door",
+        "score": 0.244,
+        "box": {
+          "xmin": 125,
+          "ymin": 11,
+          "xmax": 763,
+          "ymax": 517
+        }
+      },
+      {
+        "label": "book",
+        "score": 0.211,
+        "box": {
+          "xmin": 327,
+          "ymin": 1602,
+          "xmax": 767,
+          "ymax": 1834
+        }
+      },
+      {
+        "label": "electrical outlet panel",
+        "score": 0.199,
+        "box": {
+          "xmin": 314,
+          "ymin": 1282,
+          "xmax": 565,
+          "ymax": 1396
+        }
+      },
+      {
+        "label": "laptop screen",
+        "score": 0.195,
+        "box": {
+          "xmin": 0,
+          "ymin": 1409,
+          "xmax": 95,
+          "ymax": 1702
+        }
+      }
+    ]
+  },
+  "frame_00040.jpg": {
+    "seconds": 268.7,
+    "hits": [
+      {
+        "label": "power socket",
+        "score": 0.42,
+        "box": {
+          "xmin": 1020,
+          "ymin": 718,
+          "xmax": 1079,
+          "ymax": 817
+        }
+      },
+      {
+        "label": "bookshelf",
+        "score": 0.379,
+        "box": {
+          "xmin": 140,
+          "ymin": 3,
+          "xmax": 1071,
+          "ymax": 411
+        }
+      },
+      {
+        "label": "book",
+        "score": 0.375,
+        "box": {
+          "xmin": 480,
+          "ymin": 26,
+          "xmax": 570,
+          "ymax": 337
+        }
+      },
+      {
+        "label": "book",
+        "score": 0.366,
+        "box": {
+          "xmin": 419,
+          "ymin": 31,
+          "xmax": 503,
+          "ymax": 335
+        }
+      },
+      {
+        "label": "electrical outlet panel",
+        "score": 0.363,
+        "box": {
+          "xmin": 1020,
+          "ymin": 718,
+          "xmax": 1079,
+          "ymax": 817
+        }
+      },
+      {
+        "label": "book",
+        "score": 0.36,
+        "box": {
+          "xmin": 259,
+          "ymin": 2,
+          "xmax": 373,
+          "ymax": 343
+        }
+      },
+      {
+        "label": "bottle",
+        "score": 0.348,
+        "box": {
+          "xmin": 778,
+          "ymin": 1144,
+          "xmax": 883,
+          "ymax": 1459
+        }
+      },
+      {
+        "label": "book",
+        "score": 0.334,
+        "box": {
+          "xmin": 281,
+          "ymin": 955,
+          "xmax": 476,
+          "ymax": 1316
+        }
+      },
+      {
+        "label": "book",
+        "score": 0.334,
+        "box": {
+          "xmin": 35,
+          "ymin": 856,
+          "xmax": 419,
+          "ymax": 1020
+        }
+      },
+      {
+        "label": "electrical outlet panel",
+        "score": 0.329,
+        "box": {
+          "xmin": 1023,
+          "ymin": 913,
+          "xmax": 1070,
+          "ymax": 963
+        }
+      },
+      {
+        "label": "power socket",
+        "score": 0.323,
+        "box": {
+          "xmin": 1023,
+          "ymin": 913,
+          "xmax": 1070,
+          "ymax": 963
+        }
+      },
+      {
+        "label": "book",
+        "score": 0.322,
+        "box": {
+          "xmin": 58,
+          "ymin": 933,
+          "xmax": 463,
+          "ymax": 1329
+        }
+      }
+    ]
+  },
+  "frame_00057.jpg": {
+    "seconds": 274.2,
+    "hits": [
+      {
+        "label": "electrical outlet panel",
+        "score": 0.393,
+        "box": {
+          "xmin": 775,
+          "ymin": 1593,
+          "xmax": 1081,
+          "ymax": 1762
+        }
+      },
+      {
+        "label": "book",
+        "score": 0.386,
+        "box": {
+          "xmin": 99,
+          "ymin": 901,
+          "xmax": 153,
+          "ymax": 1195
+        }
+      },
+      {
+        "label": "door",
+        "score": 0.378,
+        "box": {
+          "xmin": 493,
+          "ymin": 3,
+          "xmax": 1070,
+          "ymax": 778
+        }
+      },
+      {
+        "label": "book",
+        "score": 0.375,
+        "box": {
+          "xmin": 236,
+          "ymin": 951,
+          "xmax": 290,
+          "ymax": 1202
+        }
+      },
+      {
+        "label": "bookshelf",
+        "score": 0.36,
+        "box": {
+          "xmin": 14,
+          "ymin": 1569,
+          "xmax": 747,
+          "ymax": 1917
+        }
+      },
+      {
+        "label": "power socket",
+        "score": 0.343,
+        "box": {
+          "xmin": 775,
+          "ymin": 1593,
+          "xmax": 1081,
+          "ymax": 1762
+        }
+      },
+      {
+        "label": "book",
+        "score": 0.328,
+        "box": {
+          "xmin": 14,
+          "ymin": 1569,
+          "xmax": 747,
+          "ymax": 1917
+        }
+      },
+      {
+        "label": "book",
+        "score": 0.323,
+        "box": {
+          "xmin": 287,
+          "ymin": 955,
+          "xmax": 358,
+          "ymax": 1209
+        }
+      },
+      {
+        "label": "book",
+        "score": 0.314,
+        "box": {
+          "xmin": 138,
+          "ymin": 909,
+          "xmax": 201,
+          "ymax": 1196
+        }
+      },
+      {
+        "label": "book",
+        "score": 0.312,
+        "box": {
+          "xmin": 174,
+          "ymin": 953,
+          "xmax": 249,
+          "ymax": 1198
+        }
+      },
+      {
+        "label": "book",
+        "score": 0.306,
+        "box": {
+          "xmin": 146,
+          "ymin": 907,
+          "xmax": 247,
+          "ymax": 1196
+        }
+      },
+      {
+        "label": "book",
+        "score": 0.298,
+        "box": {
+          "xmin": 99,
+          "ymin": 914,
+          "xmax": 485,
+          "ymax": 1206
+        }
+      }
+    ]
+  }
+}

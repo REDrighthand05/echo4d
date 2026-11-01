@@ -381,3 +381,137 @@ def register_ds_batch2(registry: Registry | None = None) -> Registry:
     reg.add(Kernel("voxel_select_representative", ("points",), "points",
                    _voxel_representative_kernel, cost=1.0))
     return reg
+
+
+# ---------------------------------------------------------------------------
+# DS batch 3 (2026-11-01): six sensor-stream utilities for the
+# collection-head pre-development (specs echo_super/workorders/WO-*.md,
+# code echo_super/ds_batch3.py, benches echo_super/test_ds_batch3.py —
+# 29/29 green; heading needed one retry with the standard algorithm
+# recipe supplied after the first attempt burned its budget on
+# derivation and returned no code):
+#   tof_grid_points            tof_frame -> points  实测 · 已验
+#   tilt_compensated_heading   mag_accel -> heading 实测 · 已验
+#   pressure_altitude_m        env -> altitude      实测 · 已验
+#   speed_of_sound_mps         env -> sound_speed   实测 · 已验
+#   stream_sync_stats          streams -> sync_report 实测 · 已验
+#   spectral_ratios            spectrum -> spectrum 实测 · 已验
+
+from .ds_batch3 import (  # noqa: E402
+    pressure_altitude_m as _pressure_altitude_fn,
+    spectral_ratios as _spectral_ratios_fn,
+    speed_of_sound_mps as _sound_speed_fn,
+    stream_sync_stats as _sync_stats_fn,
+    tilt_compensated_heading as _heading_fn,
+    tof_grid_points as _tof_grid_fn,
+)
+
+KERNEL_META.update({
+    "tof_grid_points": {"evidence": "实测", "status": "已验"},
+    "tilt_compensated_heading": {"evidence": "实测", "status": "已验"},
+    "pressure_altitude_m": {"evidence": "实测", "status": "已验"},
+    "speed_of_sound_mps": {"evidence": "实测", "status": "已验"},
+    "stream_sync_stats": {"evidence": "实测", "status": "已验"},
+    "spectral_ratios": {"evidence": "实测", "status": "已验"},
+})
+
+
+def _tof_grid_kernel(tof_obj: EchoObject):
+    dist = np.asarray(tof_obj.data["dist_mm"] if isinstance(tof_obj.data, dict)
+                      else tof_obj.data)
+    pts, zones = _tof_grid_fn(dist,
+                              float(tof_obj.meta.get("hfov_deg", 45.0)),
+                              float(tof_obj.meta.get("vfov_deg", 45.0)),
+                              int(tof_obj.meta.get("max_range_mm", 4000)))
+    return tof_obj.derive(
+        "points", {"points": pts, "zones": zones},
+        source="kernel:tof_grid_points", **KERNEL_META["tof_grid_points"])
+
+
+def _heading_kernel(obj: EchoObject):
+    h = _heading_fn(np.asarray(obj.data["mag"], dtype=np.float64),
+                    np.asarray(obj.data["accel"], dtype=np.float64))
+    return obj.derive("heading", {"heading_deg": h},
+                      source="kernel:tilt_compensated_heading",
+                      **KERNEL_META["tilt_compensated_heading"])
+
+
+def _pressure_altitude_kernel(obj: EchoObject):
+    h = _pressure_altitude_fn(float(obj.data["pressure_hpa"]),
+                              float(obj.data["reference_hpa"]))
+    return obj.derive("altitude", {"altitude_m": h},
+                      source="kernel:pressure_altitude_m",
+                      **KERNEL_META["pressure_altitude_m"])
+
+
+def _sound_speed_kernel(obj: EchoObject):
+    c = _sound_speed_fn(float(obj.data["temp_c"]))
+    return obj.derive("sound_speed", {"speed_of_sound_mps": c},
+                      source="kernel:speed_of_sound_mps",
+                      **KERNEL_META["speed_of_sound_mps"])
+
+
+def _sync_stats_kernel(obj: EchoObject):
+    stats = _sync_stats_fn([np.asarray(s, dtype=np.float64)
+                            for s in obj.data["streams"]])
+    return obj.derive("sync_report", stats, source="kernel:stream_sync_stats",
+                      **KERNEL_META["stream_sync_stats"])
+
+
+def _spectral_ratios_kernel(obj: EchoObject):
+    out = _spectral_ratios_fn(np.asarray(obj.data["counts"], dtype=np.float64))
+    return obj.derive("spectrum", out, source="kernel:spectral_ratios",
+                      **KERNEL_META["spectral_ratios"])
+
+
+def register_ds_batch3(registry: Registry | None = None) -> Registry:
+    """Register the DS batch-3 kernels; returns the registry."""
+    reg = registry if registry is not None else Registry()
+    reg.add(Kernel("tof_grid_points", ("tof_frame",), "points",
+                   _tof_grid_kernel, cost=1.0))
+    reg.add(Kernel("tilt_compensated_heading", ("mag_accel",), "heading",
+                   _heading_kernel, cost=1.0))
+    reg.add(Kernel("pressure_altitude_m", ("env",), "altitude",
+                   _pressure_altitude_kernel, cost=1.0))
+    reg.add(Kernel("speed_of_sound_mps", ("env",), "sound_speed",
+                   _sound_speed_kernel, cost=1.0))
+    reg.add(Kernel("stream_sync_stats", ("streams",), "sync_report",
+                   _sync_stats_kernel, cost=1.0))
+    reg.add(Kernel("spectral_ratios", ("spectrum",), "spectrum",
+                   _spectral_ratios_kernel, cost=1.0))
+    return reg
+
+
+# ---------------------------------------------------------------------------
+# DS batch 4 (2026-11-01): Studio pre-development — one keyframe utility
+# (spec echo_super/workorders/WO-sample-track.md, code
+# echo_super/ds_batch4.py, benches echo_super/test_ds_batch4.py):
+#   sample_track   keyframe_track -> track_value   实测 · 已验
+
+from .ds_batch4 import sample_track as _sample_track_fn  # noqa: E402
+
+KERNEL_META.update({
+    "sample_track": {"evidence": "实测", "status": "已验"},
+})
+
+
+def _sample_track_kernel(obj: EchoObject):
+    data = obj.data
+    if isinstance(data, dict):
+        keys = data["keys"]
+        t = float(data.get("t", obj.meta.get("query_t", 0.0)))
+    else:
+        keys = data
+        t = float(obj.t if isinstance(obj.t, (int, float))
+                  else obj.meta.get("query_t", 0.0))
+    v = _sample_track_fn([(float(k[0]), float(k[1]), str(k[2])) for k in keys], t)
+    return obj.derive("track_value", {"value": v, "t": t},
+                      source="kernel:sample_track", **KERNEL_META["sample_track"])
+
+
+def register_ds_batch4(registry: Registry | None = None) -> Registry:
+    """Register the DS batch-4 kernels; returns the registry."""
+    reg = registry if registry is not None else Registry()
+    reg.add(Kernel("sample_track", ("keyframe_track",), "track_value",
+                   _sample_track_kernel, cost=1.0))
+    return reg

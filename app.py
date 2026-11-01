@@ -1,25 +1,30 @@
 #!/usr/bin/env python3
 """ECHO 场景生成器 desktop shell.
 
-The window keeps the Windows 10 Settings home layout the user picked —
-an identity header band on top, then a grid of tiles, one per thing you
-can do — restyled with a Meta-style rounded look: every surface is a
-soft white card with big rounded corners on a pale grey window, and
-the buttons are pills. The shell is built with CustomTkinter; the big
-生成场景 tile is the drop zone: drag a video onto it (or click it to
-pick one), watch the progress bar under the header, and the finished
-scene opens by itself. Previous scenes live in the 历史场景 tile. A
-separate 深度视频 tile runs the preserved depth-video feature
-(echo_scene.depth_video) on a picked video and offers to play the
-result. Detailed progress text goes to a collapsible terminal panel
-docked on the right (the 日志 edge tab); the main area only ever shows
-the plain-language status line. All heavy lifting lives in
-echo_scene.pipeline / echo_scene.fuse; this file only wires the stages
-together. A finished scene is plain files in its job folder -- the
-standalone scene page, the model files, the process preview, the
-route replay -- and the window says where they are and opens them
-directly (no server, no localhost page; that was the v0.1 design
-the user rejected).
+Layout (2026-11-01 redesign, on the user's direction): an identity
+header band on top, the plain-language progress band under it, then
+the working area — the 生成场景 drop tile and 历史场景 on the left,
+and the big LIVE PREVIEW card on the right: while a job runs, the
+scene grows in that card from the job's own intermediate products
+(echo_app.live_preview drives it; pioneer C proved the cadence).
+深度视频 / 打印标记纸 tiles sit under the columns and 设置 is a slim
+strip at the bottom. The visual language follows the Muse app:
+large-radius soft cards (24 px) on a pale grey window, pill buttons,
+generous padding, and small eased motions (the progress bar glides,
+preview frames crossfade, an idle breathing dot waits in the preview
+card) — all animated with plain after() loops that never block the
+UI thread. The shell is built with CustomTkinter; the 生成场景 tile
+is the drop zone: drag a video onto it (or click it to pick one),
+watch the progress bar under the header, and the finished scene
+opens by itself. Detailed progress text goes to a collapsible
+terminal panel docked on the right (the 日志 edge tab); the main
+area only ever shows the plain-language status line. All heavy
+lifting lives in echo_scene.pipeline / echo_scene.fuse; this file
+only wires the stages together. A finished scene is plain files in
+its job folder -- the standalone scene page, the model files, the
+process preview, the route replay -- and the window says where they
+are and opens them directly (no server, no localhost page; that was
+the v0.1 design the user rejected).
 
 v0.4 shell behaviour (all of it edge code in echo_app, none of it in
 the pipeline): the window lives in the system tray WeChat-style --
@@ -37,6 +42,7 @@ import queue
 import subprocess
 import sys
 import threading
+import time
 import traceback
 from datetime import datetime
 from pathlib import Path
@@ -96,8 +102,10 @@ def open_marker_sheet() -> Path:
     return pdf
 
 
-def run_pipeline(video: Path, jobs_root: Path, log) -> Path:
-    """Run every stage in order. log(str) receives human progress lines."""
+def run_pipeline(video: Path, jobs_root: Path, log, job_sink=None) -> Path:
+    """Run every stage in order. log(str) receives human progress
+    lines; job_sink(job_dir), when given, is called once the job
+    folder exists (the live preview watches it from there)."""
     from echo_scene.pipeline import stage_depth, stage_extract, stage_present, stage_select
     from echo_scene.pipeline import stage_clean, stage_mesh, stage_poses, stage_preview, stage_replay, stage_scale, stage_voxel
     from echo_scene.markers import stage_markers
@@ -110,6 +118,11 @@ def run_pipeline(video: Path, jobs_root: Path, log) -> Path:
         n += 1
         job = jobs_root / f"{base.name}_{n}"
     job.mkdir(parents=True)
+    if job_sink is not None:
+        try:
+            job_sink(job)
+        except Exception:
+            pass
     # Crash-recovery marker: from this moment the folder is recognisably
     # one of ours, so if the app dies mid-job the relaunch can list the
     # job as unfinished (each pipeline stage overwrites job.json with
@@ -285,6 +298,9 @@ def job_file_flags(job):
         folder=job.exists(),
         preview=(job / "preview.html").exists(),
         replay=_replay_available(job),
+        studio=(job / "poses.json").exists()
+        and (job / "selected_frames.json").exists()
+        and (job / "scene_points.ply").exists(),
     )
 
 
@@ -301,7 +317,9 @@ C_BTN2_HOVER = "#D8DADF"
 C_TRACK = "#E4E6EB"      # progress bar track
 C_LOG_BG = "#F7F8FA"     # log textbox surface
 C_DRAG = "#E7F3FF"       # drag-over highlight
-CORNER = 18              # card corner radius
+C_PREVIEW_BG = "#05070E"  # live preview card surface (Detroit dark)
+CORNER = 24              # card corner radius (Muse-app scale)
+CORNER_SM = 16           # inner surfaces
 
 # Preferred UI font first; whatever the platform actually has wins, so
 # the window looks native on Windows and still builds anywhere else.
@@ -348,8 +366,8 @@ def main():
     if root is None:
         root = ctk.CTk()
     root.title("ECHO 场景生成器")
-    root.geometry("860x740")
-    root.minsize(700, 660)
+    root.geometry("1020x800")
+    root.minsize(860, 700)
     root.configure(fg_color=C_BG)
 
     # --- settings + the one explicit app state (echo_app.appstate) ---
@@ -366,7 +384,12 @@ def main():
              "job_state": JobState.IDLE, "busy_kind": None,
              "hidden": False, "progress_text": "空闲",
              "update_info": None, "update_checking": False,
-             "update_downloading": False, "settings_win": None}
+             "update_downloading": False, "settings_win": None,
+             "preview_stop": None, "preview_img": None,
+             "preview_full_win": None, "preview_full_label": None,
+             "preview_full_img": None, "preview_last_pil": None,
+             "preview_render_size": (880, 520),
+             "bar_target": 0.0, "bar_shown": 0.0}
     ui_queue = queue.Queue()
 
     available = set(tkfont.families(root))
@@ -459,10 +482,13 @@ def main():
     bar.pack(fill="x", padx=16, pady=(4, 8))
 
     # --- tile grid ----------------------------------------------------------
+    # Left column: drop tile + history. Right column: the live preview
+    # card (the star of the redesign) spanning both rows; small tiles
+    # under the columns; settings strip across the bottom.
     tiles = ctk.CTkFrame(center, fg_color=C_BG, corner_radius=0)
     tiles.pack(fill="both", expand=True, padx=12, pady=(2, 12))
-    tiles.columnconfigure(0, weight=1, uniform="tile")
-    tiles.columnconfigure(1, weight=1, uniform="tile")
+    tiles.columnconfigure(0, weight=5)
+    tiles.columnconfigure(1, weight=7)
     tiles.rowconfigure(1, weight=1)
 
     def make_tile(row, column, columnspan=1, rowspan=1,
@@ -488,7 +514,7 @@ def main():
 
     # Hero tile: generating a scene. It IS the drop zone.
     zone_idle = "把视频拖到这里，或者点这里选择视频\n选一段慢慢走一圈拍的视频，剩下的交给我。"
-    hero = make_tile(0, 0, columnspan=2, pady=(2, 8))
+    hero = make_tile(0, 0, padx=(0, 4), pady=(2, 8))
     try:
         hero.configure(cursor="hand2")
     except Exception:
@@ -507,13 +533,41 @@ def main():
     btn_preview.pack(side="left", padx=(8, 0))
     btn_replay = pill(hero_btn_row, "路线回放", font_size=12, state="disabled")
     btn_replay.pack(side="left", padx=(8, 0))
+    btn_studio = pill(hero_btn_row, "渲染 Studio", font_size=12, state="disabled")
+    btn_studio.pack(side="left", padx=(8, 0))
 
     def hero_bg(color):
         # CTk labels/rows are transparent, so tinting the card is enough.
         hero.configure(fg_color=color)
 
+    # Live preview card: while a job runs, the scene grows here from
+    # the job's own intermediate products (echo_app.live_preview).
+    # Idle, it waits with one calm line and a breathing dot.
+    preview_tile = make_tile(0, 1, rowspan=2, padx=(4, 0), pady=(2, 8))
+    preview_tile.configure(fg_color=C_PREVIEW_BG, border_width=0)
+    preview_head = ctk.CTkFrame(preview_tile, fg_color="transparent")
+    preview_head.pack(fill="x", padx=16, pady=(12, 0))
+    ctk.CTkLabel(preview_head, text="✦", font=F(18),
+                 text_color="#7FB2FF").pack(side="left")
+    ctk.CTkLabel(preview_head, text="实时预览", font=F(14, True),
+                 text_color="#E8EDF5").pack(side="left", padx=(6, 0))
+    preview_dot = ctk.CTkLabel(preview_head, text="●", font=F(10),
+                               text_color="#3D5A80")
+    preview_dot.pack(side="left", padx=(8, 0))
+    btn_preview_full = ctk.CTkButton(
+        preview_head, text="全屏", font=F(11), height=28, width=64,
+        corner_radius=14, fg_color="#1B2436", hover_color="#26334D",
+        text_color="#E8EDF5")
+    btn_preview_full.pack(side="right")
+    preview_img_label = ctk.CTkLabel(preview_tile, text="", fg_color="transparent")
+    preview_img_label.pack(fill="both", expand=True, padx=10, pady=(6, 4))
+    preview_caption = ctk.CTkLabel(
+        preview_tile, text="场景会在这里长出来", font=F(11),
+        text_color="#8A94A6")
+    preview_caption.pack(anchor="w", padx=16, pady=(0, 12))
+
     # History tile: previous scenes, each reopenable.
-    hist_tile = make_tile(1, 0, rowspan=2, padx=(0, 4))
+    hist_tile = make_tile(1, 0, padx=(0, 4))
     tile_header(hist_tile, "☰", "历史场景", "以前做好的场景，选一个点“打开”。")
     hist_list = tk.Listbox(hist_tile, height=4, font=FT(11), relief="flat",
                            borderwidth=0, highlightthickness=0,
@@ -533,7 +587,7 @@ def main():
     btn_hist_replay.pack(side="left", padx=(6, 0))
 
     # Depth-video tile.
-    depth_tile = make_tile(1, 1, padx=(4, 0), pady=(0, 8))
+    depth_tile = make_tile(2, 0, padx=(0, 4))
     tile_header(depth_tile, "◐", "深度视频", "把一段视频做成黑白的深度画面。")
     depth_btn_row = ctk.CTkFrame(depth_tile, fg_color="transparent")
     depth_btn_row.pack(anchor="w", padx=14, pady=(2, 12))
@@ -571,6 +625,274 @@ def main():
     def log(text):
         """Thread-safe progress sink handed to run_pipeline."""
         ui_queue.put(("log", text))
+
+    # --- motion: eased progress bar + breathing dot (UI thread) -------
+    def _bar_tick():
+        if state["busy_kind"] != "depth":
+            shown, target = state["bar_shown"], state["bar_target"]
+            if abs(target - shown) > 0.0015:
+                shown += (target - shown) * 0.22
+                state["bar_shown"] = shown
+                try:
+                    bar.set(shown)
+                except Exception:
+                    pass
+        root.after(40, _bar_tick)
+
+    def _breath_tick():
+        try:
+            if state["busy"]:
+                preview_dot.configure(text_color="#7FB2FF")
+            else:
+                cur = preview_dot.cget("text_color")
+                preview_dot.configure(
+                    text_color="#7FB2FF" if cur == "#3D5A80" else "#3D5A80")
+        except Exception:
+            pass
+        root.after(800, _breath_tick)
+
+    def set_bar(frac):
+        """Move the progress bar, gliding (scene jobs) — the tick loop
+        does the easing; instant jumps set both ends of the glide."""
+        state["bar_target"] = frac
+        if frac in (0.0, 1.0):
+            state["bar_shown"] = frac
+            try:
+                bar.set(frac)
+            except Exception:
+                pass
+
+    # --- live preview engine (background thread, failure-contained) ---
+    def preview_view():
+        """The one shared camera state (echo_app.live_preview.
+        ViewState): the fullscreen view manipulates it, the card
+        inherits it on exit, the next job starts from it."""
+        view = state.get("preview_view")
+        if view is None:
+            try:
+                from echo_app.live_preview import ViewState
+
+                view = ViewState()
+                state["preview_view"] = view
+            except Exception:
+                return None
+        return view
+
+    def start_preview(job):
+        stop_preview()
+        stop_flag = threading.Event()
+        state["preview_stop"] = stop_flag
+        try:
+            preview_caption.configure(text="正在看着它长出来…")
+        except Exception:
+            pass
+
+        def _run():
+            try:
+                from PIL import Image
+
+                from echo_app.live_preview import (
+                    JobWatcher, LiveSequencer, render_snapshot)
+                watcher = JobWatcher(job, stable_polls=2)
+                seq = LiveSequencer(job, view=preview_view())
+                prev_img = None
+                last_render = 0.0
+                last_signature = None
+                while not stop_flag.is_set():
+                    events = watcher.poll()
+                    if events:
+                        seq.consume(events)
+                    view = state.get("preview_view")
+                    signature = (seq.state.phase, seq.state.frames_seen,
+                                 len(seq.state.reliefs),
+                                 seq.state.settled is not None,
+                                 view.version if view is not None else 0)
+                    now = time.monotonic()
+                    if signature != last_signature or now - last_render > 3.0:
+                        rw, rh = state.get("preview_render_size",
+                                           (880, 520))
+                        if state.get("preview_dragging") \
+                                and state.get("preview_full_win") is not None:
+                            rw, rh = 1066, 600  # lighter while dragging
+                        img, _dt = render_snapshot(seq, width=rw,
+                                                   height=rh)
+                        frame = Image.fromarray(img)
+                        if prev_img is not None \
+                                and prev_img.size == frame.size:
+                            for alpha in (0.35, 0.7):
+                                ui_queue.put(("preview_frame",
+                                              Image.blend(prev_img, frame,
+                                                          alpha)))
+                        ui_queue.put(("preview_frame", frame))
+                        prev_img = frame
+                        last_render = now
+                        last_signature = signature
+                    active = state.get("preview_dragging") \
+                        or state.get("preview_full_win") is not None
+                    stop_flag.wait(0.15 if active else 0.7)
+            except Exception:
+                pass  # optional subsystem: it can never take a job down
+
+        threading.Thread(target=_run, daemon=True).start()
+
+    def stop_preview():
+        flag = state.get("preview_stop")
+        if flag is not None:
+            try:
+                flag.set()
+            except Exception:
+                pass
+            state["preview_stop"] = None
+
+    def handle_job_started(job):
+        if state["busy_kind"] == "scene":
+            start_preview(job)
+
+    def handle_preview_frame(frame):
+        state["preview_last_pil"] = frame
+        try:
+            w = max(preview_img_label.winfo_width() - 4, 200)
+            h = max(preview_img_label.winfo_height() - 4, 120)
+            cimg = ctk.CTkImage(light_image=frame, dark_image=frame,
+                                size=(w, h))
+            state["preview_img"] = cimg
+            preview_img_label.configure(image=cimg, text="")
+        except Exception:
+            pass
+        full_label = state.get("preview_full_label")
+        if full_label is not None:
+            try:
+                sw = full_label.winfo_screenwidth()
+                sh = full_label.winfo_screenheight()
+                fimg = ctk.CTkImage(light_image=frame, dark_image=frame,
+                                    size=(sw, sh))
+                state["preview_full_img"] = fimg
+                full_label.configure(image=fimg, text="")
+            except Exception:
+                pass
+
+    # --- live preview fullscreen (pure view; Esc / double-click out) ---
+    def open_preview_fullscreen():
+        if state.get("preview_full_win") is not None:
+            return
+        try:
+            win = ctk.CTkToplevel(root)
+            win.configure(fg_color=C_PREVIEW_BG)
+            try:
+                win.attributes("-fullscreen", True)
+            except Exception:
+                try:
+                    win.state("zoomed")
+                except Exception:
+                    pass
+            try:
+                # Explicit full-screen geometry too: the attribute is a
+                # window-manager request, and where no manager honours
+                # it the window would otherwise open small.
+                win.geometry("%dx%d+0+0" % (win.winfo_screenwidth(),
+                                            win.winfo_screenheight()))
+            except Exception:
+                pass
+            lbl = ctk.CTkLabel(win, text="场景会在这里长出来",
+                               font=F(14), text_color="#8A94A6",
+                               fg_color="transparent")
+            lbl.pack(fill="both", expand=True)
+            try:
+                lbl.configure(cursor="fleur")
+            except Exception:
+                pass
+            hint = ctk.CTkLabel(
+                win, text="拖动转视角 · 滚轮缩放 · 右键拖动平移 · 按 0 回正 · Esc 退出全屏",
+                font=F(11), text_color="#5A6B84", fg_color="transparent")
+            hint.place(relx=1.0, rely=1.0, x=-16, y=-12, anchor="se")
+            lbl.bind("<Double-Button-1>",
+                     lambda _e: close_preview_fullscreen())
+            win.bind("<Escape>", lambda _e: close_preview_fullscreen())
+
+            # Mouse control over the shared ViewState: whatever the
+            # user does here is still the camera when fullscreen
+            # closes — the card (and the next entry) inherit it.
+            drag = {"x": 0, "y": 0, "mode": None}
+
+            def _press(mode):
+                def handler(e):
+                    drag["x"], drag["y"], drag["mode"] = e.x, e.y, mode
+                    state["preview_dragging"] = True
+                return handler
+
+            def _motion(e):
+                if drag["mode"] is None:
+                    return
+                dx, dy = e.x - drag["x"], e.y - drag["y"]
+                drag["x"], drag["y"] = e.x, e.y
+                view = preview_view()
+                if view is None:
+                    return
+                if drag["mode"] == "orbit":
+                    view.drag(dx, dy)
+                else:
+                    view.pan_drag(dx, dy)
+
+            def _release(_e=None):
+                drag["mode"] = None
+                state["preview_dragging"] = False
+
+            def _wheel(e):
+                view = preview_view()
+                if view is not None:
+                    view.zoom(1 if (getattr(e, "delta", 0) > 0
+                                    or getattr(e, "num", 0) == 4) else -1)
+
+            def _reset(_e=None):
+                view = preview_view()
+                if view is not None:
+                    view.reset()
+
+            lbl.bind("<ButtonPress-1>", _press("orbit"))
+            lbl.bind("<B1-Motion>", _motion)
+            lbl.bind("<ButtonRelease-1>", _release)
+            lbl.bind("<ButtonPress-3>", _press("pan"))
+            lbl.bind("<B3-Motion>", _motion)
+            lbl.bind("<ButtonRelease-3>", _release)
+            lbl.bind("<MouseWheel>", _wheel)
+            lbl.bind("<Button-4>", _wheel)
+            lbl.bind("<Button-5>", _wheel)
+            win.bind("<KeyPress-0>", _reset)
+            state["preview_full_win"] = win
+            state["preview_full_label"] = lbl
+            state["preview_render_size"] = (1600, 900)
+            win.focus_force()
+            last = state.get("preview_last_pil")
+            if last is not None:
+                handle_preview_frame(last)
+            else:
+                try:
+                    preview_caption.configure(text="场景会在这里长出来")
+                except Exception:
+                    pass
+
+            def _on_destroy(_e=None, _win=win):
+                if state.get("preview_full_win") is _win:
+                    state["preview_full_win"] = None
+                    state["preview_full_label"] = None
+                    state["preview_render_size"] = (880, 520)
+
+            win.bind("<Destroy>", _on_destroy)
+        except Exception:
+            state["preview_full_win"] = None
+            state["preview_full_label"] = None
+
+    def close_preview_fullscreen():
+        win = state.get("preview_full_win")
+        state["preview_dragging"] = False
+        state["preview_full_win"] = None
+        state["preview_full_label"] = None
+        state["preview_render_size"] = (880, 520)
+        if win is not None:
+            try:
+                win.destroy()
+            except Exception:
+                pass
 
     # --- tray + window lifecycle --------------------------------------
     # The tray is an optional subsystem: constructed and started under
@@ -663,7 +985,7 @@ def main():
             CHANGE_JOBS_FOLDER, CHECK_UPDATE, DOWNLOAD_UPDATE,
             HIST_FOLDER, HIST_OPEN, HIST_PREVIEW, HIST_REPLAY,
             OPEN_FOLDER, OPEN_PREVIEW, OPEN_REPLAY, OPEN_SCENE,
-            PICK_DEPTH, PICK_VIDEO, PLAY_DEPTH)
+            OPEN_STUDIO, PICK_DEPTH, PICK_VIDEO, PLAY_DEPTH)
         on(btn_pick, acts[PICK_VIDEO])
         on(btn_depth, acts[PICK_DEPTH])
         on(btn_depth_play, acts[PLAY_DEPTH])
@@ -671,6 +993,7 @@ def main():
         on(btn_folder, acts[OPEN_FOLDER])
         on(btn_preview, acts[OPEN_PREVIEW])
         on(btn_replay, acts[OPEN_REPLAY])
+        on(btn_studio, acts[OPEN_STUDIO])
         on(btn_hist_open, acts[HIST_OPEN])
         on(btn_hist_folder, acts[HIST_FOLDER])
         on(btn_hist_preview, acts[HIST_PREVIEW])
@@ -712,12 +1035,12 @@ def main():
             plain = PLAIN_STATUS[line]
             status.configure(text=plain + "…")
             frac = (list(PLAIN_STATUS).index(line) + 1) / STAGE_COUNT
-            bar.set(frac)
+            set_bar(frac)
             set_progress_text(f"{plain} · {round(frac * 100)}%")
             append_log(plain)
         elif line == "完成。":
             status.configure(text="做好了。")
-            bar.set(1)
+            set_bar(1)
         else:
             append_log(text)
 
@@ -726,6 +1049,11 @@ def main():
         state["busy_kind"] = None
         set_busy(False)
         set_progress_text("已完成")
+        try:
+            preview_caption.configure(text="做好了，这是它最后的样子。")
+        except Exception:
+            pass
+        root.after(3000, stop_preview)
         refresh_history()
         open_job(job)
         status.configure(text=f"做好了。文件都在这个文件夹里：{job}")
@@ -746,7 +1074,8 @@ def main():
         state["busy_kind"] = None
         set_busy(False)
         set_progress_text("上次任务未成功")
-        bar.set(0)
+        stop_preview()
+        set_bar(0)
         status.configure(text="没成功，这段视频没能做成场景。")
         append_log(detail)
         append_log("没成功，这段视频没能做成场景。")
@@ -789,6 +1118,10 @@ def main():
                 kind, payload = ui_queue.get_nowait()
                 if kind == "log":
                     handle_log(payload)
+                elif kind == "job_started":
+                    handle_job_started(payload)
+                elif kind == "preview_frame":
+                    handle_preview_frame(payload)
                 elif kind == "done":
                     handle_done(payload)
                 elif kind == "error":
@@ -819,7 +1152,9 @@ def main():
     # --- actions ----------------------------------------------------------
     def worker(video):
         try:
-            job = run_pipeline(video, JOBS_ROOT, log)
+            job = run_pipeline(
+                video, JOBS_ROOT, log,
+                job_sink=lambda j: ui_queue.put(("job_started", j)))
             ui_queue.put(("done", job))
         except Exception:
             ui_queue.put(("error", traceback.format_exc(limit=2)))
@@ -845,7 +1180,7 @@ def main():
             return  # reentrancy guard: a second job can never start
         if not check_video(video):
             return
-        bar.set(0)
+        set_bar(0)
         status.configure(text="开始了。")
         set_progress_text("开始了")
         state["busy_kind"] = "scene"
@@ -945,6 +1280,21 @@ def main():
 
     def open_replay():
         ensure_and_open("replay", state["job"])
+
+    def open_studio():
+        """Open the Render Studio on the current job. Guard mirrors
+        the state matrix (OPEN_STUDIO): a finished job with poses,
+        selected frames and fused points."""
+        job = state["job"]
+        if job is None or not job_file_flags(job).studio:
+            return
+        from echo_app.studio_window import StudioWindow
+        style = {"font": F, "bg": C_BG, "surface": C_SURFACE,
+                 "ink": C_INK, "subink": C_SUBINK, "accent": C_ACCENT,
+                 "accent_hover": C_ACCENT_HOVER, "btn2": C_BTN2,
+                 "btn2_hover": C_BTN2_HOVER, "preview_bg": C_PREVIEW_BG,
+                 "corner": CORNER}
+        StudioWindow(root, job, style)
 
     def print_markers():
         try:
@@ -1211,6 +1561,7 @@ def main():
     btn_folder.configure(command=open_folder)
     btn_preview.configure(command=open_preview)
     btn_replay.configure(command=open_replay)
+    btn_studio.configure(command=open_studio)
     btn_hist_folder.configure(command=open_history_folder)
     btn_hist_preview.configure(command=open_history_preview)
     btn_hist_replay.configure(command=open_history_replay)
@@ -1220,6 +1571,9 @@ def main():
     btn_settings.configure(command=open_settings)
     btn_update.configure(command=start_update_download)
     btn_hist_open.configure(command=open_history)
+    btn_preview_full.configure(command=open_preview_fullscreen)
+    preview_img_label.bind("<Double-Button-1>",
+                           lambda _e: open_preview_fullscreen())
     hist_list.bind("<<ListboxSelect>>", on_history_select)
     hist_list.bind("<Double-Button-1>", open_history)
     for w in [hero] + hero_parts:
@@ -1270,6 +1624,8 @@ def main():
     if "--tray" in sys.argv:
         hide_to_tray()
     root.after(80, drain_queue)
+    root.after(40, _bar_tick)
+    root.after(800, _breath_tick)
     # Quiet startup update check: async, fail-silent offline; only a
     # found update ever becomes visible.
     root.after(1500, lambda: start_update_check(manual=False))

@@ -305,6 +305,7 @@ def expected_actions(ctx):
         appstate.OPEN_FOLDER: cur.folder,
         appstate.OPEN_PREVIEW: cur.preview,
         appstate.OPEN_REPLAY: cur.replay,
+        appstate.OPEN_STUDIO: not busy and cur.studio,
         appstate.HIST_OPEN: hist.scene,
         appstate.HIST_FOLDER: hist.folder,
         appstate.HIST_PREVIEW: hist.preview,
@@ -322,7 +323,7 @@ def expected_actions(ctx):
 def matrix_checks():
     print("[state x action matrix]")
     flag_combos = [appstate.FileFlags(*bits) for bits in
-                   itertools.product([False, True], repeat=4)]
+                   itertools.product([False, True], repeat=5)]
     walked = 0
     mismatches = []
     for job_state in appstate.JobState:
