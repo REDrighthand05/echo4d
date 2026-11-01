@@ -126,7 +126,8 @@ class StudioRenderer:
                 age = source_t - self._relief_t.get(name, source_t)
                 amp = self.project.crush_at(source_t)
                 if 0.0 <= age < CRUSH_WINDOW and amp > 0:
-                    p = p + self._dirs(name, len(p)) * (
+                    p = p + self._dirs(name, len(p),
+                                       self.project.crush_method) * (
                         amp * seq._scene_distance * 0.18
                         * (1.0 - age / CRUSH_WINDOW))
             chunks.append(p)
@@ -136,13 +137,24 @@ class StudioRenderer:
         return (np.concatenate(chunks).astype(np.float64),
                 np.concatenate(colors).astype(np.uint8))
 
-    def _dirs(self, name: str, n: int) -> np.ndarray:
-        if name not in self._dirs_cache or len(self._dirs_cache[name]) < n:
-            rng = np.random.default_rng(zlib.crc32(name.encode()))
+    def _dirs(self, name: str, n: int, method: str = "burst") -> np.ndarray:
+        """Per-point scatter directions for one photo, by crush
+        method: burst = every direction (the approved promo look);
+        rise = mostly up (the recon frame's up is -y); drop = mostly
+        down. Deterministic per (name, method), so previews and
+        exports agree frame for frame."""
+        key = (name, method)
+        if key not in self._dirs_cache or len(self._dirs_cache[key]) < n:
+            rng = np.random.default_rng(
+                zlib.crc32(name.encode()) + zlib.crc32(method.encode()))
             d = rng.normal(size=(n, 3))
+            if method == "rise":
+                d = d * 0.35 + np.array([0.0, -1.0, 0.0])
+            elif method == "drop":
+                d = d * 0.35 + np.array([0.0, 1.0, 0.0])
             d /= (np.linalg.norm(d, axis=1, keepdims=True) + 1e-12)
-            self._dirs_cache[name] = d
-        return self._dirs_cache[name][:n]
+            self._dirs_cache[key] = d
+        return self._dirs_cache[key][:n]
 
     def _grid_lines(self, seq: LiveSequencer, points: np.ndarray):
         if len(points) < 10 or seq._scene_centre is None:
@@ -174,8 +186,14 @@ class StudioRenderer:
         return lines, rgb
 
     # -- cameras ------------------------------------------------------------
-    def _camera(self, seq: LiveSequencer, source_t: float, width, height):
-        mode = self.project.attach_at(source_t)
+    def _attach_camera(self, seq: LiveSequencer, source_t: float,
+                       width, height, mode=None, target=""):
+        """The attachment subject's camera, or None when the mode is
+        orbit (or its subject does not exist yet). mode/target
+        default to the project's segment at source_t; transitions
+        pass the neighbouring segment's explicitly."""
+        if mode is None:
+            mode = self.project.attach_at(source_t)
         route = seq.state.route
         dist = max(seq._scene_distance, 1e-3)
         if mode == "route" and len(route) >= 2:
@@ -191,20 +209,32 @@ class StudioRenderer:
                 [0.0, -dist * 0.22, 0.0])
             return _camera_dict(eye, ahead, width, height)
         if mode == "photo":
-            target = None
-            if seq.state.reliefs:
+            target_pt = None
+            if target and target in seq.state.reliefs:
+                # a named photo: watch that one, wherever it landed
+                target_pt = seq.state.reliefs[target][0].mean(axis=0)
+            elif target and seq._poses and target in seq._poses:
+                # named but not landed yet: look at its camera spot
+                from .live_preview import camera_centre
+                target_pt = camera_centre(seq._poses[target])
+            elif seq.state.reliefs:
                 newest = max(self._relief_t, key=self._relief_t.get,
                              default=None)
                 if newest in seq.state.reliefs:
-                    target = seq.state.reliefs[newest][0].mean(axis=0)
-            if target is None and len(route):
-                target = route[-1]
+                    target_pt = seq.state.reliefs[newest][0].mean(axis=0)
+            if target_pt is None and len(route):
+                target_pt = route[-1]
+            target = target_pt
             if target is not None:
                 az = 0.6 + 0.05 * source_t
                 r = dist * 1.15
                 eye = target + np.array([r * np.cos(az), -r * 0.35,
                                          r * np.sin(az)])
                 return _camera_dict(eye, target, width, height)
+        return None
+
+    def _orbit_camera(self, seq: LiveSequencer, source_t: float,
+                      width, height):
         view = seq.view
         view.az = 0.6 + 0.07 * source_t
         view.el = 0.35
@@ -212,6 +242,58 @@ class StudioRenderer:
         view._touched()
         seq._cam_t = None
         return seq.camera(width, height)
+
+    @staticmethod
+    def _mix_cam(cam_a, cam_b, wb: float, width, height):
+        """Blend two cameras by weight wb of cam_b (eye + forward
+        lerped, rebuilt as one camera)."""
+        def eye_fwd(cam):
+            R, t = cam["R"], cam["t"]
+            return -R.T @ t, R[2]
+        ea, fa = eye_fwd(cam_a)
+        eb, fb = eye_fwd(cam_b)
+        eye = ea * (1.0 - wb) + eb * wb
+        fwd = fa * (1.0 - wb) + fb * wb
+        return _camera_dict(eye, eye + fwd, width, height)
+
+    def _seg_camera(self, seq: LiveSequencer, source_t: float,
+                    width, height, mode, target):
+        """One segment's camera: its attachment subject, blended
+        with the free orbit by the follow-strength track (1 = locked
+        onto the subject, 0 = pure orbit)."""
+        attach = self._attach_camera(seq, source_t, width, height,
+                                     mode=mode, target=target)
+        if attach is None:
+            return self._orbit_camera(seq, source_t, width, height)
+        follow = self.project.follow_at(source_t)
+        if follow >= 0.999:
+            return attach
+        orbit = self._orbit_camera(seq, source_t, width, height)
+        if follow <= 0.001:
+            return orbit
+        return self._mix_cam(orbit, attach, follow, width, height)
+
+    def _camera(self, seq: LiveSequencer, source_t: float, width, height):
+        seg = self.project.attach_seg_at(source_t)
+        mode = seg.mode if seg else "orbit"
+        target = seg.target if seg else ""
+        cam = self._seg_camera(seq, source_t, width, height, mode, target)
+        # Segment changes are moves, not cuts: for TRANS seconds
+        # after a boundary where the tracking subject changes, the
+        # camera glides from the previous subject's framing to the
+        # new one (smoothstepped).
+        TRANS = 0.8
+        if seg is not None and seg.t0 > 0.0 and source_t - seg.t0 < TRANS:
+            prev = self.project.attach_seg_at(seg.t0 - 1e-6)
+            pmode = prev.mode if prev else "orbit"
+            ptarget = prev.target if prev else ""
+            if (pmode, ptarget) != (mode, target):
+                prev_cam = self._seg_camera(seq, source_t, width,
+                                            height, pmode, ptarget)
+                u = (source_t - seg.t0) / TRANS
+                u = u * u * (3.0 - 2.0 * u)
+                cam = self._mix_cam(prev_cam, cam, u, width, height)
+        return cam
 
     # -- rendering ------------------------------------------------------------
     def render(self, source_t: float, width: int = 768,

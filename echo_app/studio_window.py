@@ -39,8 +39,8 @@ class StudioWindow(ctk.CTkToplevel):
         self.style = style
         F = style["font"]
         self.title(f"渲染 Studio — {self.job_dir.name}")
-        self.geometry("1020x760")
-        self.minsize(880, 640)
+        self.geometry("1020x830")
+        self.minsize(880, 700)
         self.configure(fg_color=style["bg"])
 
         self.project = StudioProject.load(self.job_dir)
@@ -50,6 +50,7 @@ class StudioWindow(ctk.CTkToplevel):
         self.playing = False
         self._sel = None            # (t0, t1) source seconds or None
         self._drag_x = None
+        self._drag_key = None       # curve key being dragged
         self._last_tick = time.monotonic()
         self._render_busy = False
         self._render_want = None
@@ -84,7 +85,7 @@ class StudioWindow(ctk.CTkToplevel):
                           corner_radius=style["corner"])
         tl.pack(fill="x", padx=14, pady=(0, 8))
         import tkinter as tk
-        self.canvas = tk.Canvas(tl, height=66, bg=style["surface"],
+        self.canvas = tk.Canvas(tl, height=118, bg=style["surface"],
                                 highlightthickness=0, relief="flat")
         self.canvas.pack(fill="x", padx=14, pady=(12, 4))
         self.canvas.bind("<Configure>", lambda _e: self._draw_timeline())
@@ -100,6 +101,23 @@ class StudioWindow(ctk.CTkToplevel):
             b = self._pill(row, MODE_LABEL[mode])
             b.pack(side="left", padx=(8, 0))
             b.configure(command=lambda m=mode: self._apply_attach(m))
+        # Which photo the 跟随照片 mode watches: the newest one, or a
+        # named frame (decimated list — the menu stays usable; the
+        # renderer's target is the frame's file name).
+        depth_names = [ev.name for ev in self.renderer.events
+                       if ev.kind == "depth"]
+        step = max(1, len(depth_names) // 16)
+        choices = ["最新照片"] + depth_names[::step]
+        if depth_names and depth_names[-1] not in choices:
+            choices.append(depth_names[-1])
+        self.photo_target_var = tk.StringVar(master=self, value="最新照片")
+        ctk.CTkOptionMenu(
+            row, variable=self.photo_target_var, values=choices,
+            font=F(11), height=30, width=126, corner_radius=15,
+            fg_color=style["btn2"], button_color=style["btn2"],
+            button_hover_color=style["btn2_hover"],
+            text_color=style["ink"], dropdown_fg_color=style["surface"],
+            dropdown_text_color=style["ink"]).pack(side="left")
         self.btn_slow = self._pill(row, "选段慢动作 ×2")
         self.btn_slow.pack(side="left", padx=(8, 0))
         self.btn_slow.configure(command=self._apply_slow)
@@ -128,6 +146,18 @@ class StudioWindow(ctk.CTkToplevel):
         self.crush.set(self.project.crush_at(0.0))
         self.crush.pack(side="left")
         self.crush.configure(command=self._crush_changed)
+        ctk.CTkLabel(ctl, text="爆碎方式", font=F(12),
+                     text_color=style["ink"]).pack(side="left",
+                                                   padx=(18, 4))
+        self.method_btns = {}
+        for method, label in (("burst", "爆散"), ("rise", "升起"),
+                              ("drop", "坠落")):
+            b = ctk.CTkButton(ctl, text=label, font=F(11), height=28,
+                              width=52, corner_radius=14)
+            b.pack(side="left", padx=(0, 4))
+            b.configure(command=lambda m=method: self._set_method(m))
+            self.method_btns[method] = b
+        self._paint_method_btns()
         self.btn_export = self._pill(ctl, "导出视频", primary=True)
         self.btn_export.pack(side="right", padx=16)
         self.btn_export.configure(command=self._export)
@@ -159,9 +189,20 @@ class StudioWindow(ctk.CTkToplevel):
         self.status.configure(text=f"已保存 {path.name}")
 
     # -- timeline ----------------------------------------------------------
+    # Four tracks, top to bottom: attachment bands / slow bands /
+    # crush curve / follow curve. Curves are sampled live from the
+    # project's keyframe tracks and edited by clicking and dragging
+    # their points, the way the reference editors do it.
+    ROW_ATTACH = (6, 28)
+    ROW_SLOW = (32, 46)
+    ROW_CRUSH = (52, 78)
+    ROW_FOLLOW = (84, 110)
+    CRUSH_COLOR = "#C0564B"
+    FOLLOW_COLOR = "#0E7C86"
+
     def _tl_geom(self):
         w = max(self.canvas.winfo_width(), 100)
-        return 8, w - 8
+        return 36, w - 8
 
     def _x_to_source(self, x):
         a, b = self._tl_geom()
@@ -172,60 +213,141 @@ class StudioWindow(ctk.CTkToplevel):
         a, b = self._tl_geom()
         return a + (s / max(self.project.duration, 1e-6)) * (b - a)
 
+    def _row_label(self, c, row, text):
+        c.create_text(4, (row[0] + row[1]) / 2, text=text, anchor="w",
+                      fill="#606770", font=("TkDefaultFont", 9))
+
+    def _draw_curve(self, c, row, vmax, sample, keys, color):
+        y0, y1 = row
+        a, b = self._tl_geom()
+        c.create_rectangle(a, y0, b, y1, fill="#F5F6F8", outline="")
+        pts = []
+        x = a
+        while x <= b:
+            v = min(max(sample(self._x_to_source(x)), 0.0), vmax)
+            pts.extend([x, y1 - (v / vmax) * (y1 - y0)])
+            x += 4
+        if len(pts) >= 4:
+            c.create_line(*pts, fill=color, width=2, smooth=True)
+        for t, v, _e in keys:
+            cx = self._source_to_x(t)
+            cy = y1 - (min(max(v, 0.0), vmax) / vmax) * (y1 - y0)
+            c.create_oval(cx - 3.5, cy - 3.5, cx + 3.5, cy + 3.5,
+                          fill="#FFFFFF", outline=color, width=2)
+
     def _draw_timeline(self):
         c = self.canvas
         c.delete("all")
         a, b = self._tl_geom()
         dur = self.project.duration
-        # attachment bands (top row)
-        c.create_rectangle(a, 8, b, 30, fill="#EDEFF2", outline="")
+        # attachment bands
+        y0, y1 = self.ROW_ATTACH
+        self._row_label(c, self.ROW_ATTACH, "附着")
+        c.create_rectangle(a, y0, b, y1, fill="#EDEFF2", outline="")
         cursor = 0.0
         segs = sorted(self.project.attach, key=lambda s: s.t0)
         spans = []
         for seg in segs:
             if seg.t0 > cursor:
-                spans.append((cursor, seg.t0, "orbit"))
-            spans.append((seg.t0, seg.t1, seg.mode))
+                spans.append((cursor, seg.t0, "orbit", ""))
+            spans.append((seg.t0, seg.t1, seg.mode, seg.target))
             cursor = max(cursor, seg.t1)
         if cursor < dur:
-            spans.append((cursor, dur, "orbit"))
-        for t0, t1, mode in spans:
+            spans.append((cursor, dur, "orbit", ""))
+        for t0, t1, mode, target in spans:
             x0, x1 = self._source_to_x(t0), self._source_to_x(t1)
-            c.create_rectangle(x0, 8, x1, 30, fill=MODE_COLOR[mode],
+            c.create_rectangle(x0, y0, x1, y1, fill=MODE_COLOR[mode],
                                outline="")
+            label = MODE_LABEL[mode]
+            if mode == "photo" and target:
+                label = f"照片 {Path(target).stem[-5:]}"
             if x1 - x0 > 58:
-                c.create_text((x0 + x1) / 2, 19, text=MODE_LABEL[mode],
+                c.create_text((x0 + x1) / 2, (y0 + y1) / 2, text=label,
                               fill="#FFFFFF" if mode != "orbit" else "#4B4F56",
                               font=("TkDefaultFont", 9))
-        # slow segments (bottom row)
-        c.create_rectangle(a, 38, b, 56, fill="#F5F6F8", outline="")
+        # slow segments
+        y0, y1 = self.ROW_SLOW
+        self._row_label(c, self.ROW_SLOW, "慢动")
+        c.create_rectangle(a, y0, b, y1, fill="#F5F6F8", outline="")
         for seg in self.project.slow:
             x0, x1 = self._source_to_x(seg.t0), self._source_to_x(seg.t1)
-            c.create_rectangle(x0, 38, x1, 56, fill="#F2C94C", outline="")
+            c.create_rectangle(x0, y0, x1, y1, fill="#F2C94C", outline="")
             if x1 - x0 > 40:
-                c.create_text((x0 + x1) / 2, 47, text=f"慢 ×{seg.factor:g}",
+                c.create_text((x0 + x1) / 2, (y0 + y1) / 2,
+                              text=f"慢 ×{seg.factor:g}",
                               fill="#5A4A00", font=("TkDefaultFont", 9))
+        # curves
+        self._row_label(c, self.ROW_CRUSH, "爆碎")
+        self._draw_curve(c, self.ROW_CRUSH, 1.5, self.project.crush_at,
+                         self.project.crush_keys, self.CRUSH_COLOR)
+        self._row_label(c, self.ROW_FOLLOW, "跟随")
+        self._draw_curve(c, self.ROW_FOLLOW, 1.0, self.project.follow_at,
+                         self.project.follow_keys, self.FOLLOW_COLOR)
         # event ticks
         for i in range(len(self.renderer.events)):
             x = self._source_to_x(self.renderer.event_time(i))
-            c.create_line(x, 60, x, 65, fill="#C4C9D1")
-        # selection
+            c.create_line(x, 112, x, 117, fill="#C4C9D1")
+        # selection (band rows only)
         if self._sel:
             x0, x1 = (self._source_to_x(self._sel[0]),
                       self._source_to_x(self._sel[1]))
-            c.create_rectangle(x0, 4, x1, 60, outline=self.style["accent"],
+            c.create_rectangle(x0, 3, x1, 49, outline=self.style["accent"],
                                width=2)
         # playhead (shown position, glides)
         x = self._source_to_x(self.project.to_source(self.t_shown))
-        c.create_line(x, 4, x, 62, fill=self.style["accent"], width=2)
+        c.create_line(x, 3, x, 114, fill=self.style["accent"], width=2)
         c.create_polygon(x - 5, 0, x + 5, 0, x, 7,
                          fill=self.style["accent"], outline="")
 
+    def _curve_hit(self, event):
+        """(track, t) if the press lands on a curve row, else None.
+        track is 'crush' or 'follow'; t is the key time being edited
+        (an existing key near the press, or a fresh one at the press)."""
+        for track, row, vmax in (("crush", self.ROW_CRUSH, 1.5),
+                                 ("follow", self.ROW_FOLLOW, 1.0)):
+            if row[0] - 3 <= event.y <= row[1] + 3:
+                keys = self.project.crush_keys if track == "crush" \
+                    else self.project.follow_keys
+                s = self._x_to_source(event.x)
+                near = min(keys, key=lambda k: abs(k[0] - s), default=None)
+                if near is not None and \
+                        abs(self._source_to_x(near[0]) - event.x) <= 8:
+                    return (track, near[0], row, vmax)
+                v = self._y_to_value(row, vmax, event.y)
+                if track == "crush":
+                    self.project.set_crush(s, v)
+                else:
+                    self.project.set_follow(s, v)
+                return (track, s, row, vmax)
+        return None
+
+    def _y_to_value(self, row, vmax, y):
+        y0, y1 = row
+        frac = min(max((y1 - y) / max(y1 - y0, 1), 0.0), 1.0)
+        return frac * vmax
+
     def _tl_down(self, event):
+        hit = self._curve_hit(event)
+        if hit is not None:
+            self._drag_key = hit
+            self._drag_x = None
+            self._draw_timeline()
+            return
+        self._drag_key = None
         self._drag_x = event.x
         self._sel = None
 
     def _tl_move(self, event):
+        if self._drag_key is not None:
+            track, t, row, vmax = self._drag_key
+            v = self._y_to_value(row, vmax, event.y)
+            if track == "crush":
+                self.project.set_crush(t, v)
+            else:
+                self.project.set_follow(t, v)
+            self._draw_timeline()
+            self._request_render()
+            return
         if self._drag_x is None:
             return
         if abs(event.x - self._drag_x) > 6:
@@ -235,6 +357,11 @@ class StudioWindow(ctk.CTkToplevel):
             self._draw_timeline()
 
     def _tl_up(self, event):
+        if self._drag_key is not None:
+            self._drag_key = None
+            self._draw_timeline()
+            self._request_render()
+            return
         if self._drag_x is not None and self._sel is None:
             s = self._x_to_source(event.x)
             self.t_out = self.project.to_output(s)
@@ -251,7 +378,11 @@ class StudioWindow(ctk.CTkToplevel):
 
     def _apply_attach(self, mode):
         t0, t1 = self._range()
-        self.project.set_attach(t0, t1, mode)
+        target = ""
+        if mode == "photo":
+            chosen = self.photo_target_var.get()
+            target = "" if chosen == "最新照片" else chosen
+        self.project.set_attach(t0, t1, mode, target)
         self._draw_timeline()
         self._request_render()
 
@@ -259,6 +390,7 @@ class StudioWindow(ctk.CTkToplevel):
         t0, t1 = self._range()
         self.project.set_slow(t0, t1, None if clear else 2.0)
         self._draw_timeline()
+
 
     # -- controls ------------------------------------------------------------
     def _toggle_element(self, key):
@@ -268,6 +400,21 @@ class StudioWindow(ctk.CTkToplevel):
     def _crush_changed(self, value):
         s = self.project.to_source(self.t_shown)
         self.project.set_crush(s, float(value))
+        self._draw_timeline()
+
+    def _paint_method_btns(self):
+        st = self.style
+        for method, b in self.method_btns.items():
+            active = self.project.crush_method == method
+            b.configure(fg_color=st["accent"] if active else st["btn2"],
+                        hover_color=st["accent_hover"] if active
+                        else st["btn2_hover"],
+                        text_color="#FFFFFF" if active else st["ink"])
+
+    def _set_method(self, method):
+        self.project.set_crush_method(method)
+        self._paint_method_btns()
+        self._request_render()
 
     def _toggle_play(self):
         self.playing = not self.playing

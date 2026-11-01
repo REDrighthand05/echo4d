@@ -95,6 +95,65 @@ if JOB.exists():
     check("photos off empties depth phase",
           img_nophoto.std() < img_mid.std())
 
+    # -- v2: follow strength, crush methods, photo target, transitions --
+    proj5 = StudioProject(duration=24.0)
+    proj5.set_attach(0.0, 24.0, "route")
+    proj5.follow_keys = [(0.0, 0.0, "linear"), (24.0, 0.0, "linear")]
+    img_follow0 = StudioRenderer(JOB, proj5).render(18.0, 320, 180)
+    img_orbit2 = StudioRenderer(JOB, StudioProject(duration=24.0)).render(
+        18.0, 320, 180)
+    check("follow 0 equals pure orbit",
+          np.array_equal(img_follow0, img_orbit2))
+    proj6 = StudioProject(duration=24.0)
+    proj6.set_attach(0.0, 24.0, "route")
+    img_follow1 = StudioRenderer(JOB, proj6).render(18.0, 320, 180)
+    check("follow 1 route differs from follow 0",
+          not np.array_equal(img_follow1, img_follow0))
+
+    depth_idx = [i for i, e in enumerate(r.events) if e.kind == "depth"]
+    t_crush = r.event_time(depth_idx[5]) + 0.3
+    imgs = {}
+    for method in ("burst", "rise", "drop"):
+        pm = StudioProject(duration=24.0)
+        pm.crush_keys = [(0.0, 1.2, "linear"), (24.0, 1.2, "linear")]
+        pm.crush_method = method
+        imgs[method] = StudioRenderer(JOB, pm).render(t_crush, 320, 180)
+    check("crush methods look different",
+          not np.array_equal(imgs["burst"], imgs["rise"])
+          and not np.array_equal(imgs["burst"], imgs["drop"])
+          and not np.array_equal(imgs["rise"], imgs["drop"]))
+
+    names = [r.events[i].name for i in depth_idx]
+    pa = StudioProject(duration=24.0)
+    pa.set_attach(0.0, 24.0, "photo", target=names[2])
+    pb = StudioProject(duration=24.0)
+    pb.set_attach(0.0, 24.0, "photo")
+    t_photo = r.event_time(depth_idx[10])
+    img_ta = StudioRenderer(JOB, pa).render(t_photo, 320, 180)
+    img_tb = StudioRenderer(JOB, pb).render(t_photo, 320, 180)
+    check("named photo target differs from newest",
+          not np.array_equal(img_ta, img_tb))
+
+    pt = StudioProject(duration=24.0)
+    pt.set_attach(10.0, 24.0, "route")
+    rt = StudioRenderer(JOB, pt)
+    rt.render(10.1, 64, 36)
+    cam_t = rt._camera(rt._seq, 10.1, 64, 36)
+    eye_t = -cam_t["R"].T @ cam_t["t"]
+    po = StudioProject(duration=24.0)
+    ro = StudioRenderer(JOB, po)
+    ro.render(10.1, 64, 36)
+    cam_o = ro._camera(ro._seq, 10.1, 64, 36)
+    eye_o = -cam_o["R"].T @ cam_o["t"]
+    pr = StudioProject(duration=24.0)
+    pr.set_attach(0.0, 24.0, "route")
+    rr = StudioRenderer(JOB, pr)
+    rr.render(10.1, 64, 36)
+    cam_r = rr._camera(rr._seq, 10.1, 64, 36)
+    eye_r = -cam_r["R"].T @ cam_r["t"]
+    check("segment change glides (eye near previous framing)",
+          np.linalg.norm(eye_t - eye_o) < 0.5 * np.linalg.norm(eye_r - eye_o))
+
     with tempfile.TemporaryDirectory() as td:
         out = export_mp4(JOB, StudioProject(duration=2.0), Path(td) / "s.mp4",
                          fps=4, width=320, height=180)

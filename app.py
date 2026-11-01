@@ -522,18 +522,23 @@ def main():
     hero_parts = tile_header(hero, "✦", "生成场景", zone_idle)
     hero_desc = hero_parts[2]
     hero_btn_row = ctk.CTkFrame(hero, fg_color="transparent")
-    hero_btn_row.pack(anchor="w", padx=14, pady=(0, 12))
+    hero_btn_row.pack(anchor="w", padx=14, pady=(0, 6))
     btn_pick = pill(hero_btn_row, "选择视频", primary=True, font_size=12)
     btn_pick.pack(side="left")
     btn_open = pill(hero_btn_row, "打开场景", font_size=12, state="disabled")
     btn_open.pack(side="left", padx=(8, 0))
     btn_folder = pill(hero_btn_row, "打开文件夹", font_size=12, state="disabled")
     btn_folder.pack(side="left", padx=(8, 0))
-    btn_preview = pill(hero_btn_row, "过程回放", font_size=12, state="disabled")
-    btn_preview.pack(side="left", padx=(8, 0))
-    btn_replay = pill(hero_btn_row, "路线回放", font_size=12, state="disabled")
+    # Second hero row: the viewing/directing actions. Six pills no
+    # longer fit one row at full size; two rows of three keep every
+    # label whole.
+    hero_btn_row2 = ctk.CTkFrame(hero, fg_color="transparent")
+    hero_btn_row2.pack(anchor="w", padx=14, pady=(0, 12))
+    btn_preview = pill(hero_btn_row2, "过程回放", font_size=12, state="disabled")
+    btn_preview.pack(side="left")
+    btn_replay = pill(hero_btn_row2, "路线回放", font_size=12, state="disabled")
     btn_replay.pack(side="left", padx=(8, 0))
-    btn_studio = pill(hero_btn_row, "渲染 Studio", font_size=12, state="disabled")
+    btn_studio = pill(hero_btn_row2, "渲染 Studio", font_size=12, state="disabled")
     btn_studio.pack(side="left", padx=(8, 0))
 
     def hero_bg(color):
