@@ -29,6 +29,9 @@
 #ifndef AppVersion
 #include "version.inc"
 #endif
+#ifndef AppVersionInfo
+#define AppVersionInfo AppVersion + ".0"
+#endif
 
 #define AppName "ECHO Scene"
 #define AppExeName "EchoScene.exe"
