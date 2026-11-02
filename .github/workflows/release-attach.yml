@@ -22,6 +22,9 @@ jobs:
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
+      - name: Check out the branch (for staged release assets)
+        uses: actions/checkout@v4
+
       - name: Download built artifacts from the build run
         env:
           GH_TOKEN: ${{ github.token }}
@@ -74,6 +77,21 @@ jobs:
           fi
           if [ -f ./EchoScene-Update.zip ]; then
             gh release upload "${{ inputs.tag }}" ./EchoScene-Update.zip --repo "$GITHUB_REPOSITORY" --clobber
+          fi
+
+      - name: Attach staged release assets (locally built hot pack + lineage manifest)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          DIR="release-assets/${{ inputs.tag }}"
+          if [ -d "$DIR" ]; then
+            echo "staging dir found:"
+            ls -la "$DIR"
+            for f in "$DIR"/*; do
+              gh release upload "${{ inputs.tag }}" "$f" --repo "$GITHUB_REPOSITORY" --clobber
+            done
+          else
+            echo "no staged assets for this tag; skipping"
           fi
 
       - name: Verify assets present on release
