@@ -97,6 +97,17 @@ def sha256_bytes(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
+def _payload_view(manifest: dict) -> dict:
+    """The manifest as the hot path is allowed to see it: payload
+    entries only. The wrench writes nothing outside app/, so base
+    files are not the pack's business -- a client whose base was
+    built by a different (but equivalent) build must not be locked
+    out of hot updates by base-hash drift alone."""
+    return {"version": manifest["version"],
+            "files": {p: e for p, e in manifest["files"].items()
+                      if p.startswith(hotapply.PAYLOAD_PREFIX)}}
+
+
 def check_hot_update(release: dict, root: Path) -> HotInfo | None:
     """Decide whether the hot path can serve this release. Returns
     None (installer fallback) for any ineligibility; raises nothing."""
@@ -119,12 +130,9 @@ def check_hot_update(release: dict, root: Path) -> HotInfo | None:
         if not manifest_url or not pack_url:
             return None
         target = json.loads(_fetch(manifest_url).decode("utf-8"))
-        plan = plan_update(local, target)
+        plan = plan_update(_payload_view(local), _payload_view(target))
         if not plan["to_change"] and not plan["to_delete"]:
             return None
-        paths = [c["path"] for c in plan["to_change"]] + plan["to_delete"]
-        if any(not p.startswith(hotapply.PAYLOAD_PREFIX) for p in paths):
-            return None  # a base file changed: installer territory
         return HotInfo(version=target["version"], pack_url=pack_url,
                        target_manifest=target, plan=plan,
                        total_bytes=plan["total_bytes"])
@@ -157,7 +165,8 @@ def download_and_stage(root: Path, info: HotInfo) -> Path:
             raise HotUpdateError("pack starts at a different version")
         if target != info.target_manifest:
             raise HotUpdateError("pack manifest differs from release manifest")
-        expected = plan_update(local, target)
+        expected = plan_update(_payload_view(local),
+                               _payload_view(target))
         if ([c["path"] for c in plan["to_change"]]
                 != [c["path"] for c in expected["to_change"]]
                 or plan["to_delete"] != expected["to_delete"]):

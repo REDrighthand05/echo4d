@@ -584,3 +584,75 @@ def register_ds_batch5(registry: Registry | None = None) -> Registry:
     reg.add(Kernel("order_apply_steps", ("plan",), "steps",
                    _order_apply_steps_kernel, cost=1.0))
     return reg
+
+
+# ---------------------------------------------------------------------------
+# DS batch 6 (2026-11-02): the quick-line release kernels, registered
+# after Muse's bench verification (echo_super/ds_batch6.py holds the
+# code, echo_super/test_ds_batch6.py the benches; spec in
+# workorders/WO-batch6-quickline.md):
+#   merge_manifest  manifest x patch -> manifest  实测 · 已验
+#   select_changes  manifest x candidates -> change_set  实测 · 已验
+#   align_crlf      bytes -> bytes                实测 · 已验
+#   looks_text      bytes -> flag                 实测 · 已验
+# Bench results: all green, including a full-scale replay of the
+# real v0.4.0 -> v0.5.0 hot update -- the kernels reproduce the
+# hand-built release's exact change set (5 payload files), its
+# target manifest, and the very bytes the shipped pack carried.
+# Reviewed line-by-line unchanged. These kernels are the diff brain
+# of tools/quick_update.py, the one-command fast release line.
+
+from .ds_batch6 import (  # noqa: E402
+    align_crlf as _align_crlf_fn,
+    looks_text as _looks_text_fn,
+    merge_manifest as _merge_manifest_fn,
+    select_changes as _select_changes_fn,
+)
+
+KERNEL_META.update({
+    "merge_manifest": {"evidence": "实测", "status": "已验"},
+    "select_changes": {"evidence": "实测", "status": "已验"},
+    "align_crlf": {"evidence": "实测", "status": "已验"},
+    "looks_text": {"evidence": "实测", "status": "已验"},
+})
+
+
+def _merge_manifest_kernel(manifest_obj: EchoObject, patch_obj: EchoObject):
+    version = patch_obj.data["version"]
+    overrides = patch_obj.data["overrides"]
+    return manifest_obj.derive(
+        "manifest", _merge_manifest_fn(manifest_obj.data, overrides, version),
+        source="kernel:merge_manifest", **KERNEL_META["merge_manifest"])
+
+
+def _select_changes_kernel(manifest_obj: EchoObject, cand_obj: EchoObject):
+    return manifest_obj.derive(
+        "change_set",
+        _select_changes_fn(manifest_obj.data["files"], cand_obj.data),
+        source="kernel:select_changes", **KERNEL_META["select_changes"])
+
+
+def _align_crlf_kernel(bytes_obj: EchoObject):
+    return bytes_obj.derive(
+        "bytes", _align_crlf_fn(bytes_obj.data),
+        source="kernel:align_crlf", **KERNEL_META["align_crlf"])
+
+
+def _looks_text_kernel(bytes_obj: EchoObject):
+    return bytes_obj.derive(
+        "flag", _looks_text_fn(bytes_obj.data),
+        source="kernel:looks_text", **KERNEL_META["looks_text"])
+
+
+def register_ds_batch6(registry: Registry | None = None) -> Registry:
+    """Register the DS batch-6 quick-line kernels; returns the registry."""
+    reg = registry if registry is not None else Registry()
+    reg.add(Kernel("merge_manifest", ("manifest", "manifest_patch"),
+                   "manifest", _merge_manifest_kernel, cost=1.0))
+    reg.add(Kernel("select_changes", ("manifest", "candidates"),
+                   "change_set", _select_changes_kernel, cost=1.0))
+    reg.add(Kernel("align_crlf", ("bytes",), "bytes",
+                   _align_crlf_kernel, cost=1.0))
+    reg.add(Kernel("looks_text", ("bytes",), "flag",
+                   _looks_text_kernel, cost=1.0))
+    return reg

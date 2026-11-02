@@ -98,6 +98,27 @@ def run(base: Path):
     check("local manifest advanced",
           new_local and new_local["version"] == "0.5.0")
 
+    # -- base drift must not lock a client out of hot updates ------
+    # Same payload, but the base came from a different (equivalent)
+    # build: its base-file hashes differ from the release lineage.
+    dist_e = base / "distE"
+    make_tree(dist_e, "0.4.0", "v1")
+    drifted = json.loads(json.dumps(man_a))
+    drifted["files"]["EchoScene.exe"] = {"sha256": "0" * 64, "size": 3}
+    drifted["files"]["_internal/base.dll"] = {"sha256": "1" * 64,
+                                              "size": 4}
+    (dist_e / ".echo").mkdir(exist_ok=True)
+    (dist_e / ".echo/manifest.json").write_text(json.dumps(drifted),
+                                                encoding="utf-8")
+    info_e = hotupdate.check_hot_update(release, dist_e)
+    check("drifted base still eligible", info_e is not None)
+    hotupdate.download_and_stage(dist_e, info_e)
+    result_e = hotapply.apply(dist_e)
+    check("drifted base applies", result_e.get("ok") is True)
+    check("drifted base code swapped",
+          (dist_e / "app/echo_app/x.py").read_text(encoding="utf-8")
+          == "v2")
+
     # -- failure 1: corrupt pack is rejected at staging -------------
     dist_c = base / "distC"
     make_tree(dist_c, "0.4.0", "v1")

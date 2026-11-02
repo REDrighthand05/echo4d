@@ -1,0 +1,32 @@
+{
+  "id": "9d60dff2-fa56-48dc-bf39-6b66c13a169c",
+  "object": "chat.completion",
+  "created": 1793537074,
+  "model": "deepseek-flash",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "```python\nimport math\n\ndef speed_of_sound_mps(temp_c: float) -> float:\n    if not (-60 <= temp_c <= 80):\n        raise ValueError(\"temp_c must be in the range -60..80\")\n    return 331.3 * math.sqrt(1 + temp_c / 273.15)\n```",
+        "reasoning_content": "We need answer only code block. Need implement function speed_of_sound_mps(temp_c). Pure function with math. Input float, must be -60..80 inclusive else ValueError. Return dry air speed. 0 exact 331.3. Formula 331.3 * sqrt(1 + temp_c/273.15). Need ensure 0 gives 331.3 exactly? math.sqrt(1+0)=1.0, 331.3*1.0=331.3 exact representation same as literal. Fine. Need maybe validate type? Spec says input temp_c float (摄氏...). Strictly? Could just compare. If None TypeError perhaps okay. Need ValueError outside. What about non-numeric? Not specified. Only output code block. Import math. Function name.\n\nNeed consider 20 C: formula yields 331.3 * sqrt(1+20/273.15). Let's calculate approximate 343.2. Fine.\n\nNeed perhaps if temp_c < -60 or temp_c > 80: raise ValueError. Maybe use math.isfinite? Spec says float must be in range. If nan, comparisons false, then returns nan. Strict \"须在 -60..80，否则 ValueError\" NaN not in range; should raise. But maybe not required. \"输入 temp_c float（摄氏度，须在 -60..80，否则 ValueError）\". A robust implementation should check if not isinstance? Hmm \"严格按规格\". Need avoid extra behavior? It says input float. Could check `if not (-60 <= temp_c <= 80): raise ValueError`. NaN: `-60 <= nan <= 80` false, so `not false` true -> raises. Good. But if string then TypeError on <=, maybe acceptable. Need pure function.\n\nPotential issue: formula says c = 331.3 * sqrt(1 + temp_c/273.15). For -60, 1 - 0.219659... positive. Fine.\n\nLet's craft final only code block. Need include necessary import. No explanation. Ensure only one ```python code block."
+      },
+      "logprobs": null,
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 176,
+    "completion_tokens": 499,
+    "total_tokens": 675,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 428
+    },
+    "prompt_cache_hit_tokens": 0,
+    "prompt_cache_miss_tokens": 176
+  },
+  "system_fingerprint": "bc19ba97cbe016479903222bb1578db6"
+}
