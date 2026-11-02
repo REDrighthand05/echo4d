@@ -227,6 +227,39 @@ def updater_checks():
         _check("no .part left after failure",
                not list(Path(td).glob("*.part")))
 
+    # -- the relay: static mirror first, API only as fallback -----
+    relay_index = {"product": "EchoScene", "latest": "0.5.6",
+                   "versions": [
+                       {"version": "0.5.5", "from": "0.5.4",
+                        "manifest": "v0.5.5/echoscene-manifest.json",
+                        "pack": "v0.5.5/EchoScene-Update.zip",
+                        "setup_size": 639985718},
+                       {"version": "0.5.6", "from": "0.5.5",
+                        "manifest": "v0.5.6/echoscene-manifest.json",
+                        "pack": "v0.5.6/EchoScene-Update.zip",
+                        "setup_size": 639990962}]}
+    plan = updater.relay_plan("0.5.4", relay_index)
+    _check("relay: update found from index",
+           plan is not None and plan[0] == "update"
+           and plan[1].version == "0.5.6" and plan[1].size == 639990962)
+    _check("relay: hop is the chained next step",
+           plan[2] is not None and plan[2]["tag_name"] == "v0.5.5"
+           and plan[2]["assets"][1]["browser_download_url"]
+           == updater.RELAY_BASE + "/v0.5.5/EchoScene-Update.zip")
+    plan = updater.relay_plan("0.5.5", relay_index)
+    _check("relay: second hop chains onward",
+           plan is not None and plan[2] is not None
+           and plan[2]["tag_name"] == "v0.5.6")
+    _check("relay: at latest -> latest",
+           updater.relay_plan("0.5.6", relay_index)
+           == ("latest", None, None))
+    plan = updater.relay_plan("0.5.3", relay_index)
+    _check("relay: broken chain still offers the installer",
+           plan is not None and plan[0] == "update" and plan[2] is None)
+    _check("relay: unusable index -> fall back",
+           updater.relay_plan("0.5.4", {}) is None
+           and updater.relay_plan("0.5.4", {"versions": "x"}) is None)
+
 
 def tray_checks():
     print("[tray]")

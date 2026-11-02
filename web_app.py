@@ -508,7 +508,20 @@ class Bridge:
             from echo_app import updater
             from echo_app.updater import (check_for_update_status,
                                           fetch_releases, pick_hop)
-            status, info = check_for_update_status(APP_VERSION)
+            # The relay first: a static mirror with no API quota.
+            # Only when it cannot answer do we spend GitHub API
+            # calls (whose shared-IP rate limit kept locking the
+            # user out with a misleading "cannot connect").
+            status = info = hop_release = None
+            try:
+                plan = updater.relay_plan(
+                    APP_VERSION, updater.fetch_relay_index())
+            except Exception:
+                plan = None
+            if plan is not None:
+                status, info, hop_release = plan
+            else:
+                status, info = check_for_update_status(APP_VERSION)
             if status != "error":
                 # A probed local proxy answered: keep it, so no one
                 # ever has to set anything for updates again.
@@ -534,7 +547,9 @@ class Bridge:
                 # relaunches, and the next check climbs the next.
                 try:
                     from echo_app import hotupdate
-                    hop = pick_hop(fetch_releases(), APP_VERSION)
+                    hop = hop_release
+                    if hop is None:
+                        hop = pick_hop(fetch_releases(), APP_VERSION)
                     if hop is not None:
                         hot = hotupdate.check_hot_update(
                             hop, hotupdate.install_root())

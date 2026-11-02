@@ -167,6 +167,79 @@ def parse_release(payload, current_version):
         return None
 
 
+# --- The relay: our own static mirror of the update assets. ------
+#
+# The GitHub API is the one door with a quota: unauthenticated calls
+# share 60 requests/hour per egress IP, and a user behind a shared
+# proxy exit found it permanently exhausted (403 "rate limit
+# exceeded" while every plain download worked). So the app checks
+# the relay first -- a static site carrying, per release, the
+# manifest and the hot-update pack plus an index of the hop chain --
+# and the API remains only as a fallback. Static files have no
+# quota, and the route cascade above still applies to reaching the
+# relay host itself.
+RELAY_BASE = "https://redrighthand05.github.io/echo4d-update"
+
+
+def fetch_relay_index():
+    """GET the relay index through the route cascade. Raises on any
+    failure; the caller falls back to the GitHub API flow."""
+    req = urllib.request.Request(
+        RELAY_BASE + "/index.json",
+        headers={"User-Agent": _USER_AGENT, "Accept": "application/json"})
+    with _open(req, CHECK_TIMEOUT) as resp:
+        return json.loads(resp.read().decode("utf-8"))
+
+
+def relay_plan(current_version, index):
+    """Decide the update from a relay index. Pure, so tests can pin
+    it. Returns ("latest", None, None), ("update", UpdateInfo,
+    hop_release_or_None), or None when the index is unusable (the
+    caller then falls back to the GitHub API flow). The hop is the
+    entry whose "from" is exactly the running version -- packs are
+    chained, so any other entry would not apply."""
+    try:
+        entries = index["versions"]
+        if not isinstance(entries, list) or not entries:
+            return None
+        newer = []
+        for entry in entries:
+            tag = "v" + str(entry["version"])
+            if is_newer(tag, current_version):
+                newer.append(entry)
+        if not newer:
+            return ("latest", None, None)
+        newer.sort(key=lambda e: parse_version("v" + str(e["version"])))
+        latest_entry = newer[-1]
+        latest_tag = "v" + str(latest_entry["version"])
+        setup_url = (f"https://github.com/{REPO}/releases/download/"
+                     f"{latest_tag}/{SETUP_ASSET}")
+        size = latest_entry.get("setup_size")
+        info = UpdateInfo(
+            version=str(latest_entry["version"]), tag=latest_tag,
+            download_url=setup_url,
+            size=size if isinstance(size, int) and size > 0 else 0)
+        hop_release = None
+        for entry in newer:
+            if entry.get("from") == current_version:
+                hop_release = {
+                    "tag_name": "v" + str(entry["version"]),
+                    "draft": False, "prerelease": False,
+                    "assets": [
+                        {"name": "echoscene-manifest.json",
+                         "browser_download_url":
+                             RELAY_BASE + "/" + entry["manifest"]},
+                        {"name": "EchoScene-Update.zip",
+                         "browser_download_url":
+                             RELAY_BASE + "/" + entry["pack"]},
+                        {"name": SETUP_ASSET,
+                         "browser_download_url": setup_url}]}
+                break
+        return ("update", info, hop_release)
+    except Exception:
+        return None
+
+
 def _fetch_json(url=LATEST_URL, timeout=CHECK_TIMEOUT):
     req = urllib.request.Request(
         url, headers={"User-Agent": _USER_AGENT,
