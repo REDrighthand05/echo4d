@@ -38,8 +38,22 @@ def _run_ffmpeg(args: list) -> None:
     subprocess.run(argv, **kwargs)
 
 
-def make_depth_video(video: Path, out_mp4: Path, fps: int = 8) -> dict:
+def _report(progress, stage: str, done: int, total: int) -> None:
+    if progress is None:
+        return
+    try:
+        progress(stage, done, total)
+    except Exception:
+        pass  # a broken progress sink must never break the render
+
+
+def make_depth_video(video: Path, out_mp4: Path, fps: int = 8,
+                     progress=None) -> dict:
+    """progress, when given, is called as progress(stage, done, total)
+    with stage in {"frames", "depth", "encode"} so a host UI can show
+    real progress instead of a frozen bar."""
     from .depth import estimate_depth, save_depth_preview
+    from .paths import require_depth_model
 
     video = Path(video)
     out_mp4 = Path(out_mp4)
@@ -53,17 +67,17 @@ def make_depth_video(video: Path, out_mp4: Path, fps: int = 8) -> dict:
     frames = sorted(frames_dir.glob("f_*.jpg"))
     if not frames:
         return {"ok": False, "reason": "no frames extracted"}
+    _report(progress, "frames", len(frames), len(frames))
 
-    models_dir = Path(__file__).resolve().parent.parent / "models"
-    model = models_dir / "depth_anything_v2_small.onnx"
-    if not model.exists():
-        model = models_dir / "depth_anything_v2_base.onnx"
+    model = require_depth_model(prefer_base=False)
     preview_dir = out_mp4.parent / (out_mp4.stem + "_depth")
     preview_dir.mkdir(exist_ok=True)
     for i, frame in enumerate(frames):
         depth = estimate_depth(frame, model)
         save_depth_preview(depth, preview_dir / f"d_{i + 1:05d}.png")
+        _report(progress, "depth", i + 1, len(frames))
 
+    _report(progress, "encode", len(frames), len(frames))
     _run_ffmpeg(
         ["-y", "-v", "error", "-framerate", str(fps),
          "-i", str(preview_dir / "d_%05d.png"),

@@ -262,6 +262,7 @@ class Bridge:
             return {"ok": False, "message": err}
         self.busy, self.busy_kind = True, "depth"
         self.depth_out = None
+        self.frac = 0.0
         self.status = "正在生成深度视频…"
         # The depth module lands its stills progressively in
         # <stem>_depth/ next to the output; watch them so the
@@ -301,8 +302,19 @@ class Bridge:
             stop.wait(0.8)
 
     def _depth_worker(self):
+        def _progress(stage, done, total):
+            if total:
+                # Extraction is quick; weight the bar to the depth
+                # stage so it moves steadily through the long part.
+                self.frac = (done / total) if stage != "frames" else 0.02
+            if stage == "depth" and total:
+                self.status = f"正在生成深度视频… {done}/{total}"
+            elif stage == "encode":
+                self.status = "正在合成深度视频…"
+
         try:
-            self.depth_out = backend.run_depth_video(self.video)
+            self.depth_out = backend.run_depth_video(
+                self.video, progress=_progress)
             self.status = "深度视频做好了。"
             self._log("深度视频完成。")
         except Exception:
@@ -625,6 +637,33 @@ class Bridge:
         import os
         os._exit(0)
 
+    # -- window controls (the window is frameless; the page carries
+    # its own caption buttons in the same glass language) --------------
+    def win_minimize(self):
+        try:
+            if self._window is not None:
+                self._window.minimize()
+        except Exception:
+            pass
+        return {"ok": True}
+
+    def win_toggle_max(self):
+        try:
+            if self._window is not None:
+                if getattr(self, "_maximized", False):
+                    self._window.restore()
+                    self._maximized = False
+                else:
+                    self._window.maximize()
+                    self._maximized = True
+        except Exception:
+            pass
+        return {"ok": True}
+
+    def win_close(self):
+        self._quit()
+        return {"ok": True}
+
 
 def _polish_window(window):
     """Win11 window treatments, best effort: rounded corners and a
@@ -688,7 +727,7 @@ def main():
     window = webview.create_window(
         "ECHO 回声", url=str(index),
         js_api=bridge, width=1040, height=836,
-        min_size=(880, 620),
+        min_size=(880, 620), frameless=True,
         background_color="#dbe2eb")
     bridge._window = window
     _polish_window(window)

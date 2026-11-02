@@ -267,13 +267,14 @@ def stage_select(job_dir: Path, max_frames: int = 120, min_sharpness: float = 20
 def stage_depth(job_dir: Path) -> dict:
     from .depth import estimate_depth, save_depth_preview
 
-    models_dir = Path(__file__).resolve().parent.parent / "models"
-    base_model = models_dir / "depth_anything_v2_base.onnx"
-    small_model = models_dir / "depth_anything_v2_small.onnx"
     # The Base model gives visibly smoother, more continuous surfaces
     # than Small (verified on the room job); fall back to Small when the
-    # Base weights have not been downloaded.
-    model = base_model if base_model.exists() else small_model
+    # Base weights have not been downloaded. Resolution goes through
+    # the shared paths module -- the installed layout keeps models at
+    # the install root, not beside this file.
+    from .paths import require_depth_model
+
+    model = require_depth_model(prefer_base=True)
     frames_dir = job_dir / "frames"
     poses_file = job_dir / "poses.json"
     if poses_file.exists():

@@ -160,7 +160,7 @@ def run_pipeline(video: Path, jobs_root: Path, log, job_sink=None) -> Path:
     return job
 
 
-def run_depth_video(video: Path) -> Path:
+def run_depth_video(video: Path, progress=None) -> Path:
     """Turn a video into its black-and-white depth version, using the
     preserved echo_scene.depth_video feature as-is. The mp4 lands next
     to the source video (the module keeps its depth stills beside it)."""
@@ -172,7 +172,7 @@ def run_depth_video(video: Path) -> Path:
     while out.exists():
         n += 1
         out = base.with_name(f"{base.stem}_{n}.mp4")
-    info = make_depth_video(video, out)
+    info = make_depth_video(video, out, progress=progress)
     if not isinstance(info, dict) or info.get("ok") is False:
         reason = info.get("reason", "未知原因") if isinstance(info, dict) else "未知原因"
         raise RuntimeError(f"生成深度视频失败：{reason}")

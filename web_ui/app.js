@@ -400,6 +400,15 @@ function selectVideo(name, path) {
 }
 
 /* file picking + drag and drop */
+/* frameless window controls (bridge only; inert in demo mode) */
+$("win-min").addEventListener("click", () => { if (bridge) bridge.win_minimize(); });
+$("win-max").addEventListener("click", () => { if (bridge) bridge.win_toggle_max(); });
+$("win-close").addEventListener("click", () => { if (bridge) bridge.win_close(); });
+$("titlebar").addEventListener("dblclick", (e) => {
+  if (e.target.closest(".tb-btns")) return;
+  if (bridge) bridge.win_toggle_max();
+});
+
 $("btn-pick").addEventListener("click", async () => {
   if (bridge) {
     const r = await bridge.pick_video();
