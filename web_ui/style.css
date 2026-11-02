@@ -4,11 +4,16 @@
    no background at all (HTML text never had one). */
 
 :root {
-  --ink: #1c1e21;
-  --subink: #606770;
+  --ink: #14171a;
+  --subink: #454f5a;
   --accent: #0064d1;
   --accent-hover: #0053ad;
   --glass-bg: rgba(255, 255, 255, 0.47);
+  --glass-edge: rgba(255, 255, 255, 0.45);
+  --glass-shadow: 0 10px 34px rgba(30, 50, 100, 0.10),
+                  inset 0 1px 0 rgba(255, 255, 255, 0.65),
+                  inset 0 -1px 0 rgba(255, 255, 255, 0.25);
+  --radius: 26px;
 }
 /* while a job runs the scene sits behind the glass and the whole
    sheet turns to dark glass: ink flips light so text stays easy */
@@ -23,23 +28,16 @@ body.working .btn {
 body.working .btn:hover:not(:disabled) { background: rgba(30, 42, 62, 0.55); }
 body.working .btn:disabled { color: rgba(233, 239, 247, 0.38); }
 body.working #track { background: rgba(255, 255, 255, 0.18); }
-  --glass-edge: rgba(255, 255, 255, 0.45);
-  --glass-shadow: 0 10px 34px rgba(30, 50, 100, 0.10),
-                  inset 0 1px 0 rgba(255, 255, 255, 0.65),
-                  inset 0 -1px 0 rgba(255, 255, 255, 0.25);
-  --radius: 26px;
-}
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
 html, body { height: 100%; }
 
 body {
-  font-family: "Segoe UI Variable Text", "Segoe UI Light", "Segoe UI",
-               "Microsoft YaHei UI Light", "Microsoft YaHei UI",
+  font-family: "Segoe UI", "Microsoft YaHei UI",
                "PingFang SC", "Noto Sans CJK SC", sans-serif;
-  font-weight: 300;
-  letter-spacing: 0.02em;
+  font-weight: 400;
+  letter-spacing: 0.01em;
   color: var(--ink);
   overflow: hidden;
   background:
@@ -136,14 +134,15 @@ body.working #echo { opacity: 1; }
   display: flex; align-items: flex-start;
   padding: 12px 18px 12px;
 }
-#header h1 { font-size: 23px; font-weight: 400; letter-spacing: 0.05em; }
-#header .sub { font-size: 12px; color: var(--subink); margin-top: 2px; }
-#updatebox { margin-left: auto; text-align: right; }
-#updatebox p { font-size: 12px; margin-bottom: 4px; }
+#header h1 { font-size: 24px; font-weight: 600; letter-spacing: 0.04em; }
+#header .sub { font-size: 12.5px; font-weight: 500; color: var(--subink); margin-top: 2px; }
+.hdr-actions { margin-left: auto; display: flex; gap: 10px; align-items: flex-start; }
+#updatebox { text-align: right; }
+#updatebox p { font-size: 12.5px; font-weight: 500; margin-bottom: 4px; }
 
 /* -- status band -------------------------------------------------- */
 #band { padding: 8px 16px 10px; }
-#status { font-size: 12px; }
+#status { font-size: 13px; font-weight: 500; }
 #track {
   position: relative; height: 6px; margin-top: 5px;
   background: rgba(20, 40, 90, 0.08);
@@ -166,17 +165,32 @@ body.working #echo { opacity: 1; }
 #track.active #filldot { opacity: 1; }
 
 /* -- tile grid ---------------------------------------------------- */
+/* The tile deck scrolls inside its own area: at ANY window size
+   every tile -- settings included, at the very bottom -- stays
+   reachable, while header and status band never move. */
 #tiles {
   flex: 1; min-height: 0;
+  overflow-y: auto; overflow-x: hidden;
+  padding-right: 4px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(20, 40, 90, 0.25) transparent;
   display: grid; gap: 6px;
+  align-content: start;
   grid-template-columns: 1.55fr 1fr;
-  grid-template-rows: auto 1fr auto auto;
+  grid-template-rows: auto auto auto auto;
   grid-template-areas:
     "hero preview"
     "history preview"
     "depth marker"
     "settings settings";
 }
+#tiles::-webkit-scrollbar { width: 8px; }
+#tiles::-webkit-scrollbar-thumb {
+  background: rgba(20, 40, 90, 0.20); border-radius: 99px;
+}
+#tiles::-webkit-scrollbar-track { background: transparent; }
+#preview { min-height: 340px; }
+#history { max-height: 308px; }
 #hero { grid-area: hero; }
 #preview { grid-area: preview; }
 #history { grid-area: history; }
@@ -187,13 +201,13 @@ body.working #echo { opacity: 1; }
 .tile { padding: 4px 6px 12px; display: flex; flex-direction: column; }
 .tile-head { padding: 8px 8px 2px; }
 .tic { width: 20px; height: 20px; display: block; }
-.tile h2 { font-size: 14px; font-weight: 400; letter-spacing: 0.04em; margin-top: 5px; }
-.tile .desc { font-size: 12px; color: var(--subink); line-height: 1.7; margin-top: 3px; }
+.tile h2 { font-size: 14.5px; font-weight: 600; letter-spacing: 0.03em; margin-top: 5px; }
+.tile .desc { font-size: 12.5px; font-weight: 450; color: var(--subink); line-height: 1.65; margin-top: 3px; }
 
 /* -- buttons (Meta pills) ------------------------------------------ */
 .btnrow { display: flex; gap: 8px; padding: 6px 8px 0; flex-wrap: wrap; }
 .btn {
-  font: inherit; font-size: 13px;
+  font: inherit; font-size: 13px; font-weight: 500;
   height: 36px; padding: 0 20px;
   border-radius: 999px; border: 1px solid transparent;
   cursor: pointer; color: var(--ink);
@@ -205,7 +219,7 @@ body.working #echo { opacity: 1; }
   background: rgba(0, 100, 209, 0.82);
   -webkit-backdrop-filter: blur(8px);
   backdrop-filter: blur(8px);
-  color: #fff; font-weight: 500;
+  color: #fff; font-weight: 600;
   box-shadow: 0 4px 16px rgba(0, 100, 209, 0.28),
               inset 0 1px 0 rgba(255, 255, 255, 0.25);
 }
@@ -266,7 +280,7 @@ body.working #echo { opacity: 1; }
   padding: 12px 14px 6px;
 }
 .pv-head .tic { width: 17px; height: 17px; }
-.pv-head h2 { font-size: 13px; font-weight: 400; letter-spacing: 0.04em; margin: 0; }
+.pv-head h2 { font-size: 13.5px; font-weight: 600; letter-spacing: 0.03em; margin: 0; }
 .pv-head .spacer { flex: 1; }
 #pvcanvas { position: absolute; inset: 0; width: 100%; height: 100%; }
 #pvvideo {
@@ -275,7 +289,7 @@ body.working #echo { opacity: 1; }
 }
 .pv-hint {
   position: absolute; left: 16px; bottom: 14px; z-index: 2;
-  font-size: 11.5px; color: rgba(232, 236, 244, 0.55);
+  font-size: 12px; font-weight: 500; color: rgba(232, 236, 244, 0.72);
 }
 #breathdot {
   width: 9px; height: 9px; border-radius: 50%;
@@ -288,11 +302,11 @@ body.working #echo { opacity: 1; }
 #preview:fullscreen::before { -webkit-mask-image: none; mask-image: none; }
 
 /* -- history list ------------------------------------------------------ */
-#histlist { flex: 1; overflow-y: auto; margin: 4px 8px 0; }
+#histlist { flex: 1; min-height: 0; overflow-y: auto; margin: 4px 8px 0; }
 .hist-item {
   display: flex; align-items: center; gap: 8px;
   padding: 7px 10px; border-radius: 12px; cursor: pointer;
-  font-size: 12.5px;
+  font-size: 13px; font-weight: 500;
 }
 .hist-item:hover { background: rgba(255, 255, 255, 0.55); }
 .hist-item.sel { background: rgba(0, 100, 209, 0.12); }
@@ -310,7 +324,7 @@ body.working #echo { opacity: 1; }
   z-index: 30; display: flex; flex-direction: column;
 }
 #logpanel.open { transform: translateX(0); }
-.log-head { font-size: 13px; font-weight: 400; letter-spacing: 0.04em; padding: 14px 16px 8px; }
+.log-head { font-size: 13px; font-weight: 600; letter-spacing: 0.03em; padding: 14px 16px 8px; }
 #logbody {
   flex: 1; overflow: auto; padding: 0 16px 14px;
   font-family: Consolas, "Cascadia Mono", monospace;
@@ -378,7 +392,7 @@ body.working #echo { opacity: 1; }
 }
 .set-card { width: 620px; max-width: 94vw; padding: 18px 20px 20px; }
 .set-head { display: flex; align-items: center; margin-bottom: 8px; }
-.set-head h2 { font-size: 17px; font-weight: 400; letter-spacing: 0.04em; }
+.set-head h2 { font-size: 17px; font-weight: 600; letter-spacing: 0.03em; }
 .set-head .btn { margin-left: auto; }
 .set-row {
   display: flex; align-items: center; gap: 12px;
@@ -387,9 +401,9 @@ body.working #echo { opacity: 1; }
 }
 .set-row .tic { width: 22px; height: 22px; }
 .set-text { flex: 1; }
-.set-text h3 { font-size: 13.5px; font-weight: 400; letter-spacing: 0.03em; }
-.set-text p { font-size: 12px; color: var(--subink); margin-top: 2px; }
-.switch { display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px; cursor: pointer; }
+.set-text h3 { font-size: 13.5px; font-weight: 600; letter-spacing: 0.02em; }
+.set-text p { font-size: 12.5px; font-weight: 450; color: var(--subink); margin-top: 2px; }
+.switch { display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px; font-weight: 500; cursor: pointer; }
 .switch input { display: none; }
 .switch span {
   width: 36px; height: 21px; border-radius: 999px;
@@ -404,3 +418,25 @@ body.working #echo { opacity: 1; }
 }
 .switch input:checked + span { background: var(--accent); }
 .switch input:checked + span::after { left: 17px; }
+
+/* -- adaptability: narrow windows stack to one column ------------- */
+body.working #tiles { scrollbar-color: rgba(255, 255, 255, 0.32) transparent; }
+body.working #tiles::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.28); }
+
+@media (max-width: 800px) {
+  #tiles {
+    grid-template-columns: 1fr;
+    grid-template-rows: none;
+    grid-template-areas:
+      "hero"
+      "preview"
+      "history"
+      "depth"
+      "marker"
+      "settings";
+  }
+  #preview { min-height: 300px; }
+  #history { max-height: 240px; }
+  #center { padding: 8px 26px 6px 6px; }
+  #header h1 { font-size: 21px; }
+}

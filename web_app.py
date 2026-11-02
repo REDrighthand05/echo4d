@@ -532,8 +532,51 @@ class Bridge:
         os._exit(0)
 
 
+def _polish_window(window):
+    """Win11 window treatments, best effort: rounded corners and a
+    caption bar wearing the app's own pale tint, so the frame stops
+    looking like a stranger around the page. Windows-only and fully
+    guarded -- a failure here must never cost a launch."""
+    if sys.platform != "win32":
+        return
+    try:
+        import ctypes
+
+        native = getattr(window, "native", None)
+        hwnd = None
+        if native is not None:
+            try:
+                hwnd = int(native.Handle)
+            except Exception:
+                hwnd = None
+        if not hwnd:
+            return
+        dwm = ctypes.windll.dwmapi
+
+        def _set(attr, value):
+            v = ctypes.c_int(value)
+            dwm.DwmSetWindowAttribute(
+                hwnd, attr, ctypes.byref(v), ctypes.sizeof(v))
+
+        _set(20, 0)         # immersive dark caption: off (light glass)
+        _set(33, 2)         # corner preference: round (the Win11 look)
+        _set(35, 0xF7F2EE)  # caption colour: our pale glass #eef2f7 (BGR)
+        _set(36, 0x211E1C)  # caption text: our ink #1c1e21 (BGR)
+    except Exception:
+        pass
+
+
 def main():
     import webview
+
+    if sys.platform == "win32":
+        try:  # per-monitor DPI awareness: crisp text on scaled displays
+            import ctypes
+
+            ctypes.windll.user32.SetProcessDpiAwarenessContext(
+                ctypes.c_void_p(-4))
+        except Exception:
+            pass
 
     bridge = Bridge()
     # The page ships in the loose payload: resolve it next to this
@@ -545,8 +588,14 @@ def main():
     window = webview.create_window(
         "ECHO 回声", url=str(index),
         js_api=bridge, width=1040, height=836,
-        min_size=(920, 700))
+        min_size=(880, 620),
+        background_color="#dbe2eb")
     bridge._window = window
+    _polish_window(window)
+    try:
+        window.events.shown += lambda: _polish_window(window)
+    except Exception:
+        pass
     webview.start()
 
 

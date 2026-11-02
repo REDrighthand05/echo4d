@@ -151,6 +151,18 @@ function gauss() {
   return Math.max(-1.15, Math.min(1.15, (Math.random() + Math.random() + Math.random()) / 1.5 - 1));
 }
 
+function pushOutOfZones(x, y, zones) {
+  for (const [zx0, zy0, zx1, zy1] of zones) {
+    if (x > zx0 && x < zx1 && y > zy0 && y < zy1) {
+      const pens = [x - zx0, zx1 - x, y - zy0, zy1 - y];
+      const side = pens.indexOf(Math.min(...pens));
+      if (side === 0) x = zx0 - 5; else if (side === 1) x = zx1 + 5;
+      else if (side === 2) y = zy0 - 5; else y = zy1 + 5;
+    }
+  }
+  return [x, y];
+}
+
 function buildField() {
   W = window.innerWidth; H = window.innerHeight;
   canvas.width = W; canvas.height = H;
@@ -167,17 +179,11 @@ function buildField() {
     const step = 2.4;
     let sAcc = 0, carry = 0;
     const pushBead = (hx, hy, hz) => {
-      for (const [zx0, zy0, zx1, zy1] of zones) {
-        if (hx > zx0 && hx < zx1 && hy > zy0 && hy < zy1) {
-          const pens = [hx - zx0, zx1 - hx, hy - zy0, zy1 - hy];
-          const side = pens.indexOf(Math.min(...pens));
-          if (side === 0) hx = zx0 - 5; else if (side === 1) hx = zx1 + 5;
-          else if (side === 2) hy = zy0 - 5; else hy = zy1 + 5;
-        }
-      }
+      const [px, py] = pushOutOfZones(hx, hy, zones);
       const ang = Math.random() * Math.PI * 2;
       beads.push({
-        hx, hy, hz, x: hx, y: hy, z: hz, vx: 0, vy: 0, vz: 0,
+        rx: hx, ry: hy, hx: px, hy: py, hz, x: px, y: py, z: hz,
+        vx: 0, vy: 0, vz: 0,
         rj: 0.85 + Math.random() * 0.3,
         color: st.color, alpha: st.alpha / 255,
         sdirx: Math.cos(ang), sdiry: Math.sin(ang),
@@ -210,6 +216,33 @@ function buildField() {
       sAcc += segLen;
     }
   });
+}
+
+/* Window geometry changes NEVER re-roll the graffiti: the launch
+   strokes and their beads are the launch's hand, for the whole
+   session. A resize only scales homes and positions along, and
+   the canvases follow immediately so nothing stretches, jumps or
+   re-deals while the window is dragged. */
+function applyCalmZones() {
+  const zones = calmZones();
+  for (const b of beads) {
+    const [px, py] = pushOutOfZones(b.rx, b.ry, zones);
+    b.hx = px; b.hy = py;
+  }
+}
+
+function rescaleField() {
+  const nW = window.innerWidth, nH = window.innerHeight;
+  if (!nW || !nH) return;
+  if (nW === W && nH === H) { applyCalmZones(); return; }
+  const sx = W ? nW / W : 1, sy = H ? nH / H : 1;
+  W = nW; H = nH;
+  canvas.width = W; canvas.height = H;
+  echoCanvas.width = W; echoCanvas.height = H;
+  for (const b of beads) {
+    b.rx *= sx; b.ry *= sy; b.x *= sx; b.y *= sy;
+  }
+  applyCalmZones();
 }
 
 function calmZones() {
@@ -301,11 +334,7 @@ function tick(t) {
 
 window.addEventListener("mousemove", e => { mouse = { x: e.clientX, y: e.clientY }; });
 window.addEventListener("mouseout", () => { mouse = null; });
-let resizeTimer = null;
-window.addEventListener("resize", () => {
-  clearTimeout(resizeTimer);
-  resizeTimer = setTimeout(buildField, 220);
-});
+window.addEventListener("resize", rescaleField);
 
 /* working state: the graffiti recedes, the scene takes the wall */
 let holdTimer = null;
@@ -558,12 +587,14 @@ $("logtab").addEventListener("click", () => {
   p.classList.toggle("open");
   $("logtab").innerHTML = p.classList.contains("open") ? "日<br>志<br>‹" : "日<br>志<br>›";
 });
-$("btn-settings").addEventListener("click", () => {
+function openSettings() {
   const page = $("settings-page");
   page.classList.remove("leave");
   page.hidden = false;
   page.classList.add("enter");
-});
+}
+$("btn-settings").addEventListener("click", openSettings);
+$("btn-settings-top").addEventListener("click", openSettings);
 $("btn-set-back").addEventListener("click", () => {
   const page = $("settings-page");
   page.classList.remove("enter");
@@ -691,7 +722,7 @@ async function initBridge() {
 /* boot */
 buildField();
 requestAnimationFrame(tick);
-setTimeout(buildField, 350);  // rebuild once text layout settles (calm zones)
+setTimeout(applyCalmZones, 350);  // re-measure calm zones once text layout settles
 refresh();
 if (bridge) initBridge();
 else log("ECHO 已就绪。");
