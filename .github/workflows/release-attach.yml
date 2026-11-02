@@ -47,6 +47,10 @@ jobs:
           echo "setup exe: $SETUP"
           test -n "$SETUP"
           cp "$SETUP" ./EchoScene-Setup.exe
+          MANIFEST=$(find dl -name 'echoscene-manifest.json' | head -n 1)
+          if [ -n "$MANIFEST" ]; then cp "$MANIFEST" ./echoscene-manifest.json; fi
+          PACK=$(find dl -name 'EchoScene-Update.zip' | head -n 1)
+          if [ -n "$PACK" ]; then cp "$PACK" ./EchoScene-Update.zip; fi
           ls -la ./EchoScene-windows.zip ./EchoScene-Setup.exe
 
       - name: Verify inner zip contains EchoScene/EchoScene.exe
@@ -65,6 +69,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release upload "${{ inputs.tag }}" EchoScene-windows.zip EchoScene-Setup.exe --repo "$GITHUB_REPOSITORY" --clobber
+          if [ -f ./echoscene-manifest.json ]; then
+            gh release upload "${{ inputs.tag }}" ./echoscene-manifest.json --repo "$GITHUB_REPOSITORY" --clobber
+          fi
+          if [ -f ./EchoScene-Update.zip ]; then
+            gh release upload "${{ inputs.tag }}" ./EchoScene-Update.zip --repo "$GITHUB_REPOSITORY" --clobber
+          fi
 
       - name: Verify assets present on release
         env:
