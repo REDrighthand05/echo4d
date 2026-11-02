@@ -83,6 +83,27 @@ def _ffprobe_duration(video: Path) -> float:
     return float(json.loads(out.stdout)["format"]["duration"])
 
 
+_HWACCEL_CACHE: list | None = None
+
+
+def _hwaccel_args() -> list:
+    """Best verified hardware-decode args for frame extraction (DS
+    WO-D kernel; A/B-verified on the user's RTX 2060: median pixel
+    delta 1/255 vs software decode). Probed once per process; empty
+    when no accelerator verifies, and callers fall back to software
+    decoding if a hardware run fails."""
+    global _HWACCEL_CACHE
+    if _HWACCEL_CACHE is None:
+        try:
+            from .hwaccel import extract_args, probe_hwaccel
+
+            found = probe_hwaccel(_tool_path("ffmpeg"))
+            _HWACCEL_CACHE = extract_args(found[0] if found else None)
+        except Exception:
+            _HWACCEL_CACHE = []
+    return _HWACCEL_CACHE
+
+
 def stage_extract(video: Path, job_dir: Path) -> dict:
     frames_dir = job_dir / "frames"
     frames_dir.mkdir(parents=True, exist_ok=True)
@@ -94,11 +115,18 @@ def stage_extract(video: Path, job_dir: Path) -> dict:
     # them. Blur/duplicate rejection comes with the quality pass; v0
     # keeps every sampled frame.
     interval = max(0.25, duration / 320.0)
-    _run([
-        _tool_path("ffmpeg"), "-y", "-v", "error", "-i", video,
-        "-vf", f"fps=1/{interval:.3f}",
-        "-q:v", "2", frames_dir / "frame_%05d.jpg",
-    ])
+    tail = ["-vf", f"fps=1/{interval:.3f}",
+            "-q:v", "2", frames_dir / "frame_%05d.jpg"]
+    accel = _hwaccel_args()
+    try:
+        _run([_tool_path("ffmpeg"), "-y", "-v", "error", *accel,
+              "-i", video, *tail])
+    except subprocess.CalledProcessError:
+        if not accel:
+            raise
+        globals()["_HWACCEL_CACHE"] = []
+        _run([_tool_path("ffmpeg"), "-y", "-v", "error",
+              "-i", video, *tail])
     frames = sorted(frames_dir.glob("frame_*.jpg"))
     info = {
         "stage": "extract",

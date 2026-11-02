@@ -20,7 +20,7 @@ from pathlib import Path
 import numpy as np
 
 
-def _run_ffmpeg(args: list) -> None:
+def _run_ffmpeg(args: list, hwaccel: bool = False) -> None:
     """Run ffmpeg the way the pipeline does: resolved binary, and on
     Windows with no console window and no inherited stdin. A console
     window owned by a GUI app's child can be closed or signalled
@@ -28,13 +28,24 @@ def _run_ffmpeg(args: list) -> None:
     (0xC000013A) on long extractions; DEVNULL stdin also stops ffmpeg
     from treating the parent's stdin as its command channel. The
     encode parameters -- and therefore the output -- are unchanged.
+
+    hwaccel=True (extraction only) inserts the probed hardware-decode
+    args before -i, and retries in software if the hardware run fails.
     """
-    from .pipeline import _tool_path
+    from .pipeline import _hwaccel_args, _tool_path
 
     argv = [_tool_path("ffmpeg")] + [str(a) for a in args]
     kwargs: dict = {"check": True, "stdin": subprocess.DEVNULL}
     if sys.platform.startswith("win"):
         kwargs["creationflags"] = 0x08000000  # CREATE_NO_WINDOW
+    accel = _hwaccel_args() if hwaccel else []
+    if accel and "-i" in argv:
+        at = argv.index("-i")
+        try:
+            subprocess.run(argv[:at] + accel + argv[at:], **kwargs)
+            return
+        except subprocess.CalledProcessError:
+            pass  # fall through to the software run below
     subprocess.run(argv, **kwargs)
 
 
@@ -63,7 +74,8 @@ def make_depth_video(video: Path, out_mp4: Path, fps: int = 8,
 
     _run_ffmpeg(
         ["-y", "-v", "error", "-i", str(video),
-         "-vf", f"fps={fps}", "-q:v", "2", str(frames_dir / "f_%05d.jpg")])
+         "-vf", f"fps={fps}", "-q:v", "2", str(frames_dir / "f_%05d.jpg")],
+        hwaccel=True)
     frames = sorted(frames_dir.glob("f_*.jpg"))
     if not frames:
         return {"ok": False, "reason": "no frames extracted"}
