@@ -11,7 +11,15 @@
    in a plain browser a demo state machine mirrors the app's own
    action logic so the shell can be judged on its own. */
 
-const bridge = (window.pywebview && window.pywebview.api) || null;
+/* The bridge is bound lazily, NEVER snapshotted at script load:
+   pywebview injects window.pywebview.api on its own schedule, and
+   on some machines that lands after this script runs. Snapshotting
+   it here once stranded the whole app in demo mode for the entire
+   session (2026-11-02, the user's machine): simulated jobs, dead
+   buttons, and not a word about it. bindBridge() below retries
+   until the api appears, and demo mode must announce itself. */
+let bridge = null;
+let bridgeMode = "waiting";   // "waiting" -> "real" | "demo"
 
 /* ------------------------------------------------------------------ */
 /* random graffiti: 1-3 strokes, a fresh hand every launch            */
@@ -485,6 +493,10 @@ function demoDepthFrame(k) {
 
 /* demo job run (plain browser only) */
 function demoRun(kind) {
+  if (bridgeMode !== "demo") {
+    setStatus("正在连上软件后台，稍等几秒再点。");
+    return;
+  }
   state.busy = true; refresh(); setWorking(true);
   const stages = kind === "depth"
     ? ["正在读视频", "正在估深度", "正在渲染深度画面"]
@@ -611,7 +623,12 @@ $("btn-update").addEventListener("click", async () => {
 });
 $("btn-set-update").addEventListener("click", async () => {
   const note = $("set-update-note");
-  if (!bridge) { note.textContent = "演示模式，没有真的去检查。"; return; }
+  if (!bridge) {
+    note.textContent = bridgeMode === "demo"
+      ? "演示模式，没有真的去检查。"
+      : "正在连上软件后台，稍等几秒再试。";
+    return;
+  }
   note.textContent = "正在检查…";
   try {
     const r = await bridge.manual_check_update();
@@ -717,8 +734,11 @@ async function initBridge() {
     wasBusy = !!out.busy;
     (out.logs || []).forEach(l => log(l));
     if (out.history) renderHistory(out.history);
-    if (!out.busy && out.hasJob && !state.jobDir) {
-      state.jobOutputs = { any: true, scene: true, preview: true, replay: true };
+    if (!out.busy && out.hasJob && !state.jobDir && out.jobOutputs) {
+      // Only outputs the job really holds may light their buttons;
+      // a failed job used to light them all and every click then
+      // silently did nothing.
+      state.jobOutputs = out.jobOutputs;
     }
     setStatus(out.status, out.frac);
     refresh();
@@ -742,5 +762,38 @@ buildField();
 requestAnimationFrame(tick);
 setTimeout(applyCalmZones, 350);  // re-measure calm zones once text layout settles
 refresh();
-if (bridge) initBridge();
-else log("ECHO 已就绪。");
+log("ECHO 已就绪。");
+
+/* bridge binding: try at once, on pywebview's ready event, and on
+   a retry timer. Six seconds without an api and the shell admits
+   it is in demo mode (visible badge + status), but the retry never
+   stops: if the api shows up late, the shell upgrades to real. */
+function bindBridge() {
+  if (bridge) return true;
+  const api = window.pywebview && window.pywebview.api;
+  if (!api) return false;
+  bridge = api;
+  bridgeMode = "real";
+  const badge = $("demobadge");
+  if (badge) badge.hidden = true;
+  log("已连上软件后台。");
+  initBridge();
+  return true;
+}
+function declareDemo() {
+  if (bridge || bridgeMode === "demo") return;
+  bridgeMode = "demo";
+  const badge = $("demobadge");
+  if (badge) badge.hidden = false;
+  setStatus("演示模式：没有连上软件后台，生成和按钮都是演示。", 0);
+  log("演示模式：没有连上软件后台。");
+}
+window.addEventListener("pywebviewready", bindBridge);
+bindBridge();
+let bridgeTries = 0;
+const bridgeTimer = setInterval(() => {
+  bridgeTries++;
+  if (bindBridge()) { clearInterval(bridgeTimer); return; }
+  if (bridgeTries === 24) declareDemo();          // ~6 s in
+  if (bridgeTries % 8 === 0) bindBridge();        // keep retrying
+}, 250);

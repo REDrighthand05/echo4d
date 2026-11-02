@@ -175,6 +175,18 @@ class Bridge:
             out["preview"] = self._preview_data
         if self.depth_out is not None:
             out["depthUrl"] = Path(self.depth_out).as_uri()
+        if self.job is not None:
+            # Real per-output availability, so the page lights only
+            # the buttons whose file actually exists. (The page used
+            # to light them all for any job, and clicks on a failed
+            # job's buttons then silently did nothing.)
+            job = Path(self.job)
+            out["jobOutputs"] = {
+                "any": job.exists(),
+                "scene": backend.job_finished(job),
+                "preview": (job / "preview.html").exists(),
+                "replay": backend._replay_available(job),
+            }
         return out
 
     def get_preview_frame(self):
@@ -315,48 +327,58 @@ class Bridge:
             self._start_preview(job)
         return {"ok": job is not None}
 
+    def _open_target(self, target, what):
+        """Open an output file, and NEVER fail silently: a missing
+        file or a failed system open lands in the status line and
+        the log, where the user can see what happened. (Silent
+        no-ops here are what made the whole row of buttons look
+        dead on 2026-11-02.)"""
+        if target is not None and Path(target).exists():
+            try:
+                backend.play_file(Path(target))
+                return {"ok": True}
+            except Exception as exc:
+                self.status = f"{what}打开失败，看一下日志。"
+                self._log(f"{what}打开失败：{exc}")
+                return {"ok": False}
+        self.status = f"{what}还没有，暂时打不开。"
+        self._log(f"{what}还没有，暂时打不开。")
+        return {"ok": False}
+
     def open_scene(self, job_dir=None):
         job = self._job_for(job_dir)
         if job is None:
-            return {"ok": False}
-        target = backend.scene_file(job)
-        if target.exists():
-            backend.play_file(target)
-            return {"ok": True}
-        return {"ok": False}
+            return self._open_target(None, "场景")
+        return self._open_target(backend.scene_file(job), "场景")
 
     def open_folder(self, job_dir=None):
         job = self._job_for(job_dir)
-        if job is None:
+        if job is None or not Path(job).exists():
+            return self._open_target(None, "任务文件夹")
+        try:
+            _open_folder(Path(job))
+            return {"ok": True}
+        except Exception as exc:
+            self.status = "任务文件夹打开失败，看一下日志。"
+            self._log(f"任务文件夹打开失败：{exc}")
             return {"ok": False}
-        _open_folder(job)
-        return {"ok": True}
 
     def open_preview_replay(self, job_dir=None):
         job = self._job_for(job_dir)
         if job is None:
-            return {"ok": False}
-        target = job / "preview.html"
-        if target.exists():
-            backend.play_file(target)
-            return {"ok": True}
-        return {"ok": False}
+            return self._open_target(None, "过程回放")
+        return self._open_target(job / "preview.html", "过程回放")
 
     def open_route_replay(self, job_dir=None):
         job = self._job_for(job_dir)
         if job is None:
-            return {"ok": False}
-        target = backend.replay_file(job)
-        if target.exists():
-            backend.play_file(target)
-            return {"ok": True}
-        return {"ok": False}
+            return self._open_target(None, "路线回放")
+        return self._open_target(backend.replay_file(job), "路线回放")
 
     def play_depth(self):
-        if self.depth_out is not None and Path(self.depth_out).exists():
-            backend.play_file(Path(self.depth_out))
-            return {"ok": True}
-        return {"ok": False}
+        if self.depth_out is None:
+            return self._open_target(None, "深度视频")
+        return self._open_target(Path(self.depth_out), "深度视频")
 
     def print_markers(self):
         try:
@@ -607,6 +629,12 @@ def _polish_window(window):
             except Exception:
                 hwnd = None
         if not hwnd:
+            try:  # the native handle may not exist yet at first call
+                hwnd = ctypes.windll.user32.FindWindowW(
+                    None, "ECHO 回声") or None
+            except Exception:
+                hwnd = None
+        if not hwnd:
             return
         dwm = ctypes.windll.dwmapi
 
@@ -653,6 +681,14 @@ def main():
         window.events.shown += lambda: _polish_window(window)
     except Exception:
         pass
+    # The native handle often only exists a moment after start, so
+    # polish again on a delay -- a single early attempt that found
+    # no handle used to leave the frame unmodernised for the whole
+    # session with no sign of why.
+    for delay in (1.5, 4.0):
+        timer = threading.Timer(delay, _polish_window, args=(window,))
+        timer.daemon = True
+        timer.start()
     webview.start()
 
 

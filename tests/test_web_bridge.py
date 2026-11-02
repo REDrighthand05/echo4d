@@ -159,6 +159,45 @@ def main():
         updater._ROUTE = None
         updater._AUTO_PROXY = ""
 
+    # Outputs must be reported per real file, never blanket-lit:
+    # a failed job's buttons once lit up and then silently no-oped.
+    bridge.job = finished
+    outs = bridge.poll().get("jobOutputs") or {}
+    check("poll jobOutputs for a finished job",
+          outs.get("scene") is True and outs.get("preview") is True
+          and outs.get("replay") is False, str(outs))
+    bridge.job = running
+    outs = bridge.poll().get("jobOutputs") or {}
+    check("poll jobOutputs for an unfinished job stay dark",
+          outs.get("any") is True and outs.get("scene") is False
+          and outs.get("preview") is False
+          and outs.get("replay") is False, str(outs))
+
+    # Open actions must speak when they cannot open: no silent no-op.
+    bridge.job = running
+    r = bridge.open_scene()
+    check("open_scene on a job without a scene speaks up",
+          r["ok"] is False and "打不开" in bridge.status)
+    r = bridge.play_depth()
+    check("play_depth with no depth video speaks up",
+          r["ok"] is False and "打不开" in bridge.status
+          and any("深度视频还没有" in line
+                  for line in bridge.poll()["logs"]))
+
+    # And a real depth file goes through play_file exactly once.
+    depth_mp4 = tmp / "walk_depth.mp4"
+    depth_mp4.write_bytes(b"\0" * 32)
+    played = []
+    real_play = web_app.backend.play_file
+    web_app.backend.play_file = played.append
+    try:
+        bridge.depth_out = depth_mp4
+        r = bridge.play_depth()
+    finally:
+        web_app.backend.play_file = real_play
+    check("play_depth opens the finished depth video",
+          r["ok"] is True and played == [depth_mp4])
+
     check("start guards: no double start while busy",
           (bridge.__dict__.update(busy=True) or
            bridge.start_scene()["ok"] is False))
