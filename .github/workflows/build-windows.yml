@@ -71,7 +71,7 @@ jobs:
         # machine at the mesh stage. Fail the build instead if the
         # frozen tree does not carry the library and its native module.
         run: |
-          $o3d = "dist/EchoScene/_internal/open3d"
+          $o3d = "dist/EchoScene/open3d"
           if (-not (Test-Path $o3d)) { throw "open3d package missing from frozen bundle: $o3d" }
           $pyd = Get-ChildItem -Path $o3d -Recurse -Filter *.pyd | Select-Object -First 1
           if (-not $pyd) { throw "open3d native extension (*.pyd) missing from frozen bundle" }
@@ -82,7 +82,7 @@ jobs:
         # silent-missing failure mode as open3d in v0.1. Guard it the
         # same way.
         run: |
-          $sp = "dist/EchoScene/_internal/scipy"
+          $sp = "dist/EchoScene/scipy"
           if (-not (Test-Path $sp)) { throw "scipy package missing from frozen bundle: $sp" }
           $pyd = Get-ChildItem -Path $sp -Recurse -Filter *.pyd | Select-Object -First 1
           if (-not $pyd) { throw "scipy native extension (*.pyd) missing from frozen bundle" }
