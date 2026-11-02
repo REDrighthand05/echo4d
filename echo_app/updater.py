@@ -33,26 +33,93 @@ CHECK_TIMEOUT = 6.0          # seconds, per socket operation
 DOWNLOAD_TIMEOUT = 30.0      # seconds, per socket read
 _USER_AGENT = "ECHO-Scene-Updater"
 
-# Optional user proxy for update traffic only ("" = direct). Set
-# from Settings at startup and whenever the user edits it; some
-# networks simply cannot reach GitHub without one, and a silent
-# direct-only failure cost us a whole evening once.
+# --- Reaching GitHub: try every route, so the user never has to.
+#
+# The update machinery has exactly one external job: reach GitHub.
+# On some networks a plain connection never arrives (a whole
+# evening was lost to exactly that), so _open walks a route list
+# until one answers:
+#   1. the proxy the user typed in Settings, if any
+#   2. direct (urllib also honours the Windows system proxy here)
+#   3. the usual local proxy ports, probed in order
+# The first route that answers is remembered for the process, and
+# an auto-found local proxy is reported through auto_proxy() so
+# the bridge can save it -- next launch it becomes route 1 and
+# nobody has to think about any of this again.
 _PROXY = ""
+_ROUTE = None            # None = untried; "" = direct; else a URL
+_AUTO_PROXY = ""         # a probed candidate that answered
+PROBE_TIMEOUT = 3.0
+CANDIDATE_PROXIES = (
+    "http://127.0.0.1:7897",   # Clash Verge
+    "http://127.0.0.1:7890",   # Clash
+    "http://127.0.0.1:10809",  # v2rayN
+    "http://127.0.0.1:10808",  # v2rayN mixed port
+    "http://127.0.0.1:1080",
+    "http://127.0.0.1:8080",
+)
 
 
 def set_proxy(url):
-    global _PROXY
+    global _PROXY, _ROUTE
     _PROXY = (url or "").strip()
+    _ROUTE = None            # the routes changed: probe afresh
+
+
+def auto_proxy():
+    """The auto-found local proxy that answered, if one did."""
+    return _AUTO_PROXY
+
+
+def _urlopen_with(route, req, timeout):
+    """One attempt on one route ('' = direct / default opener)."""
+    if route:
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler(
+            {"http": route, "https": route}))
+        return opener.open(req, timeout=timeout)
+    return urllib.request.urlopen(req, timeout=timeout)
+
+
+def _routes():
+    seen, out = set(), []
+    head = [_PROXY] if _PROXY else []
+    for route in head + [""] + list(CANDIDATE_PROXIES):
+        if route not in seen:
+            seen.add(route)
+            out.append(route)
+    return out
 
 
 def _open(req, timeout):
-    """urlopen that honours the configured proxy. Returns the
-    response (a context manager), exactly like urlopen."""
-    if _PROXY:
-        opener = urllib.request.build_opener(urllib.request.ProxyHandler(
-            {"http": _PROXY, "https": _PROXY}))
-        return opener.open(req, timeout=timeout)
-    return urllib.request.urlopen(req, timeout=timeout)
+    """Open req on the first route that answers and remember it.
+    While the route is unknown each attempt is capped at
+    PROBE_TIMEOUT so dead routes cannot eat the caller's budget;
+    a winning probe is then re-issued at the full timeout (every
+    request here is an idempotent GET). Raises the last error
+    when no route answers."""
+    global _ROUTE, _AUTO_PROXY
+    if _ROUTE is not None:
+        return _urlopen_with(_ROUTE, req, timeout)
+    last_exc = None
+    for route in _routes():
+        try:
+            resp = _urlopen_with(route, req, min(timeout, PROBE_TIMEOUT))
+        except Exception as exc:  # dead route: try the next one
+            last_exc = exc
+            continue
+        _ROUTE = route
+        if route and route != _PROXY:
+            _AUTO_PROXY = route
+        if timeout > PROBE_TIMEOUT:
+            try:
+                resp.close()
+            except Exception:
+                pass
+            return _urlopen_with(route, req, timeout)
+        return resp
+    if last_exc is not None:
+        raise last_exc
+    raise OSError("no update route available")
 
 
 @dataclass

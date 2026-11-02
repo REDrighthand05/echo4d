@@ -117,6 +117,48 @@ def main():
           bridge.manual_check_update()["status"] in
           ("update", "latest", "error"))
 
+    # Route cascade: direct dead, first candidate dead, second
+    # answers -> it wins, is cached, and is reported as auto-found.
+    tried = []
+    real_open = updater._urlopen_with
+
+    class _Resp:
+        def close(self):
+            pass
+
+    def _fake(route, req, timeout):
+        tried.append(route)
+        if route in ("", updater.CANDIDATE_PROXIES[0]):
+            raise OSError("no route")
+        return _Resp()
+
+    updater._urlopen_with = _fake
+    updater._ROUTE = None
+    updater._AUTO_PROXY = ""
+    try:
+        updater._open("req", 6.0)
+        check("cascade walks routes until one answers",
+              tried[0] == ""
+              and tried[1] == updater.CANDIDATE_PROXIES[0]
+              and updater._ROUTE == updater.CANDIDATE_PROXIES[1]
+              and updater.auto_proxy() == updater.CANDIDATE_PROXIES[1])
+
+        def _dead(route, req, timeout):
+            raise OSError("all dead")
+
+        updater._urlopen_with = _dead
+        updater._ROUTE = None
+        try:
+            updater._open("req", 6.0)
+            raised = False
+        except OSError:
+            raised = True
+        check("cascade raises when every route is dead", raised)
+    finally:
+        updater._urlopen_with = real_open
+        updater._ROUTE = None
+        updater._AUTO_PROXY = ""
+
     check("start guards: no double start while busy",
           (bridge.__dict__.update(busy=True) or
            bridge.start_scene()["ok"] is False))

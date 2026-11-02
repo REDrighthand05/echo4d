@@ -209,9 +209,24 @@ def main(argv=None) -> int:
     st, rel = api("GET", f"/repos/{REPO}/releases/latest")
     assert st == 200, f"latest release fetch failed: {st} {rel}"
     base_tag = rel["tag_name"]
-    man_asset = next(a for a in rel["assets"]
-                     if a["name"] == "echoscene-manifest.json")
-    base = json.loads(download_asset(man_asset["id"]))
+    man_asset = next((a for a in rel["assets"]
+                      if a["name"] == "echoscene-manifest.json"), None)
+    if man_asset is not None:
+        base = json.loads(download_asset(man_asset["id"]))
+    else:
+        # The newest release's assets are still being attached
+        # (GitHub's queue): the chain hangs on the lineage
+        # manifest, which the run that made that release staged
+        # on the branch -- read it from there instead of waiting.
+        st, tree = api("GET", f"/repos/{REPO}/git/trees/"
+                              f"{BRANCH}:release-assets/{base_tag}")
+        assert st == 200, f"staged manifest lookup failed: {st}"
+        blob_sha = next(e["sha"] for e in tree["tree"]
+                        if e["path"] == "echoscene-manifest.json")
+        st, blob = api("GET", f"/repos/{REPO}/git/blobs/{blob_sha}")
+        base = json.loads(base64.b64decode(blob["content"]))
+        print(f"base manifest taken from the branch staging "
+              f"(release assets still attaching)")
     print(f"base: {base_tag} (manifest v{base['version']}, "
           f"{len(base['files'])} files) -> target v{version}")
     assert base["version"] != version, "already at that version"

@@ -483,9 +483,24 @@ class Bridge:
 
     def _run_check(self, manual):
         try:
+            from echo_app import updater
             from echo_app.updater import (check_for_update_status,
                                           fetch_releases, pick_hop)
             status, info = check_for_update_status(APP_VERSION)
+            if status != "error":
+                # A probed local proxy answered: keep it, so no one
+                # ever has to set anything for updates again.
+                try:
+                    found = updater.auto_proxy()
+                    if found and not self.settings.update_proxy:
+                        self.settings.update_proxy = found
+                        save_settings(self.settings)
+                        updater.set_proxy(found)
+                        self._log("已自动找到能连上 GitHub 的本机代理"
+                                  f"（{found}），以后的更新都走它，"
+                                  "不用你管。")
+                except Exception:
+                    pass
             if status == "update" and info is not None:
                 self.update = {"version": info.version}
                 self._update_info = info
@@ -513,9 +528,10 @@ class Bridge:
                 return {"status": "update", "version": info.version}
             if status == "error":
                 # Never silent again: the log is where a failed check
-                # explains itself (network / proxy trouble).
-                self._log("更新检查没连上：多半是网络或代理的问题。"
-                          "可以到设置里填代理地址，或到发布页手动更新。")
+                # explains itself -- and by now every route was tried.
+                self._log("更新检查没连上：直连和本机常见代理端口都"
+                          "试过了，还是到不了 GitHub。可以到发布页"
+                          "手动更新，或在设置里填你自己的代理地址。")
                 if not manual and not getattr(self, "_check_retried",
                                               False):
                     self._check_retried = True

@@ -620,7 +620,7 @@ $("btn-set-update").addEventListener("click", async () => {
     } else if (r && r.status === "latest") {
       note.textContent = "已是最新版。";
     } else {
-      note.textContent = "检查失败：连不上 GitHub。可以填下面的代理地址，或到发布页手动更新。";
+      note.textContent = "检查失败：直连和本机常见代理都试过，还是连不上 GitHub。可以到发布页手动更新。";
     }
   } catch (e) {
     note.textContent = "检查失败：连不上 GitHub。";
