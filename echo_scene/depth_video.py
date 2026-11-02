@@ -20,6 +20,24 @@ from pathlib import Path
 import numpy as np
 
 
+def _run_ffmpeg(args: list) -> None:
+    """Run ffmpeg the way the pipeline does: resolved binary, and on
+    Windows with no console window and no inherited stdin. A console
+    window owned by a GUI app's child can be closed or signalled
+    mid-run, which kills ffmpeg with STATUS_CONTROL_C_EXIT
+    (0xC000013A) on long extractions; DEVNULL stdin also stops ffmpeg
+    from treating the parent's stdin as its command channel. The
+    encode parameters -- and therefore the output -- are unchanged.
+    """
+    from .pipeline import _tool_path
+
+    argv = [_tool_path("ffmpeg")] + [str(a) for a in args]
+    kwargs: dict = {"check": True, "stdin": subprocess.DEVNULL}
+    if sys.platform.startswith("win"):
+        kwargs["creationflags"] = 0x08000000  # CREATE_NO_WINDOW
+    subprocess.run(argv, **kwargs)
+
+
 def make_depth_video(video: Path, out_mp4: Path, fps: int = 8) -> dict:
     from .depth import estimate_depth, save_depth_preview
 
@@ -29,10 +47,9 @@ def make_depth_video(video: Path, out_mp4: Path, fps: int = 8) -> dict:
     frames_dir = out_mp4.parent / (out_mp4.stem + "_frames")
     frames_dir.mkdir(exist_ok=True)
 
-    subprocess.run(
-        ["ffmpeg", "-y", "-v", "error", "-i", str(video),
-         "-vf", f"fps={fps}", "-q:v", "2", str(frames_dir / "f_%05d.jpg")],
-        check=True)
+    _run_ffmpeg(
+        ["-y", "-v", "error", "-i", str(video),
+         "-vf", f"fps={fps}", "-q:v", "2", str(frames_dir / "f_%05d.jpg")])
     frames = sorted(frames_dir.glob("f_*.jpg"))
     if not frames:
         return {"ok": False, "reason": "no frames extracted"}
@@ -47,12 +64,11 @@ def make_depth_video(video: Path, out_mp4: Path, fps: int = 8) -> dict:
         depth = estimate_depth(frame, model)
         save_depth_preview(depth, preview_dir / f"d_{i + 1:05d}.png")
 
-    subprocess.run(
-        ["ffmpeg", "-y", "-v", "error", "-framerate", str(fps),
+    _run_ffmpeg(
+        ["-y", "-v", "error", "-framerate", str(fps),
          "-i", str(preview_dir / "d_%05d.png"),
          "-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "18",
-         str(out_mp4)],
-        check=True)
+         str(out_mp4)])
     return {"ok": True, "frames": len(frames), "fps": fps,
             "video": str(out_mp4), "depth_frames_dir": str(preview_dir)}
 
