@@ -48,6 +48,11 @@ class Bridge:
 
     def __init__(self):
         self.settings = load_settings()
+        try:
+            from echo_app.updater import set_proxy
+            set_proxy(self.settings.update_proxy)
+        except Exception:
+            pass
         self.jobs_root = self.settings.jobs_root_path()
         self.video = None            # Path of the selected video
         self.job = None              # Path of the current job
@@ -139,6 +144,7 @@ class Bridge:
             "settings": {
                 "autostart": self.settings.autostart,
                 "closeToTray": self.settings.close_to_tray,
+                "updateProxy": self.settings.update_proxy,
             },
             "history": hist,
             "status": self.status,
@@ -444,6 +450,13 @@ class Bridge:
                     pass
             if "closeToTray" in data:
                 self.settings.close_to_tray = bool(data["closeToTray"])
+            if "updateProxy" in data:
+                self.settings.update_proxy = str(data["updateProxy"]).strip()
+                try:
+                    from echo_app.updater import set_proxy
+                    set_proxy(self.settings.update_proxy)
+                except Exception:
+                    pass
             save_settings(self.settings)
             return {"ok": True}
         except Exception as exc:
@@ -458,21 +471,36 @@ class Bridge:
         return paths[0] if paths else None
 
     def check_update(self):
-        def _check():
-            try:
-                from echo_app.updater import check_for_update_status
-                status, info = check_for_update_status(APP_VERSION)
-                if status == "update" and info is not None:
-                    self.update = {"version": info.version}
-                    self._update_info = info
-                    self._log(f"有新版本：{info.version}")
-                    # Prefer the hot path: same release, megabytes
-                    # instead of the full installer, when eligible.
-                    try:
-                        from echo_app import hotupdate, updater
-                        payload = updater._fetch_json()
+        threading.Thread(target=lambda: self._run_check(False),
+                         daemon=True).start()
+        return {"ok": True}
+
+    def manual_check_update(self):
+        """The settings-page check: the user pressed the button, so
+        they get an honest, specific answer back -- update / latest
+        / error -- instead of the startup check's polite silence."""
+        return self._run_check(True)
+
+    def _run_check(self, manual):
+        try:
+            from echo_app.updater import (check_for_update_status,
+                                          fetch_releases, pick_hop)
+            status, info = check_for_update_status(APP_VERSION)
+            if status == "update" and info is not None:
+                self.update = {"version": info.version}
+                self._update_info = info
+                self._log(f"有新版本：{info.version}")
+                # Prefer the hot path, megabytes instead of the full
+                # installer. Packs are chained, so aim at the NEXT
+                # release above this one, not blindly at the latest:
+                # a client several versions behind climbs one hop,
+                # relaunches, and the next check climbs the next.
+                try:
+                    from echo_app import hotupdate
+                    hop = pick_hop(fetch_releases(), APP_VERSION)
+                    if hop is not None:
                         hot = hotupdate.check_hot_update(
-                            payload, hotupdate.install_root())
+                            hop, hotupdate.install_root())
                         if hot is not None:
                             self._hot_info = hot
                             self.update = {
@@ -480,12 +508,25 @@ class Bridge:
                                 "mb": round(hot.total_bytes / 1e6, 1)}
                             self._log("这个版本可以热更新，"
                                       f"只需下载约 {self.update['mb']} MB。")
-                    except Exception:
-                        pass
-            except Exception:
-                pass
-        threading.Thread(target=_check, daemon=True).start()
-        return {"ok": True}
+                except Exception:
+                    pass
+                return {"status": "update", "version": info.version}
+            if status == "error":
+                # Never silent again: the log is where a failed check
+                # explains itself (network / proxy trouble).
+                self._log("更新检查没连上：多半是网络或代理的问题。"
+                          "可以到设置里填代理地址，或到发布页手动更新。")
+                if not manual and not getattr(self, "_check_retried",
+                                              False):
+                    self._check_retried = True
+                    self._retry_timer = threading.Timer(
+                        90.0, lambda: self._run_check(False))
+                    self._retry_timer.daemon = True
+                    self._retry_timer.start()
+                return {"status": "error"}
+            return {"status": "latest"}
+        except Exception:
+            return {"status": "error"}
 
     def download_update(self):
         hot = getattr(self, "_hot_info", None)

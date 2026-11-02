@@ -610,7 +610,24 @@ $("btn-update").addEventListener("click", async () => {
   if (bridge) await bridge.download_update();
 });
 $("btn-set-update").addEventListener("click", async () => {
-  if (bridge) { await bridge.check_update(); log("正在检查更新…"); }
+  const note = $("set-update-note");
+  if (!bridge) { note.textContent = "演示模式，没有真的去检查。"; return; }
+  note.textContent = "正在检查…";
+  try {
+    const r = await bridge.manual_check_update();
+    if (r && r.status === "update") {
+      note.textContent = `有新版本 v${r.version} —— 回到主界面，顶部点「下载并安装」。`;
+    } else if (r && r.status === "latest") {
+      note.textContent = "已是最新版。";
+    } else {
+      note.textContent = "检查失败：连不上 GitHub。可以填下面的代理地址，或到发布页手动更新。";
+    }
+  } catch (e) {
+    note.textContent = "检查失败：连不上 GitHub。";
+  }
+});
+$("set-proxy").addEventListener("change", async e => {
+  if (bridge) await bridge.save_settings({ updateProxy: e.target.value.trim() });
 });
 $("btn-set-folder").addEventListener("click", async () => {
   if (!bridge) return;
@@ -684,6 +701,7 @@ async function initBridge() {
   $("set-version").textContent = `当前版本 v${snap.version}`;
   $("set-autostart").checked = !!snap.settings.autostart;
   $("set-tray").checked = !!snap.settings.closeToTray;
+  $("set-proxy").value = snap.settings.updateProxy || "";
   (snap.log || []).forEach(l => log(l));
   renderHistory(snap.history || []);
   setStatus(snap.status, snap.frac);

@@ -86,6 +86,37 @@ def main():
     check("settings roundtrip", saved["ok"] is True
           and bridge.settings.autostart is True)
 
+    from echo_app import updater
+    saved = bridge.save_settings(
+        {"updateProxy": " http://127.0.0.1:7890 "})
+    check("proxy setting roundtrip + live-applied",
+          saved["ok"] is True
+          and bridge.settings.update_proxy == "http://127.0.0.1:7890"
+          and updater._PROXY == "http://127.0.0.1:7890")
+    snap = bridge.get_snapshot()
+    check("snapshot carries the proxy",
+          snap["settings"]["updateProxy"] == "http://127.0.0.1:7890")
+    bridge.save_settings({"updateProxy": ""})
+    updater.set_proxy("")
+
+    def rel(tag, draft=False):
+        return {"tag_name": tag, "draft": draft, "prerelease": False,
+                "assets": []}
+
+    releases = [rel("v0.5.1"), rel("v0.5.0"), rel("v0.4.0"),
+                rel("v0.6.0", draft=True), rel("junk")]
+    hop = updater.pick_hop(releases, "0.4.0")
+    check("hop picks the smallest newer step",
+          hop is not None and hop["tag_name"] == "v0.5.0")
+    hop = updater.pick_hop(releases, "0.5.0")
+    check("hop climbs one step", hop is not None
+          and hop["tag_name"] == "v0.5.1")
+    check("hop at the top is None",
+          updater.pick_hop(releases, "0.5.1") is None)
+    check("manual check never raises and answers honestly",
+          bridge.manual_check_update()["status"] in
+          ("update", "latest", "error"))
+
     check("start guards: no double start while busy",
           (bridge.__dict__.update(busy=True) or
            bridge.start_scene()["ok"] is False))

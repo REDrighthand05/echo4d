@@ -55,6 +55,9 @@ class Settings:
     jobs_root: str = ""          # "" = default (default_jobs_root())
     autostart: bool = False
     close_to_tray: bool = True   # WeChat behaviour out of the box
+    update_proxy: str = ""       # "" = direct; else e.g.
+    # "http://127.0.0.1:7890" -- update checks/downloads only; some
+    # networks cannot reach GitHub without the user's own proxy.
 
     def jobs_root_path(self) -> Path:
         return Path(self.jobs_root) if self.jobs_root else default_jobs_root()
@@ -67,6 +70,8 @@ def _coerce(data) -> Settings:
         return out
     if isinstance(data.get("jobs_root"), str):
         out.jobs_root = data["jobs_root"]
+    if isinstance(data.get("update_proxy"), str):
+        out.update_proxy = data["update_proxy"].strip()
     for key in ("autostart", "close_to_tray"):
         if isinstance(data.get(key), bool):
             setattr(out, key, data[key])

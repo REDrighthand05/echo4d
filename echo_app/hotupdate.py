@@ -88,8 +88,10 @@ def _asset_url(release: dict, name: str) -> str | None:
 
 
 def _fetch(url: str) -> bytes:
+    from . import updater
+
     request = urllib.request.Request(url, headers={"User-Agent": _USER_AGENT})
-    with urllib.request.urlopen(request, timeout=_TIMEOUT) as response:
+    with updater._open(request, _TIMEOUT) as response:
         return response.read()
 
 

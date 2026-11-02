@@ -53,6 +53,22 @@ PINNED = {"app/echo_scene/preview.py"}  # snapshot pins it to HEAD
 PUSHER = Path.home() / "workspace" / "echo4d_supervisor" / \
     "upload_snapshot_postv03.py"
 
+# Appended to every quick-line release body: the manual route must
+# be written on the release itself, because the users who need it
+# are exactly the ones the in-app prompt cannot reach.
+STANDARD_FOOTER = """
+
+---
+
+【如果软件里没出现更新提示】多半是网络连不上 GitHub，可以手动升：
+下载本页的 EchoScene-Update.zip → 关掉软件（任务栏右下角托盘
+右键退出）→ 解压，把 files 里的 app 文件复制进安装文件夹的
+app 里替换 → 把 target-manifest.json 改名成 manifest.json，
+放进安装文件夹的 .echo 里替换 → 重新打开软件即可。
+
+【新装用户】下方完整安装包是上一版的底座，装好后打开软件会
+自动热更新到本版。"""
+
 
 def api(method, path, body=None):
     data = json.dumps(body).encode() if body is not None else None
@@ -306,6 +322,8 @@ def main(argv=None) -> int:
         {"sha": nc["sha"]})
     print("staged assets committed:", nc["sha"][:12])
 
+    if "手动升" not in notes:
+        notes += STANDARD_FOOTER
     st, rel_new = api("POST", f"/repos/{REPO}/releases", {
         "tag_name": f"v{version}", "target_commitish": nc["sha"],
         "name": f"EchoScene v{version}", "body": notes})
@@ -324,7 +342,40 @@ def main(argv=None) -> int:
     except Exception:
         pass  # 204 No Content trips the JSON reader; dispatch landed
     print(f"release-attach dispatched (build run {build_run}); "
-          f"verify the assets on the release page")
+          f"waiting for it to finish...")
+
+    import time
+    attach_id = None
+    for _ in range(10):
+        time.sleep(6)
+        st, runs = api("GET", f"/repos/{REPO}/actions/workflows/"
+                              f"release-attach.yml/runs?per_page=5")
+        for r in runs.get("workflow_runs", []):
+            if r["event"] == "workflow_dispatch" and \
+                    r["status"] != "completed":
+                attach_id = r["id"]
+                break
+        if attach_id:
+            break
+    assert attach_id, "attach run never appeared"
+    conclusion = None
+    for _ in range(24):
+        st, run = api("GET", f"/repos/{REPO}/actions/runs/{attach_id}")
+        if run["status"] == "completed":
+            conclusion = run["conclusion"]
+            break
+        time.sleep(30)
+    assert conclusion == "success", f"attach run ended: {conclusion}"
+    st, rel_done = api("GET", f"/repos/{REPO}/releases/tags/v{version}")
+    assets = {a["name"]: a["size"] for a in rel_done["assets"]}
+    expect = {"EchoScene-Update.zip": len(pack_bytes),
+              "echoscene-manifest.json": len(target_p.read_bytes())}
+    for name, size in expect.items():
+        assert assets.get(name) == size, \
+            f"asset {name}: got {assets.get(name)}, want {size}"
+    for name in ("EchoScene-Setup.exe", "EchoScene-windows.zip"):
+        assert name in assets, f"fallback asset missing: {name}"
+    print("release assets verified:", assets)
     return 0
 
 

@@ -27,10 +27,32 @@ from .version import is_newer, parse_version
 
 REPO = "REDrighthand05/echo4d"
 LATEST_URL = f"https://api.github.com/repos/{REPO}/releases/latest"
+RELEASES_URL = f"https://api.github.com/repos/{REPO}/releases?per_page=30"
 SETUP_ASSET = "EchoScene-Setup.exe"
 CHECK_TIMEOUT = 6.0          # seconds, per socket operation
 DOWNLOAD_TIMEOUT = 30.0      # seconds, per socket read
 _USER_AGENT = "ECHO-Scene-Updater"
+
+# Optional user proxy for update traffic only ("" = direct). Set
+# from Settings at startup and whenever the user edits it; some
+# networks simply cannot reach GitHub without one, and a silent
+# direct-only failure cost us a whole evening once.
+_PROXY = ""
+
+
+def set_proxy(url):
+    global _PROXY
+    _PROXY = (url or "").strip()
+
+
+def _open(req, timeout):
+    """urlopen that honours the configured proxy. Returns the
+    response (a context manager), exactly like urlopen."""
+    if _PROXY:
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler(
+            {"http": _PROXY, "https": _PROXY}))
+        return opener.open(req, timeout=timeout)
+    return urllib.request.urlopen(req, timeout=timeout)
 
 
 @dataclass
@@ -78,8 +100,43 @@ def _fetch_json(url=LATEST_URL, timeout=CHECK_TIMEOUT):
     req = urllib.request.Request(
         url, headers={"User-Agent": _USER_AGENT,
                       "Accept": "application/vnd.github+json"})
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
+    with _open(req, timeout) as resp:
         return json.loads(resp.read().decode("utf-8"))
+
+
+def fetch_releases():
+    """The recent-releases list (newest first). Raises on any
+    failure -- callers decide what silence is worth."""
+    payload = _fetch_json(RELEASES_URL)
+    if not isinstance(payload, list):
+        raise ValueError("releases payload is not a list")
+    return payload
+
+
+def pick_hop(releases, current_version):
+    """The next single step up from current_version: the release
+    with the SMALLEST parseable version that is still strictly
+    newer. Hot packs are chained (each starts where the previous
+    ended), so a client several versions behind must climb one
+    release at a time; this picks its next handhold. None when
+    already at the top. Pure; never raises."""
+    try:
+        best = None
+        best_key = None
+        for rel in releases or []:
+            if not isinstance(rel, dict):
+                continue
+            if rel.get("draft") or rel.get("prerelease"):
+                continue
+            key = parse_version(rel.get("tag_name"))
+            if key is None or not is_newer(rel.get("tag_name"),
+                                            current_version):
+                continue
+            if best_key is None or key < best_key:
+                best, best_key = rel, key
+        return best
+    except Exception:
+        return None
 
 
 def check_for_update(current_version, fetch=None):
@@ -117,10 +174,10 @@ def download_installer(info: UpdateInfo, dest_dir,
     final = dest_dir / f"EchoScene-Setup-{info.version}.exe"
     part = final.with_name(final.name + ".part")
     opener = open_url or (
-        lambda url: urllib.request.urlopen(
+        lambda url: _open(
             urllib.request.Request(
                 url, headers={"User-Agent": _USER_AGENT}),
-            timeout=timeout))
+            timeout))
     try:
         with opener(info.download_url) as resp, part.open("wb") as out:
             while True:
