@@ -1,0 +1,52 @@
+name: Attach release assets (manifest / update pack)
+
+# Companion to release-attach.yml: that one carries the two big
+# packages; this one carries the small hot-update assets the build
+# produced -- the release manifest (the NEXT release diffs against
+# it) and, from v0.5 on, the update pack. Runs entirely on GitHub
+# so the bytes never travel through a local machine.
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to attach to (e.g. v0.4.0)"
+        required: true
+      build_run:
+        description: "build-windows-exe run id holding the artifacts"
+        required: true
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  attach:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download built artifacts from the build run
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh run download "${{ inputs.build_run }}" --repo "$GITHUB_REPOSITORY" --dir dl
+          find dl -type f -name 'echoscene-manifest.json' -o -type f -name 'EchoScene-Update.zip' | head
+
+      - name: Upload hot-update assets to the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          MANIFEST=$(find dl -name 'echoscene-manifest.json' | head -n 1)
+          test -n "$MANIFEST"
+          gh release upload "${{ inputs.tag }}" "$MANIFEST#echoscene-manifest.json" --repo "$GITHUB_REPOSITORY" --clobber
+          PACK=$(find dl -name 'EchoScene-Update.zip' | head -n 1)
+          if [ -n "$PACK" ]; then
+            gh release upload "${{ inputs.tag }}" "$PACK" --repo "$GITHUB_REPOSITORY" --clobber
+          else
+            echo "no update pack in this build (expected for v0.4)"
+          fi
+
+      - name: Verify assets present on release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release view "${{ inputs.tag }}" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name'
