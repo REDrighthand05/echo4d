@@ -285,12 +285,28 @@ def stage_depth(job_dir: Path) -> dict:
     preview_dir = job_dir / "depth_preview"
     depth_dir.mkdir(exist_ok=True)
     preview_dir.mkdir(exist_ok=True)
+    # Batched inference (DS kernel, merge-gated in
+    # tests/test_depth_batch.py); falls back to per-frame on any
+    # batch-level failure, per frame on a batch miss.
+    existing = [n for n in names if (frames_dir / n).exists()]
+    depths = None
+    try:
+        from .depth import _get_session
+        from .depth_batch import estimate_depth_batch
+
+        depths = estimate_depth_batch(
+            [frames_dir / n for n in existing], _get_session(model),
+            batch_size=4)
+        if depths is None or len(depths) != len(existing):
+            depths = None
+    except Exception:
+        depths = None
     done = []
-    for name in names:
+    for i, name in enumerate(existing):
         src = frames_dir / name
-        if not src.exists():
-            continue
-        depth = estimate_depth(src, model)
+        depth = depths[i] if depths is not None else None
+        if depth is None:
+            depth = estimate_depth(src, model)
         stem = Path(name).stem
         np.save(depth_dir / f"{stem}.npy", depth)
         save_depth_preview(depth, preview_dir / f"{stem}.png")

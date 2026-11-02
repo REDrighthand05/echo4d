@@ -718,6 +718,17 @@ def main():
             pass
 
     bridge = Bridge()
+    try:  # say once, in the log, where depth compute will run
+        import onnxruntime as _ort
+
+        _provs = _ort.get_available_providers()
+        if ("DmlExecutionProvider" in _provs
+                or "CUDAExecutionProvider" in _provs):
+            bridge._log("显卡加速可用，深度计算会走显卡。")
+        else:
+            bridge._log("深度计算使用 CPU（未检测到显卡运行时）。")
+    except Exception:
+        pass
     # The page ships in the loose payload: resolve it next to this
     # file first (that is the copy hot updates replace), and only
     # fall back to the frozen resource path in a source tree.

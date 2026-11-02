@@ -72,8 +72,25 @@ def make_depth_video(video: Path, out_mp4: Path, fps: int = 8,
     model = require_depth_model(prefer_base=False)
     preview_dir = out_mp4.parent / (out_mp4.stem + "_depth")
     preview_dir.mkdir(exist_ok=True)
+    # Batched inference (DS kernel, merge-gated against the single-frame
+    # results in tests/test_depth_batch.py); any batch-level failure
+    # falls back to the original per-frame loop, and a frame the batch
+    # could not do is retried singly below.
+    depths = None
+    try:
+        from .depth import _get_session
+        from .depth_batch import estimate_depth_batch
+
+        depths = estimate_depth_batch(frames, _get_session(model),
+                                      batch_size=4)
+        if depths is None or len(depths) != len(frames):
+            depths = None
+    except Exception:
+        depths = None
     for i, frame in enumerate(frames):
-        depth = estimate_depth(frame, model)
+        depth = depths[i] if depths is not None else None
+        if depth is None:
+            depth = estimate_depth(frame, model)
         save_depth_preview(depth, preview_dir / f"d_{i + 1:05d}.png")
         _report(progress, "depth", i + 1, len(frames))
 

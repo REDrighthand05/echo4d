@@ -1,5 +1,11 @@
 pycolmap>=3.10
-onnxruntime>=1.17
+# Windows ships the DirectML runtime: same onnxruntime package API,
+# plus the DmlExecutionProvider (any DX12 GPU, no CUDA toolkit).
+# Measured on the user's RTX 2060 (2026-11-03): depth Base model
+# 5.15 -> 0.43 s/frame (12.1x), outputs numerically identical.
+# Non-Windows dev machines keep the plain CPU build.
+onnxruntime-directml>=1.17; sys_platform == 'win32'
+onnxruntime>=1.17; sys_platform != 'win32'
 open3d>=0.18
 scipy>=1.11
 numpy>=1.26
