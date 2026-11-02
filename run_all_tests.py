@@ -35,6 +35,12 @@ SUITES = [
     ("hotupdate", [sys.executable, "tests/test_hot_update.py"]),
     ("sensor", [sys.executable, "tests/test_sensor_record.py"]),
     ("tethered", [sys.executable, "tests/test_tethered.py"]),
+    ("paths", [sys.executable, "tests/test_paths.py"]),
+    ("paths", [sys.executable, "tests/test_depth_progress.py"]),
+    ("webshell", [sys.executable, "tests/test_win_controls.py"]),
+    ("parts", [sys.executable, "tests/test_hwaccel.py"]),
+    ("parts", [sys.executable, "tests/test_depth_batch.py"]),
+    ("parts", [sys.executable, "tests/test_frame_feed.py"]),
 ]
 
 
