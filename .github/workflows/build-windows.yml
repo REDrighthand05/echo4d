@@ -107,7 +107,12 @@ jobs:
           if (Test-Path "$prev/echoscene-manifest.json") {
             python tools/build_update_pack.py "$prev/echoscene-manifest.json" dist/EchoScene echoscene-manifest.json EchoScene-Update.zip
             if ($LASTEXITCODE -eq 3) { Write-Host "no pack: base files changed" }
+            elseif ($LASTEXITCODE -ne 0) { Write-Host "pack builder failed ($LASTEXITCODE): installer-only release" }
           } else { Write-Host "no previous manifest: pack skipped" }
+          # Best effort means best effort: gh's exit code (no such
+          # asset on the previous release) otherwise leaks through
+          # $LASTEXITCODE and fails the step AFTER it did its job.
+          exit 0
         env:
           GH_TOKEN: ${{ github.token }}
       - uses: actions/upload-artifact@v4
