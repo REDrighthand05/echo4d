@@ -186,14 +186,34 @@ def updater_checks():
            updater.check_for_update_status("0.3.0", fetch=boom)
            == ("error", None))
 
+    _check("fixture: asset size carried",
+           info.size == 402112554)
+
     with tempfile.TemporaryDirectory() as td:
+        ok_info = updater.UpdateInfo(
+            version=info.version, tag=info.tag,
+            download_url=info.download_url, size=len(b"SETUP-BYTES"))
         got = updater.download_installer(
-            info, Path(td), open_url=lambda url: _FakeResponse(b"SETUP-BYTES"))
+            ok_info, Path(td),
+            open_url=lambda url: _FakeResponse(b"SETUP-BYTES"))
         _check("download lands with versioned name",
                got.name == "EchoScene-Setup-0.4.0.exe"
                and got.read_bytes() == b"SETUP-BYTES")
         _check("no .part left after success",
                not list(Path(td).glob("*.part")))
+
+        # A connection that dies mid-stream looks like a clean EOF;
+        # the truncated file must raise, never land as an installer.
+        try:
+            updater.download_installer(
+                info, Path(td) / "sub",
+                open_url=lambda url: _FakeResponse(b"SETUP-BYTES"))
+            trunc_raised = False
+        except OSError:
+            trunc_raised = True
+        _check("truncated download raises", trunc_raised)
+        _check("truncated download leaves nothing behind",
+               not list((Path(td) / "sub").glob("*")))
 
         def bad_open(url):
             raise OSError("connection reset")

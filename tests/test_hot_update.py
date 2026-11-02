@@ -119,6 +119,44 @@ def run(base: Path):
           (dist_e / "app/echo_app/x.py").read_text(encoding="utf-8")
           == "v2")
 
+    # -- payload lineage drift: extra local payload files ---------
+    # The installer-snapshot lineage can ship payload files the
+    # quick-line lineage never tracked (build-workorder outputs).
+    # They are absent from the target, so the kernel plan deletes
+    # them; the pack carries no such steps. Staging must merge the
+    # extra deletes instead of rejecting the whole update (the
+    # 2026-11-03 live failure: 13 stray files sank a 3-file hop).
+    dist_f = base / "distF"
+    make_tree(dist_f, "0.4.0", "v1")
+    write(dist_f, "app/echo_super/workorders/stray.json", "{}")
+    man_f = build_manifest(dist_f, "0.4.0")
+    (dist_f / ".echo").mkdir(exist_ok=True)
+    (dist_f / ".echo/manifest.json").write_text(json.dumps(man_f),
+                                                encoding="utf-8")
+    info_f = hotupdate.check_hot_update(release, dist_f)
+    check("stray-payload client still eligible", info_f is not None)
+    try:
+        hotupdate.download_and_stage(dist_f, info_f)
+        staged_f = True
+    except hotupdate.HotUpdateError:
+        staged_f = False
+    check("stray deletes merged at staging", staged_f)
+    if staged_f:
+        staged_plan = json.loads(
+            (dist_f / ".echo/staging/plan.json").read_text(
+                encoding="utf-8"))
+        check("merged plan deletes the stray file",
+              "app/echo_super/workorders/stray.json"
+              in staged_plan["to_delete"])
+        result_f = hotapply.apply(dist_f)
+        check("stray-payload applies", result_f.get("ok") is True)
+        check("stray file gone after apply",
+              not (dist_f / "app/echo_super/workorders/stray.json")
+              .exists())
+        check("stray-payload code swapped",
+              (dist_f / "app/echo_app/x.py")
+              .read_text(encoding="utf-8") == "v2")
+
     # -- failure 1: corrupt pack is rejected at staging -------------
     dist_c = base / "distC"
     make_tree(dist_c, "0.4.0", "v1")

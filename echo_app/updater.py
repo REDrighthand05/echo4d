@@ -128,6 +128,7 @@ class UpdateInfo:
     tag: str                 # "v0.5.0"
     download_url: str        # browser_download_url of the setup exe
     page_url: str = ""       # the release page, for reference
+    size: int = 0            # asset size from the release, when known
 
 
 def parse_release(payload, current_version):
@@ -153,11 +154,14 @@ def parse_release(payload, current_version):
             if isinstance(asset, dict) and asset.get("name") == SETUP_ASSET:
                 url = asset.get("browser_download_url")
                 if isinstance(url, str) and url.startswith("https://"):
+                    size = asset.get("size")
                     return UpdateInfo(
                         version=".".join(str(p) for p in version),
                         tag=tag,
                         download_url=url,
-                        page_url=payload.get("html_url") or "")
+                        page_url=payload.get("html_url") or "",
+                        size=size if isinstance(size, int) and size > 0
+                        else 0)
         return None
     except Exception:
         return None
@@ -229,6 +233,15 @@ def check_for_update_status(current_version, fetch=None):
     return ("update", info) if info else ("latest", None)
 
 
+def _content_length(resp) -> int:
+    """The response's Content-Length, or 0 when it does not say."""
+    try:
+        value = resp.headers.get("Content-Length")
+        return int(value) if value else 0
+    except Exception:
+        return 0
+
+
 def download_installer(info: UpdateInfo, dest_dir,
                        open_url=None, timeout=DOWNLOAD_TIMEOUT) -> Path:
     """Stream EchoScene-Setup.exe for `info` into dest_dir and return
@@ -246,12 +259,25 @@ def download_installer(info: UpdateInfo, dest_dir,
                 url, headers={"User-Agent": _USER_AGENT}),
             timeout))
     try:
+        written = 0
         with opener(info.download_url) as resp, part.open("wb") as out:
             while True:
                 chunk = resp.read(1 << 18)
                 if not chunk:
                     break
                 out.write(chunk)
+                written += len(chunk)
+            expected = info.size or _content_length(resp)
+            if expected and written != expected:
+                # A dropped connection can look exactly like a clean
+                # EOF to urllib; without this check the truncated
+                # file was renamed and launched, and the user got
+                # Inno's "setup files are corrupted" instead of a
+                # plain "download failed" (seen live, 2026-11-03:
+                # 60 MB of a 640 MB installer).
+                raise OSError(
+                    f"installer download incomplete: {written} of "
+                    f"{expected} bytes")
         part.replace(final)
         return final
     except Exception:

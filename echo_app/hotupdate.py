@@ -92,7 +92,17 @@ def _fetch(url: str) -> bytes:
 
     request = urllib.request.Request(url, headers={"User-Agent": _USER_AGENT})
     with updater._open(request, _TIMEOUT) as response:
-        return response.read()
+        data = response.read()
+        try:
+            length = response.headers.get("Content-Length")
+            if length and int(length) != len(data):
+                raise HotUpdateError(
+                    f"download incomplete: {len(data)} of {length} bytes")
+        except HotUpdateError:
+            raise
+        except Exception:
+            pass
+        return data
 
 
 def sha256_bytes(data: bytes) -> str:
@@ -170,12 +180,20 @@ def download_and_stage(root: Path, info: HotInfo) -> Path:
         expected = plan_update(_payload_view(local),
                                _payload_view(target))
         if ([c["path"] for c in plan["to_change"]]
-                != [c["path"] for c in expected["to_change"]]
-                or plan["to_delete"] != expected["to_delete"]):
+                != [c["path"] for c in expected["to_change"]]):
             raise HotUpdateError("pack plan differs from kernel plan")
-        if plan.get("steps") != order_apply_steps(expected):
+        if not set(plan["to_delete"]) <= set(expected["to_delete"]):
+            raise HotUpdateError(
+                "pack deletes files the kernel plan keeps")
+        if plan.get("steps") != order_apply_steps(plan):
             raise HotUpdateError("pack steps differ from kernel order")
-        for change in expected["to_change"]:
+        target_files = _payload_view(target)["files"]
+        for change in plan["to_change"]:
+            entry = target_files.get(change["path"])
+            if (entry is None or entry["sha256"] != change["sha256"]
+                    or entry["size"] != change["size"]):
+                raise HotUpdateError(
+                    f"pack change is not the target file: {change['path']}")
             staged = staging / "files" / change["path"]
             if not staged.exists():
                 raise HotUpdateError(f"staged file missing: {change['path']}")
@@ -183,6 +201,29 @@ def download_and_stage(root: Path, info: HotInfo) -> Path:
             if (len(data) != change["size"]
                     or sha256_bytes(data) != change["sha256"]):
                 raise HotUpdateError(f"staged file corrupt: {change['path']}")
+        # The two manifest lineages (installer snapshot vs quick
+        # line) do not list identical payloads: a client can carry
+        # payload files the pack's base never knew -- build-workorder
+        # outputs shipped in one snapshot, say. Those files are
+        # absent from the target, so the kernel plan deletes them,
+        # but the pack cannot carry delete steps it was never built
+        # with, and exact plan equality used to reject the whole hot
+        # update for them (seen live, 2026-11-03: 13 stray workorder
+        # files sank a 3-file update). Merge the extra deletes into
+        # the staged plan instead: a delete needs no content, it is
+        # derived from the release's own target manifest, and the
+        # wrench backs every deleted file up, so it stays
+        # rollback-safe.
+        extra_deletes = [p for p in expected["to_delete"]
+                         if p not in set(plan["to_delete"])]
+        if extra_deletes:
+            plan = dict(plan)
+            plan["to_delete"] = sorted(set(plan["to_delete"])
+                                       | set(extra_deletes))
+            plan["steps"] = order_apply_steps(plan)
+            (staging / "plan.json").write_text(
+                json.dumps(plan, ensure_ascii=False, indent=1),
+                encoding="utf-8")
         return staging
     except HotUpdateError:
         _wipe_staging(root)
