@@ -1,3 +1,38 @@
+<div align="center">
+
+# 回声 ECHO
+
+### 把生活存成可以重进的现场
+*Store life as a place you can walk back into.*
+
+[![Latest release](https://img.shields.io/github/v/release/REDrighthand05/echo4d?label=最新版&style=for-the-badge&color=38bdf8&logo=github)](https://github.com/REDrighthand05/echo4d/releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/REDrighthand05/echo4d/total?label=下载量&style=for-the-badge&color=2ea44f&logo=github)](https://github.com/REDrighthand05/echo4d/releases)
+![License](https://img.shields.io/badge/License-MIT-0e75b6?style=for-the-badge)
+
+<img src="docs/media/echo-scan.jpg" width="92%" alt="ECHO 的视角：一个房间，被存成线框、点云与光"/>
+
+</div>
+
+## 📦 先拿软件用：EchoScene（Windows · 免费）
+
+**一段慢速环绕拍摄的视频拖进去，等它显影，拿回一个能双击打开的 3D 场景。**
+
+- 🖱️ 拖入视频 → 本地生成场景文件 + GLB / PLY，全程在你自己的电脑上，不上传。
+- 👁️ 边生成边看：实时预览看着房间一点点长出来，可全屏旋转缩放。
+- 🔥 **v0.4 起带热更新**：装一次底座，之后每个新版本只下几 MB，软件里自己完成。
+- 📏 真尺度按画面里的参照物量出，标「估计」——量到的、估的、生成的、未知的，永远分得清清楚楚。
+
+<div align="center">
+
+[![⬇ 下载 EchoScene 最新版](https://img.shields.io/badge/⬇_下载_EchoScene-最新版-38bdf8?style=for-the-badge&logo=windows)](https://github.com/REDrighthand05/echo4d/releases/latest)
+[![全部版本](https://img.shields.io/badge/全部版本-Releases-0e75b6?style=for-the-badge&logo=github)](https://github.com/REDrighthand05/echo4d/releases)
+
+</div>
+
+> **两条线**：产品（EchoScene）在 `product/echo-scene` 分支上迭代，本页下方是研究线——重建内核、42 条路线棋盘与逐条验证体系的完整记录。两条线共享同一条记录格式与同一套证据纪律。
+
+---
+
 # 回声 ECHO / echo4d
 
 **标定 RGB-D → 带观测证据的三维表面 → 时间回放。**
