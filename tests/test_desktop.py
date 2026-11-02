@@ -299,6 +299,8 @@ def expected_actions(ctx):
     cur, hist = ctx.current, ctx.history
     return {
         appstate.PICK_VIDEO: not busy,
+        appstate.START_SCENE: not busy and ctx.video_selected,
+        appstate.START_DEPTH: not busy and ctx.video_selected,
         appstate.PICK_DEPTH: not busy,
         appstate.PLAY_DEPTH: not busy and ctx.depth_ready,
         appstate.OPEN_SCENE: cur.scene,
@@ -328,12 +330,12 @@ def matrix_checks():
     for job_state in appstate.JobState:
         for cur in flag_combos:
             for hist in flag_combos:
-                for depth_ready, checking, downloading in itertools.product(
-                        [False, True], repeat=3):
+                for depth_ready, checking, downloading, vsel in \
+                        itertools.product([False, True], repeat=4):
                     ctx = appstate.ActionContext(
                         job_state=job_state, current=cur, history=hist,
                         depth_ready=depth_ready, update_checking=checking,
-                        update_downloading=downloading)
+                        update_downloading=downloading, video_selected=vsel)
                     got = appstate.compute_actions(ctx)
                     if set(got) != set(appstate.ALL_ACTIONS):
                         mismatches.append(("action set", ctx))
@@ -361,6 +363,21 @@ def matrix_checks():
            acts[appstate.CHANGE_JOBS_FOLDER] is False)
     _check("while running: tray quit still offered (app confirms)",
            acts[appstate.TRAY_QUIT] is True)
+    chosen = appstate.compute_actions(appstate.ActionContext(
+        video_selected=True))
+    _check("video chosen, idle: scene and depth both startable",
+           chosen[appstate.START_SCENE] is True
+           and chosen[appstate.START_DEPTH] is True)
+    unchosen = appstate.compute_actions(appstate.ActionContext())
+    _check("no video chosen: neither job can start",
+           unchosen[appstate.START_SCENE] is False
+           and unchosen[appstate.START_DEPTH] is False
+           and unchosen[appstate.PICK_VIDEO] is True)
+    running_chosen = appstate.compute_actions(appstate.ActionContext(
+        job_state=appstate.JobState.RUNNING, video_selected=True))
+    _check("running with a video chosen: still cannot start",
+           running_chosen[appstate.START_SCENE] is False
+           and running_chosen[appstate.START_DEPTH] is False)
     empty = appstate.compute_actions(appstate.ActionContext())
     _check("idle with no job: every output action calm-disabled",
            not any(empty[a] for a in (

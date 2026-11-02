@@ -14,8 +14,10 @@ generous padding, and small eased motions (the progress bar glides,
 preview frames crossfade, an idle breathing dot waits in the preview
 card) — all animated with plain after() loops that never block the
 UI thread. The shell is built with CustomTkinter; the 生成场景 tile
-is the drop zone: drag a video onto it (or click it to pick one),
-watch the progress bar under the header, and the finished scene
+is the drop zone: drag a video onto it (or click to pick one) --
+dropping only selects the file; 生成场景 or 深度视频 then starts
+from the same selection -- watch the progress bar under the header,
+and the finished scene
 opens by itself. Detailed progress text goes to a collapsible
 terminal panel docked on the right (the 日志 edge tab); the main
 area only ever shows the plain-language status line. All heavy
@@ -302,21 +304,46 @@ def job_file_flags(job):
 
 
 # Meta-style palette: soft grey window, white rounded cards, one blue.
-C_BG = "#F0F2F5"         # window surface
+C_BG = "#E9EDF2"         # window surface (sits inside the frost tone)
 C_SURFACE = "#FFFFFF"    # cards (header / tiles / log panel)
 C_BORDER = "#DADDE1"     # subtle card borders
 C_INK = "#1C1E21"        # primary text
 C_SUBINK = "#606770"     # secondary text
 C_ACCENT = "#0064D1"     # Meta blue
 C_ACCENT_HOVER = "#0053AD"
-C_BTN2 = "#E4E6EB"       # secondary pill buttons
-C_BTN2_HOVER = "#D8DADF"
+C_BTN2 = "#E9EDF3"       # secondary pill buttons (pale glass)
+C_BTN2_HOVER = "#DCE3EC"
 C_TRACK = "#E4E6EB"      # progress bar track
-C_LOG_BG = "#F7F8FA"     # log textbox surface
+C_LOG_BG = "#F4F6FA"     # log textbox surface
 C_DRAG = "#E7F3FF"       # drag-over highlight
 C_PREVIEW_BG = "#05070E"  # live preview card surface (Detroit dark)
 CORNER = 24              # card corner radius (Muse-app scale)
 CORNER_SM = 16           # inner surfaces
+
+# Frontend skin variants (user review, 2026-11-02): how far every
+# element melts into the frosted-glass wall. "now" = the look as
+# shipped in the working tree; a/b/c are the review candidates.
+SKINS = {
+    "now": dict(corner=24, pane_milk=100, pane_blur=19, p_fg=C_ACCENT, p_hover=C_ACCENT_HOVER,
+                p_text="#FFFFFF", s_fg=C_BTN2, s_hover=C_BTN2_HOVER,
+                bar_h=10, track=C_TRACK),
+    # A 轻透: glass pills -- pale blue primary, near-clear secondaries,
+    # clearer panes, softer corners, hairline progress.
+    "a": dict(corner=28, pane_milk=58, pane_blur=14, p_fg="#AAC7FA", p_hover="#97B8F7",
+              p_text="#1E4FD6", s_fg="#EFF4FB", s_hover="#E1EBF9",
+              bar_h=6, track="#DFE8F3"),
+    # B 浮卡: tidy floating cards -- panes more present, buttons crisp
+    # white glass, primary stays a confident solid blue.
+    "b": dict(corner=20, pane_milk=118, pane_blur=16, p_fg=C_ACCENT, p_hover=C_ACCENT_HOVER,
+              p_text="#FFFFFF", s_fg="#FAFCFF", s_hover="#EBF1FA",
+              bar_h=8, track="#E3E9F2"),
+    # C 极简: buttons unloaded entirely -- text resting on the glass,
+    # panes barely there, the wall and its beads carry the window.
+    "c": dict(corner=32, pane_milk=26, pane_blur=10, p_fg="transparent", p_hover="#E1EBF9",
+              p_text=C_ACCENT, s_fg="transparent", s_hover="#E7EFFA",
+              bar_h=3, track="#E6EDF6"),
+}
+SKIN = SKINS.get(os.environ.get("ECHO_SKIN", "a"), SKINS["now"])
 
 # Preferred UI font first; whatever the platform actually has wins, so
 # the window looks native on Windows and still builds anywhere else.
@@ -367,6 +394,17 @@ def main():
     root.minsize(860, 700)
     root.configure(fg_color=C_BG)
 
+    # Frosted-glass skin (echo_app.glass): graffiti behind glass,
+    # every card a translucent pane. Decoration only -- if it fails,
+    # the window keeps its flat colours and nothing else changes.
+    wall = None
+    try:
+        from echo_app.glass import GlassWall
+
+        wall = GlassWall(root)
+    except Exception:
+        wall = None
+
     # --- settings + the one explicit app state (echo_app.appstate) ---
     from echo_app import settings as settings_mod
     from echo_app.appstate import ActionContext, JobState, compute_actions
@@ -376,7 +414,7 @@ def main():
     settings = settings_mod.load_settings()
     JOBS_ROOT = settings.jobs_root_path()
 
-    state = {"job": None, "busy": False, "history": [],
+    state = {"job": None, "busy": False, "history": [], "video": None,
              "depth_video": None, "panel_open": False,
              "job_state": JobState.IDLE, "busy_kind": None,
              "hidden": False, "progress_text": "空闲",
@@ -405,12 +443,14 @@ def main():
         if primary:
             return ctk.CTkButton(
                 master, text=text, font=F(font_size), height=36,
-                corner_radius=18, fg_color=C_ACCENT,
-                hover_color=C_ACCENT_HOVER, text_color="#FFFFFF",
+                corner_radius=18, fg_color=SKIN["p_fg"],
+                hover_color=SKIN["p_hover"], text_color=SKIN["p_text"],
                 state=state)
         return ctk.CTkButton(
             master, text=text, font=F(font_size), height=36,
-            corner_radius=18, fg_color=C_BTN2, hover_color=C_BTN2_HOVER,
+            corner_radius=18, fg_color=SKIN["s_fg"],
+            hover_color=SKIN["s_hover"],
+            border_width=0,
             text_color=C_INK, state=state)
 
     outer = ctk.CTkFrame(root, fg_color=C_BG, corner_radius=0)
@@ -420,9 +460,11 @@ def main():
     center.pack(side="left", fill="both", expand=True)
 
     # --- collapsible terminal panel (right edge, hidden by default) -----
-    panel = ctk.CTkFrame(outer, fg_color=C_SURFACE, corner_radius=CORNER,
-                         border_width=1, border_color=C_BORDER, width=340)
+    panel = ctk.CTkFrame(outer, fg_color=C_SURFACE, corner_radius=SKIN["corner"],
+                         border_width=0, border_color=C_BORDER, width=340)
     panel.pack_propagate(False)
+    if wall is not None:
+        wall.attach(panel, name="log", milk=SKIN["pane_milk"], blur=SKIN["pane_blur"], radius=SKIN["corner"])
     ctk.CTkLabel(panel, text="日志", font=F(12, True),
                  text_color=C_INK).pack(anchor="w", padx=14, pady=(12, 4))
     logbox = ctk.CTkTextbox(panel, height=120, state="disabled", font=F(11),
@@ -446,13 +488,17 @@ def main():
             panel.pack(side="right", fill="y", padx=(0, 4), pady=10)
             state["panel_open"] = True
             btn_log.configure(text="日\n志\n‹")
+        if wall is not None:
+            root.after(60, wall.refresh)
 
     btn_log.configure(command=toggle_panel)
 
     # --- header band ------------------------------------------------------
-    header = ctk.CTkFrame(center, fg_color=C_SURFACE, corner_radius=CORNER,
-                          border_width=1, border_color=C_BORDER)
-    header.pack(fill="x", padx=12, pady=(12, 8))
+    header = ctk.CTkFrame(center, fg_color=C_SURFACE, corner_radius=SKIN["corner"],
+                          border_width=0, border_color=C_BORDER)
+    header.pack(fill="x", padx=8, pady=(10, 6))
+    if wall is not None:
+        wall.attach(header, name="header", milk=SKIN["pane_milk"], blur=SKIN["pane_blur"], radius=SKIN["corner"])
     # Update banner: stays packed away until a check actually finds a
     # newer version -- one calm line + one button, no nagging.
     update_box = ctk.CTkFrame(header, fg_color="transparent")
@@ -461,19 +507,29 @@ def main():
     update_label.pack(anchor="e", padx=(0, 2))
     btn_update = pill(update_box, "下载并安装", primary=True, font_size=12)
     btn_update.pack(anchor="e", pady=(4, 0))
-    ctk.CTkLabel(header, text="ECHO 回声", font=F(22, True),
-                 text_color=C_INK).pack(anchor="w", padx=18, pady=(12, 0))
-    ctk.CTkLabel(header, text="视频变 3D 场景", font=F(12),
-                 text_color=C_SUBINK).pack(anchor="w", padx=18, pady=(0, 12))
+    _hdr_title = ctk.CTkLabel(header, text="ECHO 回声", font=F(22, True),
+                              text_color=C_INK)
+    _hdr_title.pack(anchor="w", padx=18, pady=(12, 0))
+    _hdr_sub = ctk.CTkLabel(header, text="视频变 3D 场景", font=F(12),
+                            text_color=C_SUBINK)
+    _hdr_sub.pack(anchor="w", padx=18, pady=(0, 12))
+    if wall is not None:
+        wall.textify(_hdr_title)
+        wall.textify(_hdr_sub)
+        wall.textify(update_label)
 
     # --- progress band (plain-language status only) -----------------------
     band = ctk.CTkFrame(center, fg_color=C_BG, corner_radius=0)
     band.pack(fill="x")
+    if wall is not None:
+        wall.attach(band, name="band", milk=SKIN["pane_milk"], blur=SKIN["pane_blur"], radius=14)
     status = ctk.CTkLabel(band, text="还没开始。", font=F(12),
                           text_color=C_INK)
     status.pack(anchor="w", padx=16, pady=(2, 0))
-    bar = ctk.CTkProgressBar(band, mode="determinate", height=10,
-                             corner_radius=5, fg_color=C_TRACK,
+    if wall is not None:
+        wall.textify(status)
+    bar = ctk.CTkProgressBar(band, mode="determinate", height=SKIN["bar_h"],
+                             corner_radius=5, fg_color=SKIN["track"],
                              progress_color=C_ACCENT)
     bar.set(0)
     bar.pack(fill="x", padx=16, pady=(4, 8))
@@ -483,71 +539,128 @@ def main():
     # card (the star of the redesign) spanning both rows; small tiles
     # under the columns; settings strip across the bottom.
     tiles = ctk.CTkFrame(center, fg_color=C_BG, corner_radius=0)
-    tiles.pack(fill="both", expand=True, padx=12, pady=(2, 12))
+    tiles.pack(fill="both", expand=True, padx=8, pady=(2, 8))
     tiles.columnconfigure(0, weight=5)
     tiles.columnconfigure(1, weight=7)
     tiles.rowconfigure(1, weight=1)
 
     def make_tile(row, column, columnspan=1, rowspan=1,
-                  padx=(0, 0), pady=(0, 0)):
-        tile = ctk.CTkFrame(tiles, fg_color=C_SURFACE, corner_radius=CORNER,
-                            border_width=1, border_color=C_BORDER)
+                  padx=(0, 0), pady=(0, 0), glass=True, glass_name=None):
+        tile = ctk.CTkFrame(tiles, fg_color=C_SURFACE, corner_radius=SKIN["corner"],
+                            border_width=0, border_color=C_BORDER)
         tile.grid(row=row, column=column, columnspan=columnspan,
                   rowspan=rowspan, sticky="nsew", padx=padx, pady=pady)
+        if wall is not None and glass:
+            wall.attach(tile, name=glass_name, milk=SKIN["pane_milk"], blur=SKIN["pane_blur"], radius=SKIN["corner"])
         return tile
+
+    _ICON_GLYPHS = {"spark": "✦", "list": "☰", "depth": "◐",
+                    "grid": "▦", "gear": "⚙", "folder": "▤",
+                    "refresh": "↻"}
+
+    def icon_label(parent, key, size=26, dark=False, font_size=22):
+        """A section icon drawn in the glass-bead style of the skin
+        (echo_app.icons); falls back to the old text glyph if the
+        drawn icon cannot be built."""
+        try:
+            from echo_app.icons import icon_pil
+
+            img = ctk.CTkImage(icon_pil(key, size * 3, dark=dark),
+                               size=(size, size))
+            return ctk.CTkLabel(parent, text="", image=img)
+        except Exception:
+            return ctk.CTkLabel(
+                parent, text=_ICON_GLYPHS.get(key, "✦"), font=F(font_size),
+                text_color="#7FB2FF" if dark else C_ACCENT)
 
     def tile_header(tile, glyph, title, desc):
         parts = [
-            ctk.CTkLabel(tile, text=glyph, font=F(22), text_color=C_ACCENT),
+            icon_label(tile, glyph),
             ctk.CTkLabel(tile, text=title, font=F(14, True),
                          text_color=C_INK),
-            ctk.CTkLabel(tile, text=desc, font=F(11), text_color=C_SUBINK,
+            ctk.CTkLabel(tile, text=desc, font=F(12), text_color=C_SUBINK,
                          justify="left"),
         ]
+        if wall is not None:
+            wall.textify(parts[1])
+            wall.textify(parts[2])
         parts[0].pack(anchor="w", padx=14, pady=(12, 0))
         parts[1].pack(anchor="w", padx=14)
         parts[2].pack(anchor="w", padx=14, pady=(0, 6))
         return parts
 
-    # Hero tile: generating a scene. It IS the drop zone.
-    zone_idle = "把视频拖到这里，或者点这里选择视频\n选一段慢慢走一圈拍的视频，剩下的交给我。"
-    hero = make_tile(0, 0, padx=(0, 4), pady=(2, 8))
+    # Hero tile: the input zone. It IS the drop zone. Dropping or
+    # picking a video only SELECTS it -- starting is a separate,
+    # explicit choice between 生成场景 and 深度视频, so neither job
+    # can swallow a file the user meant for the other.
+    zone_idle = "把视频拖到这里，或者点「选择视频」。\n选好后点「开始生成」建模，或者先做一段深度视频。"
+    hero = make_tile(0, 0, padx=(0, 4), pady=(2, 8), glass_name="hero")
     try:
         hero.configure(cursor="hand2")
     except Exception:
         pass
-    hero_parts = tile_header(hero, "✦", "生成场景", zone_idle)
+    hero_parts = tile_header(hero, "spark", "生成场景", zone_idle)
     hero_desc = hero_parts[2]
     hero_btn_row = ctk.CTkFrame(hero, fg_color="transparent")
-    hero_btn_row.pack(anchor="w", padx=14, pady=(0, 12))
-    btn_pick = pill(hero_btn_row, "选择视频", primary=True, font_size=12)
+    hero_btn_row.pack(anchor="w", padx=14, pady=(0, 4))
+    btn_pick = pill(hero_btn_row, "选择视频", font_size=12)
     btn_pick.pack(side="left")
-    btn_open = pill(hero_btn_row, "打开场景", font_size=12, state="disabled")
-    btn_open.pack(side="left", padx=(8, 0))
-    btn_folder = pill(hero_btn_row, "打开文件夹", font_size=12, state="disabled")
+    btn_start_scene = pill(hero_btn_row, "开始生成", primary=True,
+                           font_size=12, state="disabled")
+    btn_start_scene.pack(side="left", padx=(8, 0))
+    btn_hero_depth = pill(hero_btn_row, "深度视频", font_size=12,
+                          state="disabled")
+    btn_hero_depth.pack(side="left", padx=(8, 0))
+    hero_out_row = ctk.CTkFrame(hero, fg_color="transparent")
+    hero_out_row.pack(anchor="w", padx=14, pady=(0, 12))
+    btn_open = pill(hero_out_row, "打开场景", font_size=12, state="disabled")
+    btn_open.pack(side="left")
+    btn_folder = pill(hero_out_row, "打开文件夹", font_size=12, state="disabled")
     btn_folder.pack(side="left", padx=(8, 0))
-    btn_preview = pill(hero_btn_row, "过程回放", font_size=12, state="disabled")
+    btn_preview = pill(hero_out_row, "过程回放", font_size=12, state="disabled")
     btn_preview.pack(side="left", padx=(8, 0))
-    btn_replay = pill(hero_btn_row, "路线回放", font_size=12, state="disabled")
+    btn_replay = pill(hero_out_row, "路线回放", font_size=12, state="disabled")
     btn_replay.pack(side="left", padx=(8, 0))
 
     def hero_bg(color):
-        # CTk labels/rows are transparent, so tinting the card is enough.
+        # CTk labels/rows are transparent, so tinting the card is
+        # enough -- and the hero's glass pane tints along with it.
         hero.configure(fg_color=color)
+        if wall is not None:
+            try:
+                wall.tint("hero", None if color == C_SURFACE else color)
+            except Exception:
+                pass
 
     # Live preview card: while a job runs, the scene grows here from
     # the job's own intermediate products (echo_app.live_preview).
     # Idle, it waits with one calm line and a breathing dot.
-    preview_tile = make_tile(0, 1, rowspan=2, padx=(4, 0), pady=(2, 8))
+    preview_tile = make_tile(0, 1, rowspan=2, padx=(4, 0), pady=(2, 8),
+                             glass=False)
     preview_tile.configure(fg_color=C_PREVIEW_BG, border_width=0)
     preview_head = ctk.CTkFrame(preview_tile, fg_color="transparent")
     preview_head.pack(fill="x", padx=16, pady=(12, 0))
-    ctk.CTkLabel(preview_head, text="✦", font=F(18),
-                 text_color="#7FB2FF").pack(side="left")
+    icon_label(preview_head, "spark", size=20, dark=True).pack(side="left")
     ctk.CTkLabel(preview_head, text="实时预览", font=F(14, True),
                  text_color="#E8EDF5").pack(side="left", padx=(6, 0))
-    preview_dot = ctk.CTkLabel(preview_head, text="●", font=F(10),
-                               text_color="#3D5A80")
+    # The breathing dot is a little pearl in the same bead style:
+    # a dim bead and a bright bead, swapped by the breath tick.
+    dot_imgs = {}
+    try:
+        from echo_app.icons import icon_pil as _icon_pil
+
+        dot_imgs = {
+            "dim": ctk.CTkImage(_icon_pil("dot_dim", 36), size=(12, 12)),
+            "bright": ctk.CTkImage(_icon_pil("dot_bright", 36),
+                                   size=(12, 12)),
+        }
+        preview_dot = ctk.CTkLabel(preview_head, text="",
+                                   image=dot_imgs["dim"])
+    except Exception:
+        dot_imgs = {}
+        preview_dot = ctk.CTkLabel(preview_head, text="●", font=F(10),
+                                   text_color="#3D5A80")
+    dot_state = {"bright": False}
     preview_dot.pack(side="left", padx=(8, 0))
     btn_preview_full = ctk.CTkButton(
         preview_head, text="全屏", font=F(11), height=28, width=64,
@@ -563,10 +676,10 @@ def main():
 
     # History tile: previous scenes, each reopenable.
     hist_tile = make_tile(1, 0, padx=(0, 4))
-    tile_header(hist_tile, "☰", "历史场景", "以前做好的场景，选一个点“打开”。")
+    tile_header(hist_tile, "list", "历史场景", "以前做好的场景，选一个点“打开”。")
     hist_list = tk.Listbox(hist_tile, height=4, font=FT(11), relief="flat",
                            borderwidth=0, highlightthickness=0,
-                           bg=C_SURFACE, fg=C_INK,
+                           bg="#EDF1F6", fg=C_INK,
                            selectbackground=C_ACCENT,
                            selectforeground="#FFFFFF")
     hist_list.pack(fill="both", expand=True, padx=14, pady=(2, 6))
@@ -583,7 +696,7 @@ def main():
 
     # Depth-video tile.
     depth_tile = make_tile(2, 0, padx=(0, 4))
-    tile_header(depth_tile, "◐", "深度视频", "把一段视频做成黑白的深度画面。")
+    tile_header(depth_tile, "depth", "深度视频", "把选好的视频做成黑白的深度画面；还没选就先挑一段。")
     depth_btn_row = ctk.CTkFrame(depth_tile, fg_color="transparent")
     depth_btn_row.pack(anchor="w", padx=14, pady=(2, 12))
     btn_depth = pill(depth_btn_row, "深度视频", primary=True, font_size=12)
@@ -594,7 +707,7 @@ def main():
 
     # Marker-sheet tile.
     marker_tile = make_tile(2, 1, padx=(4, 0))
-    tile_header(marker_tile, "▦", "打印标记纸",
+    tile_header(marker_tile, "grid", "打印标记纸",
                 "打印出来贴在房间里，帮场景认准大小。")
     btn_markers = pill(marker_tile, "打印标记纸", primary=True, font_size=12)
     btn_markers.pack(anchor="w", padx=14, pady=(2, 12))
@@ -604,7 +717,7 @@ def main():
     # the running version so both are visible without opening anything.
     settings_tile = make_tile(3, 0, columnspan=2, pady=(8, 0))
     settings_parts = tile_header(
-        settings_tile, "⚙", "设置",
+        settings_tile, "gear", "设置",
         f"任务文件夹：{JOBS_ROOT} · 当前版本 v{APP_VERSION}")
     settings_desc = settings_parts[2]
     btn_settings = pill(settings_tile, "打开设置", font_size=12)
@@ -636,7 +749,12 @@ def main():
 
     def _breath_tick():
         try:
-            if state["busy"]:
+            if dot_imgs:
+                bright = True if state["busy"] else not dot_state["bright"]
+                dot_state["bright"] = bright
+                preview_dot.configure(
+                    image=dot_imgs["bright" if bright else "dim"])
+            elif state["busy"]:
                 preview_dot.configure(text_color="#7FB2FF")
             else:
                 cur = preview_dot.cget("text_color")
@@ -969,6 +1087,7 @@ def main():
             current=job_file_flags(state["job"]),
             history=job_file_flags(selected_history_job()),
             depth_ready=bool(state["depth_video"]),
+            video_selected=bool(state["video"]),
             update_checking=state["update_checking"],
             update_downloading=state["update_downloading"])
         acts = compute_actions(ctx)
@@ -980,8 +1099,10 @@ def main():
             CHANGE_JOBS_FOLDER, CHECK_UPDATE, DOWNLOAD_UPDATE,
             HIST_FOLDER, HIST_OPEN, HIST_PREVIEW, HIST_REPLAY,
             OPEN_FOLDER, OPEN_PREVIEW, OPEN_REPLAY, OPEN_SCENE,
-            PICK_DEPTH, PICK_VIDEO, PLAY_DEPTH)
+            PICK_DEPTH, PICK_VIDEO, PLAY_DEPTH, START_DEPTH, START_SCENE)
         on(btn_pick, acts[PICK_VIDEO])
+        on(btn_start_scene, acts[START_SCENE])
+        on(btn_hero_depth, acts[START_DEPTH])
         on(btn_depth, acts[PICK_DEPTH])
         on(btn_depth_play, acts[PLAY_DEPTH])
         on(btn_open, acts[OPEN_SCENE])
@@ -1169,8 +1290,23 @@ def main():
             return False
         return True
 
-    def start(video: Path):
+    def select_video(path: Path):
+        """Choosing a video only selects it. Nothing starts here:
+        the user then picks 生成场景 or 深度视频 for the same file."""
         if state["busy"]:
+            return
+        if not check_video(path):
+            return
+        state["video"] = path
+        hero_desc.configure(
+            text=f"已选：{path.name}\n点「开始生成」建模；也可以先做一段深度视频。")
+        status.configure(text="视频选好了。点「开始生成」，或者做深度视频。")
+        append_log(f"已选视频：{path.name}")
+        refresh_actions()
+
+    def start(video: Path = None):
+        video = video or state["video"]
+        if video is None or state["busy"]:
             return  # reentrancy guard: a second job can never start
         if not check_video(video):
             return
@@ -1189,10 +1325,11 @@ def main():
             filetypes=[("视频", "*.mp4 *.mov *.mkv *.avi"), ("所有文件", "*.*")],
         )
         if path:
-            start(Path(path))
+            select_video(Path(path))
 
-    def start_depth(video: Path):
-        if state["busy"]:
+    def start_depth(video: Path = None):
+        video = video or state["video"]
+        if video is None or state["busy"]:
             return  # same guard as scene jobs: one thing at a time
         if not check_video(video):
             return
@@ -1208,12 +1345,16 @@ def main():
     def pick_depth(_event=None):
         if state["busy"]:
             return
+        if state["video"] is not None:
+            start_depth(state["video"])
+            return
         path = filedialog.askopenfilename(
             title="选择视频（做深度视频）",
             filetypes=[("视频", "*.mp4 *.mov *.mkv *.avi"), ("所有文件", "*.*")],
         )
         if path:
-            start_depth(Path(path))
+            select_video(Path(path))
+            start_depth(state["video"])
 
     def play_depth():
         out = state["depth_video"]
@@ -1431,15 +1572,14 @@ def main():
 
         def card():
             frame = ctk.CTkFrame(win, fg_color=C_SURFACE,
-                                 corner_radius=CORNER, border_width=1,
+                                 corner_radius=SKIN["corner"], border_width=0,
                                  border_color=C_BORDER)
             frame.pack(fill="x", padx=12, pady=(12, 0))
             return frame
 
         def card_title(frame, glyph, title):
-            ctk.CTkLabel(frame, text=glyph, font=F(18),
-                         text_color=C_ACCENT).pack(anchor="w", padx=14,
-                                                    pady=(10, 0))
+            icon_label(frame, glyph, size=22,
+                       font_size=18).pack(anchor="w", padx=14, pady=(10, 0))
             ctk.CTkLabel(frame, text=title, font=F(14, True),
                          text_color=C_INK).pack(anchor="w", padx=14)
 
@@ -1447,7 +1587,7 @@ def main():
         # job (the button is disabled while one runs, and the note
         # says why); existing scenes are never moved or deleted.
         folder_card = card()
-        card_title(folder_card, "▤", "任务文件夹")
+        card_title(folder_card, "folder", "任务文件夹")
         folder_label = ctk.CTkLabel(
             folder_card, text=str(JOBS_ROOT), font=F(11),
             text_color=C_SUBINK, justify="left", wraplength=480)
@@ -1481,7 +1621,7 @@ def main():
 
         # Behaviour switches: applied (and saved) the moment they flip.
         behaviour_card = card()
-        card_title(behaviour_card, "✦", "使用习惯")
+        card_title(behaviour_card, "spark", "使用习惯")
         autostart_var = tk.BooleanVar(value=settings.autostart)
         tray_var = tk.BooleanVar(value=settings.close_to_tray)
 
@@ -1511,7 +1651,7 @@ def main():
 
         # Version + manual update check.
         update_card = card()
-        card_title(update_card, "↻", "版本与更新")
+        card_title(update_card, "refresh", "版本与更新")
         ctk.CTkLabel(update_card, text=f"当前版本 v{APP_VERSION}",
                      font=F(12), text_color=C_INK).pack(
                          anchor="w", padx=14, pady=(2, 0))
@@ -1536,6 +1676,8 @@ def main():
         win.bind("<Destroy>", on_settings_destroy)
 
     btn_pick.configure(command=pick)
+    btn_start_scene.configure(command=lambda: start())
+    btn_hero_depth.configure(command=lambda: start_depth())
     btn_open.configure(command=open_scene)
     btn_folder.configure(command=open_folder)
     btn_preview.configure(command=open_preview)
@@ -1571,19 +1713,72 @@ def main():
             return
         if len(paths) > 1:
             append_log("一次先做一段视频，先用第一段。")
-        start(Path(paths[0]))
+        select_video(Path(paths[0]))
 
     if dnd_ready:
-        for widget in [hero, root] + hero_parts:
+        # The hero's glass pane covers the tile, so drops land on it:
+        # it registers as a drop target alongside the tile itself.
+        hero_glass = []
+        if wall is not None and "hero" in wall.labels:
+            hero_glass = [wall.labels["hero"]]
+        for widget in [hero, root] + hero_parts + hero_glass:
             widget.drop_target_register(DND_FILES)
             widget.dnd_bind("<<Drop>>", on_drop)
-        for widget in [hero] + hero_parts:
+        for widget in [hero] + hero_parts + hero_glass:
             widget.dnd_bind("<<DragEnter>>", lambda _e: hero_bg(C_DRAG))
             widget.dnd_bind("<<DragLeave>>", lambda _e: hero_bg(C_SURFACE))
 
     root.protocol("WM_DELETE_WINDOW", on_close)
     refresh_history()
     refresh_actions()
+    if wall is not None:
+        # First panes once the layout settles, then re-hang them
+        # (debounced) whenever the window changes size.
+        root.after(90, wall.refresh)
+        _glass_pending = {"id": None}
+
+        def _glass_on_configure(event):
+            if event.widget is not root:
+                return
+            if _glass_pending["id"] is not None:
+                try:
+                    root.after_cancel(_glass_pending["id"])
+                except Exception:
+                    pass
+            _glass_pending["id"] = root.after(320, wall.refresh)
+
+        root.bind("<Configure>", _glass_on_configure, add="+")
+        # The graffiti comes alive behind the glass: scattered into
+        # 3D beads that dodge the mouse while the app sits idle,
+        # frozen flat while a job owns the machine. Decoration only.
+        try:
+            wall.start_animation(lambda: bool(state["busy"]))
+        except Exception:
+            pass
+        # Text on glass must not sit on a box: hand the wall every
+        # label/textbox living on a glass frame, so each one's
+        # background is matched to the glass directly beneath it.
+        try:
+            def _collect(frame, out):
+                for child in frame.winfo_children():
+                    if isinstance(child, ctk.CTkTextbox):
+                        out.append(child)
+                    elif isinstance(child, ctk.CTkLabel):
+                        try:
+                            if child.cget("text"):
+                                out.append(child)
+                        except Exception:
+                            pass
+                    _collect(child, out)
+
+            tracked = [hist_list]
+            for fr in (header, band, hero, hist_tile, depth_tile,
+                       marker_tile, settings_tile, panel):
+                _collect(fr, tracked)
+            wall.track_labels(tracked)
+            wall.track_grout([outer, center, tiles])
+        except Exception:
+            pass
     # The tray goes up before anything can hide to it; both the
     # close-to-tray behaviour and a --tray (autostart) launch check
     # tray.running first, so a tray that failed to start can never

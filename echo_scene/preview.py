@@ -38,15 +38,7 @@ Usage:
 natively for that length and pinned to the promo track's accents: a
 curated set of hero dissolves keeps the exact photo/crush/particle
 speeds of the full replay (nothing is sped up), the remaining frames'
-points rain in as a quick montage. In promo the camera TRACKS the
-photos: it travels with each hero photo, arriving at its wall as the
-photo lands, breathing through the crush, then easing on to the next
-one (all motion smootherstep/cubic-eased, never constant-speed). The
-photos render in true colour at 2x atlas resolution with NO frame --
-their edges feather out through a black gradient to transparent. The
-wireframe environment is Detroit-style surface dressing: grids lying
-on the room's actual floor and wall surfaces (support-clipped in
-build_preview_data, never a bounding-box cage) plus scattered shards.
+points rain in as a quick montage.
 
 The page honours URL hashes for stills/debugging: #t=0.45&still=1 seeks
 to a timeline fraction, pauses and hides the control bar.
@@ -125,224 +117,6 @@ def _floor_level(y: np.ndarray) -> float:
     hist, edges = np.histogram(y, bins=160, range=(lo, hi))
     k = int(np.argmax(hist))
     return float(0.5 * (edges[k] + edges[k + 1]))
-
-
-def _surface_grid(pts, floor_y, step=0.45):
-    """Detroit-style grids that lie ON the room's actual surfaces.
-
-    Deterministic support clipping: a grid segment survives only where
-    real points of that surface exist nearby, so the wireframe hugs
-    the floor and the walls instead of floating as a bounding-box
-    cage. The export frame fixes only the up axis, so the room's wall
-    yaw is estimated first (the angle whose wall-band XZ profile is
-    most concentrated -- an explicit, inspectable objective), the
-    extraction runs in that room frame, and segments are rotated back.
-    Wall planes sit at the extreme percentiles of the wall-band
-    points; the support test then erases every stretch of plane the
-    room does not actually have. Returns [[x1,y1,z1,x2,y2,z2,shade]].
-    """
-    x, y, z = pts[:, 0], pts[:, 1], pts[:, 2]
-
-    # -- dominant wall yaw from the wall-band XZ profile ---------------
-    band0 = (y >= floor_y + 0.25) & (y <= floor_y + 2.35)
-    cx0 = float(x[band0].mean())
-    cz0 = float(z[band0].mean())
-    dxb, dzb = x[band0] - cx0, z[band0] - cz0
-
-    def _profile_score(th):
-        c, s = np.cos(th), np.sin(th)
-        tot = 0.0
-        for v in (dxb * c + dzb * s, -dxb * s + dzb * c):
-            h, _ = np.histogram(
-                v, bins=np.arange(v.min(), v.max() + 0.1, 0.1))
-            tot += float((h.astype(np.float64) ** 2).sum())
-        return tot
-
-    coarse = np.arange(0.0, np.pi / 2, np.deg2rad(1.0))
-    th = float(coarse[int(np.argmax([_profile_score(t) for t in coarse]))])
-    fine = np.arange(th - np.deg2rad(1.0), th + np.deg2rad(1.01),
-                     np.deg2rad(0.2))
-    th = float(fine[int(np.argmax([_profile_score(t) for t in fine]))])
-    ct, st = float(np.cos(th)), float(np.sin(th))
-    dxs, dzs = x - cx0, z - cz0
-    x = cx0 + dxs * ct + dzs * st
-    z = cz0 - dxs * st + dzs * ct
-
-    xmin, xmax = float(x.min()), float(x.max())
-    zmin, zmax = float(z.min()), float(z.max())
-    top = floor_y + min(2.7, float(np.percentile(y, 99.5)) - floor_y)
-    cell = 0.3
-
-    def occupancy(a, b, a0, a1, b0, b1):
-        H, _, _ = np.histogram2d(
-            a, b, bins=[np.arange(a0, a1 + cell, cell),
-                        np.arange(b0, b1 + cell, cell)])
-        occ = H > 0
-        d = occ.copy()
-        for da in (-1, 0, 1):
-            for db in (-1, 0, 1):
-                d |= np.roll(np.roll(occ, da, axis=0), db, axis=1)
-        d[[0, -1], :] = False
-        d[:, [0, -1]] = False
-        return d
-
-    def runs_along(support, coords, gap=2):
-        """Runs of supported samples, bridging gaps of <= gap samples
-        (small occlusions/holes in the surface coverage)."""
-        out, i, n = [], 0, len(support)
-        while i < n:
-            if not support[i]:
-                i += 1
-                continue
-            last, miss, k = i, 0, i
-            while k + 1 < n and miss <= gap:
-                k += 1
-                if support[k]:
-                    last, miss = k, 0
-                else:
-                    miss += 1
-            if coords[last] - coords[i] >= 0.3:
-                out.append((float(coords[i]), float(coords[last])))
-            i = last + 1
-        return out
-
-    def support_at(occ, a0, b0, av, bv):
-        ia = int((av - a0) / cell)
-        ib = int((bv - b0) / cell)
-        if 0 <= ia < occ.shape[0] and 0 <= ib < occ.shape[1]:
-            return bool(occ[ia, ib])
-        return False
-
-    segs = []
-
-    def add(p, q, shade):
-        segs.append([p[0], p[1], p[2], q[0], q[1], q[2], shade])
-
-    # -- floor: lines along x and along z on the floor plane itself
-    band = np.abs(y - floor_y) <= 0.10
-    occ = occupancy(x[band], z[band], xmin - cell, xmax + cell,
-                    zmin - cell, zmax + cell)
-    xs = np.arange(xmin, xmax + 1e-6, 0.15)
-    zs = np.arange(zmin, zmax + 1e-6, 0.15)
-    g = np.arange(np.floor(zmin / step) * step, zmax + 1e-6, step)
-    for zg in g:
-        sup = [support_at(occ, xmin - cell, zmin - cell, v, zg) for v in xs]
-        for a, b in runs_along(sup, xs):
-            add((a, floor_y, float(zg)), (b, floor_y, float(zg)), 0.55)
-    g = np.arange(np.floor(xmin / step) * step, xmax + 1e-6, step)
-    for xg in g:
-        sup = [support_at(occ, xmin - cell, zmin - cell, xg, v) for v in zs]
-        for a, b in runs_along(sup, zs):
-            add((float(xg), floor_y, a), (float(xg), floor_y, b), 0.55)
-
-    # -- walls: grids that hug the boundary surface LOCALLY. For each
-    # direction, take a thick slab of points near the extreme plane;
-    # a grid run is kept where the (along, height) occupancy supports
-    # it, and the run is offset to the LOCAL median surface depth, so
-    # the lines sit on the actual wall even where it is not planar.
-    band = (y >= floor_y + 0.25) & (y <= floor_y + 2.35)
-    xb, zb = x[band], z[band]
-    ys = np.arange(floor_y + 0.1, top + 1e-6, 0.15)
-    levels = np.arange(floor_y + step, top - 0.05, step)
-
-    def wall_grid(coord, along, plane, sign, shade):
-        """Grid runs in (along, y, depth) space for one wall.
-
-        depth d = (plane - coord) * sign: 0 at the extreme plane,
-        positive inward. Returns (u, v, d) endpoint tuples."""
-        d_all = (plane - coord) * sign
-        # the real surface is the depth of maximum point concentration
-        # inside the extreme, not the extreme itself (monocular fuzz
-        # pushes the percentile plane well past the actual wall)
-        in_y = (y >= floor_y) & (y <= top)
-        h_d, e_d = np.histogram(d_all[in_y],
-                                bins=np.arange(-0.2, 1.85, 0.15))
-        k = int(np.argmax(h_d))
-        if h_d[k] < 120:
-            return []
-        d_star = float(0.5 * (e_d[k] + e_d[k + 1]))
-        slab = (d_all >= d_star - 0.38) & (d_all <= d_star + 0.38) & in_y
-        if slab.sum() < 50:
-            return []
-        occ = occupancy(along[slab], y[slab], along.min() - cell,
-                        along.max() + cell, floor_y, top + cell)
-        # local median depth per (along, y) cell of 0.45
-        gc = 0.45
-        a0 = np.floor(along.min() / gc) * gc
-        na = int((along.max() - a0) / gc) + 1
-        nv = int((top - floor_y) / gc) + 1
-        med = np.full((na, nv), np.nan)
-        ia = ((along[slab] - a0) / gc).astype(int)
-        iv = ((y[slab] - floor_y) / gc).astype(int)
-        dsl = d_all[slab]
-        for a_ in range(na):
-            m = ia == a_
-            if not m.any():
-                continue
-            for v_ in range(nv):
-                mm = m & (iv == v_)
-                if mm.sum() >= 2:
-                    med[a_, v_] = float(np.median(dsl[mm]))
-
-        def depth_at(u, v):
-            a_ = int((u - a0) / gc)
-            v_ = int((v - floor_y) / gc)
-            for r in (0, 1, 2):
-                for da in range(-r, r + 1):
-                    for dv in range(-r, r + 1):
-                        aa, vv = a_ + da, v_ + dv
-                        if 0 <= aa < na and 0 <= vv < nv \
-                                and not np.isnan(med[aa, vv]):
-                            return float(med[aa, vv])
-            return None
-
-        out = []
-        us = np.arange(along.min(), along.max() + 1e-6, 0.15)
-        for ug in np.arange(np.floor(along.min() / step) * step,
-                            along.max() + 1e-6, step):
-            sup, dep = [], []
-            for v in ys:
-                dv = depth_at(ug, v) if support_at(
-                    occ, along.min() - cell, floor_y, ug, v) else None
-                sup.append(dv is not None)
-                dep.append(dv)
-            for a, b in runs_along(sup, ys):
-                ia_ = list(ys).index(a)
-                ib_ = list(ys).index(b)
-                out.append((float(ug), a, dep[ia_], float(ug), b, dep[ib_]))
-        for vg in levels:
-            sup, dep = [], []
-            for u in us:
-                dv = depth_at(u, vg) if support_at(
-                    occ, along.min() - cell, floor_y, u, vg) else None
-                sup.append(dv is not None)
-                dep.append(dv)
-            for a, b in runs_along(sup, us):
-                ia_ = list(us).index(a)
-                ib_ = list(us).index(b)
-                out.append((a, float(vg), dep[ia_], b, float(vg), dep[ib_]))
-        return [(u1, v1, d1, u2, v2, d2, shade)
-                for (u1, v1, d1, u2, v2, d2) in out]
-
-    for sgn, pct in ((1.0, 99.0), (-1.0, 1.0)):
-        p = float(np.percentile(xb, pct))
-        for (u1, v1, d1, u2, v2, d2, sh) in wall_grid(x, z, p, sgn, 0.38):
-            add((p - sgn * d1, v1, u1), (p - sgn * d2, v2, u2), sh)
-        p = float(np.percentile(zb, pct))
-        for (u1, v1, d1, u2, v2, d2, sh) in wall_grid(z, x, p, sgn, 0.38):
-            add((u1, v1, p - sgn * d1), (u2, v2, p - sgn * d2), sh)
-
-    # -- rotate every segment back into the export frame ----------------
-    def _inv(px, pz):
-        du, dw = px - cx0, pz - cz0
-        return (cx0 + du * ct - dw * st, cz0 + du * st + dw * ct)
-
-    out = []
-    for sgm in segs:
-        ax, az = _inv(sgm[0], sgm[2])
-        bx, bz = _inv(sgm[3], sgm[5])
-        out.append([ax, sgm[1], az, bx, sgm[4], bz, sgm[6]])
-    return out
 
 
 def _decimate_mesh(verts, vcols, tris, max_tris=90000):
@@ -702,18 +476,14 @@ def build_preview_data(job_dir: Path, provenance_dir: Path | None,
     route_frac = (cum / max(cum[-1], 1e-9)).astype(np.float32)
 
     # -- thumbnail atlas --------------------------------------------------------
-    # promo close-ups push right into the landed photo, so the promo cut
-    # gets 2x atlas tiles (the photo must stay a real photo up close);
-    # the 72 s replay keeps the compact tiles.
-    tile_w, tile_h = (252, 448) if promo else (ATLAS_TILE_W, ATLAS_TILE_H)
     rows = int(np.ceil(n_cards / ATLAS_COLS))
-    atlas = Image.new("RGB", (ATLAS_COLS * tile_w, rows * tile_h),
+    atlas = Image.new("RGB", (ATLAS_COLS * ATLAS_TILE_W, rows * ATLAS_TILE_H),
                       (8, 12, 20))
     for i, stem in enumerate(card_stems):
         img = Image.open(frames_dir / f"{stem}.jpg").convert("RGB")
-        img = img.resize((tile_w, tile_h), Image.LANCZOS)
-        atlas.paste(img, ((i % ATLAS_COLS) * tile_w,
-                          (i // ATLAS_COLS) * tile_h))
+        img = img.resize((ATLAS_TILE_W, ATLAS_TILE_H), Image.LANCZOS)
+        atlas.paste(img, ((i % ATLAS_COLS) * ATLAS_TILE_W,
+                          (i // ATLAS_COLS) * ATLAS_TILE_H))
     buf = io.BytesIO()
     atlas.save(buf, "JPEG", quality=80)
     atlas_jpeg = buf.getvalue()
@@ -753,7 +523,6 @@ def build_preview_data(job_dir: Path, provenance_dir: Path | None,
     lo = pts.min(axis=0)
     hi = pts.max(axis=0)
     manifest = {
-        "promo": bool(promo),
         "duration": tl_dur,
         "n_points": int(n_pts),
         "n_frames": n_diss,
@@ -767,11 +536,9 @@ def build_preview_data(job_dir: Path, provenance_dir: Path | None,
         "mesh_t0": tl_mesh[0], "mesh_t1": tl_mesh[1],
         "dim_t0": tl_dim[0], "dim_t1": tl_dim[1],
         "atlas": {"cols": ATLAS_COLS, "rows": rows,
-                  "tile_w": tile_w, "tile_h": tile_h},
+                  "tile_w": ATLAS_TILE_W, "tile_h": ATLAS_TILE_H},
         "frames": frame_meta,
         "closeups": closeups,
-        "surface_grid": _surface_grid(pts, _floor_level(pts[:, 1]))
-                        if promo else None,
         "cards": [{"stem": s, "atlas": card_atlas_idx[s]} for s in card_stems],
         "provenance": prov_note,
         "mesh_note": mesh_note,
@@ -908,7 +675,6 @@ const meshPos = NV ? takeF32(3 * NV) : null, meshCol = NV ? takeU8(3 * NV) : nul
 const meshIdx = NT ? takeU32(3 * NT) : null;
 const FRAMES = MANIFEST.frames, DUR = MANIFEST.duration;
 const CLOSEUPS = MANIFEST.closeups || [];
-const PROMO = !!MANIFEST.promo;
 
 /* ---------------- mat4 (column-major) ---------------- */
 function mMul(a, b) { const o = new Float32Array(16);
@@ -954,20 +720,13 @@ const cardP = prog(VS_HEAD + `
     vUV = aUV; vLoc = aLocal;
     gl_Position = uMVP * vec4(aPos, 1.0); }`,
   `#version 300 es
-  precision highp float; uniform sampler2D uTex; uniform float uTrue;
+  precision highp float; uniform sampler2D uTex;
   in vec2 vUV; in vec2 vLoc; in float vA; in float vHot; out vec4 o;
   void main(){
     vec3 c = texture(uTex, vUV).rgb;
-    float e = min(min(vLoc.x, 1.0 - vLoc.x), min(vLoc.y, 1.0 - vLoc.y));
-    if (uTrue > 0.5) {
-      /* promo: true colours, no frame -- edges feather through black
-         to transparent, same as the landed photos */
-      float fe = smoothstep(0.0, 0.20, e);
-      c *= fe * (0.9 + 0.35 * vHot);
-      o = vec4(c, vA * fe); if (o.a < 0.004) discard; return;
-    }
     float lum0 = dot(c, vec3(0.299, 0.587, 0.114));
     c = mix(c, vec3(lum0) * vec3(0.80, 0.94, 1.22), 0.30);
+    float e = min(min(vLoc.x, 1.0 - vLoc.x), min(vLoc.y, 1.0 - vLoc.y));
     float border = 1.0 - smoothstep(0.015, 0.05, e);
     c = mix(c, vec3(0.35, 0.65, 1.0), border * (0.55 + 0.45 * vHot));
     c *= 0.82 + 0.5 * vHot;
@@ -1021,25 +780,16 @@ const photoP = prog(VS_HEAD + `
   out vec2 vUV; out vec2 vLoc;
   void main(){ vUV = aUV; vLoc = aUV; gl_Position = uMVP * vec4(aPos, 1.0); }`,
   `#version 300 es
-  precision highp float; uniform sampler2D uTex; uniform float uOpacity; uniform vec4 uRect; uniform float uTrue;
+  precision highp float; uniform sampler2D uTex; uniform float uOpacity; uniform vec4 uRect;
   in vec2 vUV; in vec2 vLoc; out vec4 o;
   void main(){
     vec2 uv = vec2(mix(uRect.x, uRect.z, vUV.x), mix(uRect.y, uRect.w, vUV.y));
     vec3 c = texture(uTex, uv).rgb;
+    float lum0 = dot(c, vec3(0.299, 0.587, 0.114));
+    c = mix(c, vec3(lum0) * vec3(0.80, 0.94, 1.22), 0.30);
     float e = min(min(vLoc.x, 1.0 - vLoc.x), min(vLoc.y, 1.0 - vLoc.y));
-    if (uTrue > 0.5) {
-      /* promo: the landed photo is the REAL photo -- true colours, no
-         blue ghost grade and NO frame at all: the edges feather out
-         through a black gradient to transparent, dissolving into the
-         dark room */
-      float fe = smoothstep(0.0, 0.16, e);
-      o = vec4(c * fe, uOpacity * fe); if (o.a < 0.004) discard; return;
-    } else {
-      float lum0 = dot(c, vec3(0.299, 0.587, 0.114));
-      c = mix(c, vec3(lum0) * vec3(0.80, 0.94, 1.22), 0.30);
-      float border = 1.0 - smoothstep(0.004, 0.02, e);
-      c = mix(c, vec3(0.45, 0.72, 1.0), border * 0.8);
-    }
+    float border = 1.0 - smoothstep(0.004, 0.02, e);
+    c = mix(c, vec3(0.45, 0.72, 1.0), border * 0.8);
     o = vec4(c, uOpacity); if (o.a < 0.004) discard; }`);
 const meshP = prog(VS_HEAD + `
   layout(location=0) in vec3 aPos; layout(location=1) in vec3 aCol;
@@ -1074,10 +824,6 @@ function tileUV(idx, lx, ly) {
 
 /* grid: floor grid + grid-filled walls */
 const bmin = MANIFEST.bbox_min, bmax = MANIFEST.bbox_max, floorY = MANIFEST.floor_y;
-/* promo: grid segments pre-clipped in Python to lie ON the room's
-   real floor/walls (never a bounding-box cage) */
-const surfGrid = (PROMO && MANIFEST.surface_grid && MANIFEST.surface_grid.length)
-  ? MANIFEST.surface_grid : null;
 let gridVAO, gridCount = 0;
 {
   const cx = (bmin[0] + bmax[0]) / 2, cz = (bmin[2] + bmax[2]) / 2;
@@ -1085,11 +831,7 @@ let gridVAO, gridCount = 0;
   const topY = floorY + (bmax[1] - floorY);
   const pos = [], shade = [];
   function line(a, b, s) { pos.push(a[0], a[1], a[2], b[0], b[1], b[2]); shade.push(s, s); }
-  if (surfGrid) {
-    for (const s of surfGrid)
-      line([s[0], s[1], s[2]], [s[3], s[4], s[5]], s[6]);
-  }
-  if (!surfGrid) { const step = 0.75;
+  const step = 0.75;
   for (let x = cx - hx; x <= cx + hx + 1e-4; x += step)
     line([x, floorY, cz - hz], [x, floorY, cz + hz], Math.abs(x - cx) < step / 2 ? 0.9 : 0.35);
   for (let z = cz - hz; z <= cz + hz + 1e-4; z += step)
@@ -1110,7 +852,6 @@ let gridVAO, gridCount = 0;
     }
     for (let y = floorY + step; y < topY - 1e-4; y += step)
       line([a[0], y, a[1]], [b[0], y, b[1]], 0.22);
-  }
   }
   /* scattered blue line shards strewn through the whole volume --
      ambient dressing like in the android-vision shots: thin streaks of
@@ -1339,8 +1080,6 @@ function caption(t) {
   return '完成 ✓';
 }
 function smooth(a, b, x) { const p = Math.max(0, Math.min(1, (x - a) / (b - a))); return p * p * (3 - 2 * p); }
-function smoother01(u) { u = Math.max(0, Math.min(1, u)); return u * u * u * (u * (u * 6 - 15) + 10); }
-function easeInOutCubic(u) { u = Math.max(0, Math.min(1, u)); return u < 0.5 ? 4 * u * u * u : 1 - Math.pow(-2 * u + 2, 3) / 2; }
 function activeFrame(t) {
   let act = null;
   for (const f of FRAMES) { if (f.slot <= t && t <= f.photo_out_end) act = f; else if (f.slot > t) break; }
@@ -1355,85 +1094,6 @@ function photoOpacity(f, t) {
   return Math.max(0, 1 - (tt - db) / Math.max(f.photo_out_end - f.dissolve_begin, 1e-4));
 }
 let photoFrame = null;
-
-/* ---------------- promo tracking camera ----------------
-   The camera FOLLOWS the photos: a keyframed track through every
-   hero's watch pose (the same framing math as the close-ups). It
-   arrives at each wall exactly as that photo lands, breathes through
-   the crush on the accent heroes, then eases on to follow the next
-   photo -- event to event, never a constant-speed glide. */
-let TRACK = null, TRACK_BLEND_T = 16.05;
-if (PROMO && FRAMES.length) {
-  const accentSlots = new Set(CLOSEUPS.map(c => c.slot));
-  const watchOf = f => {
-    const C = f.centre, V = f.z, X = f.x, d = f.dmed;
-    const pc = [C[0] + V[0] * d, C[1] + V[1] * d, C[2] + V[2] * d];
-    const hw = d * Math.max(f.cx, f.W - f.cx) / f.f;
-    const hh = d * Math.max(f.cy, f.H - f.cy) / f.f;
-    /* pulled back ~15% vs the old close-up math (and the distance cap
-       loosened) so a followed photo sits IN the frame with the room
-       around it -- the travel needs context to read as travel */
-    const k = Math.min(Math.max(2.35 * Math.max(hw, hh), 0.7), 1.30 * d);
-    return {
-      eye: [pc[0] - V[0] * k + X[0] * hw * 0.38,
-            pc[1] - V[1] * k + X[1] * hw * 0.38 + hh * 0.22,
-            pc[2] - V[2] * k + X[2] * hw * 0.38],
-      tgt: pc,
-    };
-  };
-  const wideOf = (az, el, r) => ({
-    eye: [centre[0] + r * Math.cos(el) * Math.sin(az),
-          centre[1] + r * Math.sin(el),
-          centre[2] + r * Math.cos(el) * Math.cos(az)],
-    tgt: centre.slice(),
-  });
-  const keys = [];
-  const w0 = wideOf(0.75, 0.36, radius0);
-  keys.push({ t: 0, eye: w0.eye, tgt: w0.tgt, hero: -1, slot: 0 });
-  const w1 = wideOf(0.84, 0.33, radius0 * 0.99);
-  keys.push({ t: 2.7, eye: w1.eye, tgt: w1.tgt, hero: -1, slot: 0 });
-  FRAMES.forEach((f, j) => {
-    const w = watchOf(f);
-    keys.push({ t: f.slot, eye: w.eye, tgt: w.tgt, hero: j, slot: f.slot });
-    const next = FRAMES[j + 1];
-    if (accentSlots.has(f.slot) && next) {
-      const holdEnd = Math.min(f.slot + 0.22, next.slot - 0.30);
-      if (holdEnd > f.slot + 0.05)
-        keys.push({ t: holdEnd, eye: w.eye, tgt: w.tgt, hero: j, slot: f.slot });
-    }
-    if (!next)
-      keys.push({ t: f.points_t1 + 0.3, eye: w.eye, tgt: w.tgt, hero: j, slot: f.slot });
-  });
-  const wEnd = wideOf(1.18, 0.34, radius0);
-  keys.push({ t: TRACK_BLEND_T, eye: wEnd.eye, tgt: wEnd.tgt, hero: -1, slot: 0 });
-  TRACK = keys;
-}
-function trackEval(t) {
-  const K = TRACK;
-  if (t <= K[0].t) return { eye: K[0].eye, tgt: K[0].tgt };
-  for (let i = 0; i < K.length - 1; i++) {
-    const a = K[i], b = K[i + 1];
-    if (t >= a.t && t <= b.t) {
-      const u = smoother01((t - a.t) / Math.max(b.t - a.t, 1e-4));
-      let eye = [0, 1, 2].map(k => a.eye[k] + (b.eye[k] - a.eye[k]) * u);
-      const tgt = [0, 1, 2].map(k => a.tgt[k] + (b.tgt[k] - a.tgt[k]) * u);
-      if (a.hero >= 0 && a.hero === b.hero) {
-        /* holding on one photo: a faint breathing drift along the
-           view axis so the settled shot stays alive */
-        const br = 1 + 0.013 * Math.sin((t - a.slot) * 2.1);
-        eye = [0, 1, 2].map(k => tgt[k] + (eye[k] - tgt[k]) * br);
-      } else if (a.hero !== b.hero) {
-        /* travelling between photos: a shallow arc, not a chord */
-        const chord = Math.hypot(b.eye[0] - a.eye[0], b.eye[1] - a.eye[1],
-                                 b.eye[2] - a.eye[2]);
-        eye[1] += 4 * u * (1 - u) * 0.04 * chord;
-      }
-      return { eye, tgt };
-    }
-  }
-  const last = K[K.length - 1];
-  return { eye: last.eye, tgt: last.tgt };
-}
 
 /* ---------------- render loop ---------------- */
 function resize() {
@@ -1461,12 +1121,7 @@ function frame(now) {
                target[2] + radius * Math.cos(el) * Math.cos(az)];
     azPhase = az - time * 0.028;
   } else {
-    /* promo master path: the same total azimuth swing, but eased
-       cubic-in-out over the whole cut -- slow off the mark, quicker
-       through the middle, settling gently into the final hold
-       instead of one constant robotic rotation speed */
-    const azA = PROMO ? azPhase + (0.028 * DUR) * easeInOutCubic(time / DUR)
-                      : azPhase + time * 0.028;
+    const azA = azPhase + time * 0.028;
     const elA = 0.34 + 0.09 * Math.sin(time * 0.13);
     const rA = radius0 * (1.0 + 0.05 * Math.sin(time * 0.07));
     baseTgt = centre;
@@ -1475,16 +1130,7 @@ function frame(now) {
                centre[2] + rA * Math.cos(elA) * Math.cos(azA)];
   }
   let eye = baseEye, lookTgt = baseTgt;
-  if (!manual && PROMO && TRACK) {
-    /* tracking camera: follow the photos event to event; after the
-       last settle, hand back to the ambient master shot */
-    const tp = trackEval(time);
-    if (time > TRACK_BLEND_T) {
-      const w = smoother01((time - TRACK_BLEND_T) / (DUR - TRACK_BLEND_T));
-      eye = [0, 1, 2].map(k => tp.eye[k] + (baseEye[k] - tp.eye[k]) * w);
-      lookTgt = [0, 1, 2].map(k => tp.tgt[k] + (baseTgt[k] - tp.tgt[k]) * w);
-    } else { eye = tp.eye; lookTgt = tp.tgt; }
-  } else if (!manual) {
+  if (!manual) {
     for (const c of CLOSEUPS) {
       if (time >= c.t0 && time <= c.t2) {
         const w = Math.min(smooth(c.t0, c.t0 + 1.1, time),
@@ -1497,7 +1143,6 @@ function frame(now) {
       }
     }
   }
-  if (PROMO) { window.__eye = eye; window.__tgt = lookTgt; }
   const mvp = mMul(mPersp(0.96, canvas.width / canvas.height, 0.1, 300), mLook(eye, lookTgt, [0, 1, 0]));
   const uScale = canvas.height / 850;
   const uRoute = Math.max(0, Math.min(1, (time - MANIFEST.route_t0) / (MANIFEST.route_t1 - MANIFEST.route_t0)));
@@ -1508,24 +1153,19 @@ function frame(now) {
   gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
   gl.enable(gl.DEPTH_TEST); gl.disable(gl.CULL_FACE);
 
-  /* grid -- in promo it is drawn AFTER mesh+points as a HUD overlay
-     (see below); the plain replay keeps the original order */
+  /* grid */
   gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
   gl.depthMask(false);
-  if (!PROMO) {
-    gl.useProgram(gridP); gl.uniformMatrix4fv(uni(gridP, 'uMVP'), false, mvp);
-    gl.uniform1f(uni(gridP, 'uAlpha'), 0.30 * smooth(0, 2, time));
-    gl.bindVertexArray(gridVAO); gl.drawArrays(gl.LINES, 0, gridCount);
-  }
+  gl.useProgram(gridP); gl.uniformMatrix4fv(uni(gridP, 'uMVP'), false, mvp);
+  gl.uniform1f(uni(gridP, 'uAlpha'), 0.30 * smooth(0, 2, time));
+  gl.bindVertexArray(gridVAO); gl.drawArrays(gl.LINES, 0, gridCount);
 
   /* mesh (fades in at the end) */
   if (meshVAO && uMesh > 0.003) {
     gl.depthMask(true);
-    if (PROMO) { gl.enable(gl.POLYGON_OFFSET_FILL); gl.polygonOffset(1, 2); }
     gl.useProgram(meshP); gl.uniformMatrix4fv(uni(meshP, 'uMVP'), false, mvp);
     gl.uniform1f(uni(meshP, 'uOpacity'), uMesh * 0.92);
     gl.bindVertexArray(meshVAO); gl.drawElements(gl.TRIANGLES, NT * 3, gl.UNSIGNED_INT, 0);
-    if (PROMO) gl.disable(gl.POLYGON_OFFSET_FILL);
     gl.depthMask(false);
   }
 
@@ -1533,15 +1173,6 @@ function frame(now) {
   gl.useProgram(ptsP); gl.uniformMatrix4fv(uni(ptsP, 'uMVP'), false, mvp);
   gl.uniform1f(uni(ptsP, 'uTime'), time); gl.uniform1f(uni(ptsP, 'uScale'), uScale);
   gl.bindVertexArray(ptsVAO); gl.drawArrays(gl.POINTS, 0, NP);
-
-  /* promo: the Detroit surface grid overlays the geometry (depth-tested
-     against the polygon-offset mesh) so grids read ON their surfaces
-     instead of being swallowed by the surface drawn over them */
-  if (PROMO) {
-    gl.useProgram(gridP); gl.uniformMatrix4fv(uni(gridP, 'uMVP'), false, mvp);
-    gl.uniform1f(uni(gridP, 'uAlpha'), 0.5 * smooth(0, 2, time));
-    gl.bindVertexArray(gridVAO); gl.drawArrays(gl.LINES, 0, gridCount);
-  }
 
   /* photo on the wall */
   if (act && atlasReady) {
@@ -1551,7 +1182,6 @@ function frame(now) {
       const A = MANIFEST.atlas, col = act.atlas % A.cols, row = Math.floor(act.atlas / A.cols);
       gl.useProgram(photoP); gl.uniformMatrix4fv(uni(photoP, 'uMVP'), false, mvp);
       gl.uniform1f(uni(photoP, 'uOpacity'), op);
-      gl.uniform1f(uni(photoP, 'uTrue'), PROMO ? 1 : 0);
       gl.uniform4f(uni(photoP, 'uRect'), col / A.cols, 1 - row / A.rows, (col + 1) / A.cols, 1 - (row + 1) / A.rows);
       gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, atlasTex);
       gl.uniform1i(uni(photoP, 'uTex'), 0);
@@ -1562,7 +1192,6 @@ function frame(now) {
   /* frame cards */
   if (atlasReady) {
     gl.useProgram(cardP); gl.uniformMatrix4fv(uni(cardP, 'uMVP'), false, mvp);
-    gl.uniform1f(uni(cardP, 'uTrue'), PROMO ? 1 : 0);
     gl.uniform1f(uni(cardP, 'uTime'), time);
     gl.uniform1f(uni(cardP, 'uActive'), act ? act.atlas : -1);
     gl.uniform1f(uni(cardP, 'uDim'), uDim);

@@ -515,3 +515,72 @@ def register_ds_batch4(registry: Registry | None = None) -> Registry:
     reg.add(Kernel("sample_track", ("keyframe_track",), "track_value",
                    _sample_track_kernel, cost=1.0))
     return reg
+
+
+# ---------------------------------------------------------------------------
+# DS batch 5 (2026-11-02): the hot-update kernels, registered after
+# Muse's bench verification (echo_super/ds_batch5.py holds the code,
+# echo_super/test_ds_batch5.py the benches; spec in
+# workorders/WO-update-kernels.md):
+#   manifest_digest   manifest -> digest  实测 · 已验
+#   plan_update       manifest x manifest -> plan  实测 · 已验
+#   verify_listing    manifest x listing -> report 实测 · 已验
+#   order_apply_steps plan -> steps       实测 · 已验
+# Bench results: all green, including digest recomputed independently,
+# plan diffs exact on hand fixtures, verify semantics (extra files never
+# fail), apply order (version stamp flips last), and ValueError on
+# unsafe paths / malformed shapes. First DS attempt burned its budget
+# on reasoning; the retry with a minimal-deliberation brief landed
+# clean and passed review line-by-line unchanged.
+
+from .ds_batch5 import (  # noqa: E402
+    manifest_digest as _manifest_digest_fn,
+    order_apply_steps as _order_apply_steps_fn,
+    plan_update as _plan_update_fn,
+    verify_listing as _verify_listing_fn,
+)
+
+KERNEL_META.update({
+    "manifest_digest": {"evidence": "实测", "status": "已验"},
+    "plan_update": {"evidence": "实测", "status": "已验"},
+    "verify_listing": {"evidence": "实测", "status": "已验"},
+    "order_apply_steps": {"evidence": "实测", "status": "已验"},
+})
+
+
+def _manifest_digest_kernel(manifest_obj: EchoObject):
+    return manifest_obj.derive(
+        "digest", _manifest_digest_fn(manifest_obj.data),
+        source="kernel:manifest_digest", **KERNEL_META["manifest_digest"])
+
+
+def _plan_update_kernel(old_obj: EchoObject, new_obj: EchoObject):
+    return new_obj.derive(
+        "plan", _plan_update_fn(old_obj.data, new_obj.data),
+        source="kernel:plan_update", **KERNEL_META["plan_update"])
+
+
+def _verify_listing_kernel(manifest_obj: EchoObject, listing_obj: EchoObject):
+    return manifest_obj.derive(
+        "report", _verify_listing_fn(manifest_obj.data, listing_obj.data),
+        source="kernel:verify_listing", **KERNEL_META["verify_listing"])
+
+
+def _order_apply_steps_kernel(plan_obj: EchoObject):
+    return plan_obj.derive(
+        "steps", _order_apply_steps_fn(plan_obj.data),
+        source="kernel:order_apply_steps", **KERNEL_META["order_apply_steps"])
+
+
+def register_ds_batch5(registry: Registry | None = None) -> Registry:
+    """Register the DS batch-5 hot-update kernels; returns the registry."""
+    reg = registry if registry is not None else Registry()
+    reg.add(Kernel("manifest_digest", ("manifest",), "digest",
+                   _manifest_digest_kernel, cost=1.0))
+    reg.add(Kernel("plan_update", ("manifest", "manifest"), "plan",
+                   _plan_update_kernel, cost=1.0))
+    reg.add(Kernel("verify_listing", ("manifest", "listing"), "report",
+                   _verify_listing_kernel, cost=1.0))
+    reg.add(Kernel("order_apply_steps", ("plan",), "steps",
+                   _order_apply_steps_kernel, cost=1.0))
+    return reg

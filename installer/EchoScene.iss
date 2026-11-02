@@ -96,7 +96,12 @@ Name: "{userdesktop}\{#AppName}"; Filename: "{app}\{#AppExeName}"; WorkingDir: "
 [Run]
 Filename: "{app}\{#AppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(AppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
 
-; Deliberately NO [UninstallDelete] and NO [Code] section: Setup's own
-; uninstall log already removes exactly what was installed under
-; {app}, and nothing outside {app} -- in particular nothing in
-; %USERPROFILE%\ECHO Jobs -- may ever be deleted by install/uninstall.
+; The uninstall log removes exactly what was installed under {app}.
+; One scoped exception since v0.4: the hot-update state directory
+; {app}\.echo accumulates runtime files (staging, backups) that are
+; not in the install log; it is the app's own state, inside {app},
+; and is removed with the app. Nothing outside {app} -- in
+; particular nothing in %USERPROFILE%\ECHO Jobs -- may ever be
+; deleted by install/uninstall.
+[UninstallDelete]
+Type: filesandordirs; Name: "{app}\.echo"

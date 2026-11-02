@@ -29,6 +29,8 @@ class JobState(Enum):
 
 # Action ids: every interactive element maps to exactly one.
 PICK_VIDEO = "pick_video"
+START_SCENE = "start_scene"
+START_DEPTH = "start_depth"
 PICK_DEPTH = "pick_depth"
 PLAY_DEPTH = "play_depth"
 OPEN_SCENE = "open_scene"
@@ -47,7 +49,7 @@ TRAY_OPEN = "tray_open"
 TRAY_QUIT = "tray_quit"
 
 ALL_ACTIONS = (
-    PICK_VIDEO, PICK_DEPTH, PLAY_DEPTH,
+    PICK_VIDEO, START_SCENE, START_DEPTH, PICK_DEPTH, PLAY_DEPTH,
     OPEN_SCENE, OPEN_FOLDER, OPEN_PREVIEW, OPEN_REPLAY,
     HIST_OPEN, HIST_FOLDER, HIST_PREVIEW, HIST_REPLAY,
     OPEN_SETTINGS, CHANGE_JOBS_FOLDER, CHECK_UPDATE, DOWNLOAD_UPDATE,
@@ -70,6 +72,7 @@ class ActionContext:
     current: FileFlags = field(default_factory=FileFlags)
     history: FileFlags = field(default_factory=FileFlags)
     depth_ready: bool = False        # a finished depth video can be played
+    video_selected: bool = False     # an input video is chosen, not yet run
     update_checking: bool = False
     update_downloading: bool = False
 
@@ -79,8 +82,11 @@ def compute_actions(ctx: ActionContext) -> dict:
     busy = ctx.job_state is JobState.RUNNING
     cur, hist = ctx.current, ctx.history
     return {
-        # Starting work: never while a job runs (no second job, ever).
+        # Choosing is always possible while idle; STARTING either job
+        # needs a chosen video first (drop/pick selects, never starts).
         PICK_VIDEO: not busy,
+        START_SCENE: not busy and ctx.video_selected,
+        START_DEPTH: not busy and ctx.video_selected,
         PICK_DEPTH: not busy,
         PLAY_DEPTH: not busy and ctx.depth_ready,
         # Current job's outputs: exactly when their file is usable.

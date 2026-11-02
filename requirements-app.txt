@@ -10,3 +10,6 @@ customtkinter>=5.2
 numba>=0.68
 pystray>=0.19
 winotify>=1.1; sys_platform == 'win32'
+
+# web shell window (web_app.py); on Windows rides the system WebView2
+pywebview>=5.0

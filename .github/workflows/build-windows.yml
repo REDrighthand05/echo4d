@@ -18,6 +18,23 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install -r requirements-app.txt pyinstaller huggingface_hub
+      - name: Resolve installer version
+        id: ver
+        shell: pwsh
+        run: |
+          # Single source of truth: the release tag (vX.Y.Z) when this
+          # build runs from one, else installer/version.inc.
+          if ("${{ github.ref_name }}" -match '^v(\d+\.\d+\.\d+)$') {
+            $ver = $Matches[1]
+          } else {
+            $line = Get-Content installer/version.inc |
+              Where-Object { $_ -match '#define AppVersion "' } |
+              Select-Object -First 1
+            if (-not $line) { throw "AppVersion not found in installer/version.inc" }
+            $ver = [regex]::Match($line, '"([0-9.]+)"').Groups[1].Value
+          }
+          "version=$ver" >> $env:GITHUB_OUTPUT
+          Write-Host "Installer version: $ver"
       - name: Fetch ffmpeg (static Windows builds for the exe bundle)
         run: |
           Invoke-WebRequest -Uri "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip" -OutFile ffmpeg-essentials.zip
@@ -40,8 +57,14 @@ jobs:
           Write-Host "Base model verified: $($f.Length) bytes, sha256 $h"
         env:
           HF_HUB_DISABLE_SYMLINKS_WARNING: "1"
+      - name: Clean payload caches
+        # The loose app payload is copied into the bundle as-is;
+        # stale bytecode caches must not ride along (they would
+        # also poison the update manifest with per-build noise).
+        run: |
+          Get-ChildItem -Path echo_scene, echo_app, echo_super, web_ui -Recurse -Directory -Filter __pycache__ | Remove-Item -Recurse -Force
       - name: Build exe
-        run: pyinstaller echo-scene.spec --noconfirm
+        run: pyinstaller echo-scene-web.spec --noconfirm
       - name: Verify mesh dependency (open3d) is inside the frozen bundle
         # Regression guard for the v0.1 breakage: the exe built green
         # while open3d was missing, and only failed on the user's
@@ -64,6 +87,40 @@ jobs:
           $pyd = Get-ChildItem -Path $sp -Recurse -Filter *.pyd | Select-Object -First 1
           if (-not $pyd) { throw "scipy native extension (*.pyd) missing from frozen bundle" }
           Write-Host "scipy bundled OK: $($pyd.FullName)"
+      - name: Build update manifest
+        # The manifest is the hot-update ledger: every file in the
+        # finished tree, hashed. It is embedded into the install
+        # (.echo/manifest.json) BEFORE packaging so a fresh install
+        # starts with the truth, and uploaded as a release asset so
+        # the NEXT release can diff against it.
+        run: |
+          python tools/build_manifest.py dist/EchoScene "${{ steps.ver.outputs.version }}" echoscene-manifest.json
+      - name: Build update pack (best effort)
+        # Diff against the latest published release's manifest.
+        # No previous manifest (v0.4 is the first) or base files
+        # changed -> no pack, installer-only release; never fatal.
+        shell: pwsh
+        run: |
+          $prev = "prev-manifest"
+          New-Item -ItemType Directory -Force $prev | Out-Null
+          gh release download --pattern echoscene-manifest.json --dir $prev
+          if (Test-Path "$prev/echoscene-manifest.json") {
+            python tools/build_update_pack.py "$prev/echoscene-manifest.json" dist/EchoScene echoscene-manifest.json EchoScene-Update.zip
+            if ($LASTEXITCODE -eq 3) { Write-Host "no pack: base files changed" }
+          } else { Write-Host "no previous manifest: pack skipped" }
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: EchoScene-manifest
+          path: echoscene-manifest.json
+          retention-days: 30
+      - uses: actions/upload-artifact@v4
+        if: hashFiles('EchoScene-Update.zip') != ''
+        with:
+          name: EchoScene-update-pack
+          path: EchoScene-Update.zip
+          retention-days: 30
       - name: Package
         run: Compress-Archive -Path dist/EchoScene -DestinationPath EchoScene-windows.zip
       - uses: actions/upload-artifact@v4
@@ -76,23 +133,6 @@ jobs:
       # primary route (per-user, no admin, Start-menu entry, upgrade in
       # place, clean uninstall -- see installer/README.md). Payload is
       # the same dist/EchoScene folder the zip is made from.
-      - name: Resolve installer version
-        id: ver
-        shell: pwsh
-        run: |
-          # Single source of truth: the release tag (vX.Y.Z) when this
-          # build runs from one, else installer/version.inc.
-          if ("${{ github.ref_name }}" -match '^v(\d+\.\d+\.\d+)$') {
-            $ver = $Matches[1]
-          } else {
-            $line = Get-Content installer/version.inc |
-              Where-Object { $_ -match '#define AppVersion "' } |
-              Select-Object -First 1
-            if (-not $line) { throw "AppVersion not found in installer/version.inc" }
-            $ver = [regex]::Match($line, '"([0-9.]+)"').Groups[1].Value
-          }
-          "version=$ver" >> $env:GITHUB_OUTPUT
-          Write-Host "Installer version: $ver"
       - name: Install Inno Setup
         run: choco install innosetup -y --no-progress
       - name: Build installer (Inno Setup)

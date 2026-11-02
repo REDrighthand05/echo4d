@@ -4,7 +4,9 @@
     .venv/bin/python run_all_tests.py [--smoke]
 
 Layers (any red layer fails the run):
-  parts   per-kernel unit tests        (echo_super/test_real_kernels.py)
+  parts   per-kernel unit tests        (echo_super/test_real_kernels.py,
+                                          echo_super/test_ds_batch5.py)
+  hotupdate  hot-update chain e2e      (tests/test_hot_update.py)
   routes  routing / skip / reroute     (tests/test_echo_super.py)
   frozen  locked features must not drift (tests/test_voxel_frozen.py,
                                           tests/test_markers_synth.py)
@@ -28,6 +30,9 @@ SUITES = [
     ("replay", [sys.executable, "tests/test_replay.py"]),
     ("scale", [sys.executable, "tests/test_scale.py"]),
     ("desktop", [sys.executable, "tests/test_desktop.py"]),
+    ("webshell", [sys.executable, "tests/test_web_bridge.py"]),
+    ("parts", [sys.executable, "echo_super/test_ds_batch5.py"]),
+    ("hotupdate", [sys.executable, "tests/test_hot_update.py"]),
     ("sensor", [sys.executable, "tests/test_sensor_record.py"]),
     ("tethered", [sys.executable, "tests/test_tethered.py"]),
 ]

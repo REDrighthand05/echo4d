@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ECHO 回声</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<canvas id="beads"></canvas>
+<canvas id="echo"></canvas>
+<div id="frost"></div>
+
+<div id="app">
+  <aside id="logpanel">
+    <div class="log-head">日志</div>
+    <pre id="logbody"></pre>
+  </aside>
+  <button id="logtab" title="日志">日<br>志<br>›</button>
+
+  <main id="center">
+    <header class="glass" id="header">
+      <div class="hdr-text">
+        <h1 class="calm">ECHO 回声</h1>
+        <p class="sub calm">视频变 3D 场景</p>
+      </div>
+      <div id="updatebox" hidden>
+        <p id="updatelabel"></p>
+        <button class="btn primary small" id="btn-update">下载并安装</button>
+      </div>
+    </header>
+
+    <section class="glass" id="band">
+      <p id="status" class="calm">还没开始。</p>
+      <div id="track"><div id="fill"></div><div id="filldot"></div></div>
+    </section>
+
+    <div id="tiles">
+      <section class="glass tile" id="hero">
+        <div class="tile-head">
+          <img class="tic" src="assets/icons/spark.png" alt="">
+          <h2 class="calm">生成场景</h2>
+          <p class="desc calm" id="hero-desc">把视频拖到这里，或者点「选择视频」。<br>选好后点「开始生成」建模，或者先做一段深度视频。</p>
+        </div>
+        <div class="btnrow">
+          <button class="btn glass-btn" id="btn-pick">选择视频</button>
+          <button class="btn primary" id="btn-start" disabled>开始生成</button>
+          <button class="btn glass-btn" id="btn-herodepth" disabled>深度视频</button>
+        </div>
+        <div class="btnrow">
+          <button class="btn glass-btn" id="btn-open" disabled>打开场景</button>
+          <button class="btn glass-btn" id="btn-folder" disabled>打开文件夹</button>
+          <button class="btn glass-btn" id="btn-replay" disabled>过程回放</button>
+          <button class="btn glass-btn" id="btn-route" disabled>路线回放</button>
+        </div>
+      </section>
+
+      <section class="glass tile dark" id="preview">
+        <div class="pv-head">
+          <img class="tic" src="assets/icons/spark_dark.png" alt="">
+          <h2>实时预览</h2>
+          <span id="breathdot"></span>
+          <span class="spacer"></span>
+          <button class="btn dark-btn small" id="btn-full">全屏</button>
+        </div>
+        <canvas id="pvcanvas"></canvas>
+        <video id="pvvideo" loop muted playsinline hidden></video>
+        <p class="pv-hint">场景会在这里长出来</p>
+      </section>
+
+      <section class="glass tile" id="history">
+        <div class="tile-head">
+          <img class="tic" src="assets/icons/list.png" alt="">
+          <h2 class="calm">历史场景</h2>
+          <p class="desc calm">以前做好的场景，选一个点「打开」。</p>
+        </div>
+        <div id="histlist"></div>
+      </section>
+
+      <section class="glass tile" id="depth">
+        <div class="tile-head">
+          <img class="tic" src="assets/icons/depth.png" alt="">
+          <h2 class="calm">深度视频</h2>
+          <p class="desc calm">把选好的视频做成黑白的深度画面；还没选就先挑一段。</p>
+        </div>
+        <div class="btnrow">
+          <button class="btn primary" id="btn-depth">深度视频</button>
+          <button class="btn glass-btn" id="btn-playdepth" disabled>播放深度视频</button>
+        </div>
+      </section>
+
+      <section class="glass tile" id="marker">
+        <div class="tile-head">
+          <img class="tic" src="assets/icons/grid.png" alt="">
+          <h2 class="calm">打印标记纸</h2>
+          <p class="desc calm">打印出来贴在房间里，帮场景认准大小。</p>
+        </div>
+        <div class="btnrow">
+          <button class="btn primary" id="btn-markers">打印标记纸</button>
+        </div>
+      </section>
+
+      <section class="glass tile" id="settings-strip">
+        <div class="tile-head">
+          <img class="tic" src="assets/icons/gear.png" alt="">
+          <h2 class="calm">设置</h2>
+          <p class="desc calm" id="settings-desc">任务文件夹：… · 当前版本 v0.3.0</p>
+        </div>
+        <div class="btnrow">
+          <button class="btn glass-btn" id="btn-settings">打开设置</button>
+        </div>
+      </section>
+    </div>
+  </main>
+</div>
+
+<div id="settings-page" hidden>
+  <div class="set-card glass-strong">
+    <div class="set-head">
+      <h2>设置</h2>
+      <button class="btn glass-btn small" id="btn-set-back">返回</button>
+    </div>
+    <div class="set-row">
+      <img class="tic" src="assets/icons/folder.png" alt="">
+      <div class="set-text"><h3>任务文件夹</h3><p id="set-jobs">…</p></div>
+      <button class="btn glass-btn small" id="btn-set-folder">更改…</button>
+    </div>
+    <div class="set-row">
+      <img class="tic" src="assets/icons/spark.png" alt="">
+      <div class="set-text"><h3>使用习惯</h3><p>开机自启、关窗缩到托盘</p></div>
+      <label class="switch"><input type="checkbox" id="set-autostart"><span></span>开机自启</label>
+      <label class="switch"><input type="checkbox" id="set-tray" checked><span></span>系统托盘</label>
+    </div>
+    <div class="set-row">
+      <img class="tic" src="assets/icons/refresh.png" alt="">
+      <div class="set-text"><h3>版本与更新</h3><p id="set-version">当前版本 v0.3.0</p></div>
+      <button class="btn glass-btn small" id="btn-set-update">检查更新</button>
+    </div>
+  </div>
+</div>
+
+<input type="file" id="fileinput" accept="video/*" hidden>
+<script src="app.js"></script>
+</body>
+</html>
