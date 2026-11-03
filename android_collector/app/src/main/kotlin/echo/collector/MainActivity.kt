@@ -18,6 +18,7 @@ import android.graphics.RectF
 import android.graphics.SurfaceTexture
 import android.graphics.drawable.GradientDrawable
 import android.hardware.SensorManager
+import android.media.ImageReader
 import android.hardware.camera2.CameraCaptureSession
 import android.hardware.camera2.CameraDevice
 import android.hardware.camera2.CameraManager
@@ -58,12 +59,12 @@ class MainActivity : Activity() {
 
     private lateinit var capLine: TextView
     private lateinit var statusLine: TextView
+    private lateinit var updateLine: TextView
     private lateinit var recordButton: Button
     private lateinit var sendButton: Button
     private lateinit var caps: Capabilities
     private lateinit var backdrop: BackdropView
     private lateinit var halo: View
-    private lateinit var previewTexture: TextureView
     private lateinit var previewImage: ImageView
     private lateinit var previewHint: TextView
     private lateinit var viz: VizView
@@ -72,7 +73,9 @@ class MainActivity : Activity() {
     private var idleThread: HandlerThread? = null
     private var idleDevice: CameraDevice? = null
     private var idleSession: CameraCaptureSession? = null
-    private var idleSize: Size? = null
+    private var idleReader: ImageReader? = null
+    @Volatile private var idleThumb: Bitmap? = null
+    private var lastIdleThumbNs = 0L
     private val animTicker = object : Runnable {
         override fun run() {
             val rec = CaptureService.instance?.controller?.state ==
@@ -94,7 +97,7 @@ class MainActivity : Activity() {
     private val ticker = object : Runnable {
         override fun run() {
             refreshStatus()
-            uiHandler.postDelayed(this, 250)
+            uiHandler.postDelayed(this, 150)
         }
     }
 
@@ -148,34 +151,14 @@ class MainActivity : Activity() {
             }
         }
 
-        // ---- preview box: live TextureView while idle, backend
-        // thumbnails while recording ------------------------------
+        // ---- preview box: one thumbnail stream for both states
+        // (idle: this activity's own guest reader; recording: the
+        // backend's) -- a single display path, rotated upright in
+        // software, no texture-transform guesswork ---------------
         val previewBox = FrameLayout(this).apply {
             background = glassCard()
             clipToOutline = true
         }
-        previewTexture = TextureView(this).apply {
-            surfaceTextureListener = object :
-                TextureView.SurfaceTextureListener {
-                override fun onSurfaceTextureAvailable(
-                    st: SurfaceTexture, w: Int, h: Int) {
-                    openIdlePreview()
-                }
-                override fun onSurfaceTextureSizeChanged(
-                    st: SurfaceTexture, w: Int, h: Int) {
-                    configureTransform(w, h)
-                }
-                override fun onSurfaceTextureDestroyed(
-                    st: SurfaceTexture): Boolean {
-                    closeIdlePreview()
-                    return true
-                }
-                override fun onSurfaceTextureUpdated(st: SurfaceTexture) {}
-            }
-        }
-        previewBox.addView(previewTexture, FrameLayout.LayoutParams(
-            FrameLayout.LayoutParams.MATCH_PARENT,
-            FrameLayout.LayoutParams.MATCH_PARENT))
         previewImage = ImageView(this).apply {
             scaleType = ImageView.ScaleType.CENTER_CROP
             visibility = View.GONE
@@ -235,6 +218,18 @@ class MainActivity : Activity() {
         }
         root.addView(statusLine)
 
+        // update line: hidden unless the relay offers a newer
+        // collector; tapping downloads, verifies and installs.
+        updateLine = TextView(this).apply {
+            setTextColor(BLUE)
+            textSize = 14.5f
+            gravity = Gravity.CENTER
+            visibility = View.GONE
+            setPadding(8, 14, 8, 6)
+        }
+        root.addView(updateLine)
+        checkForUpdate()
+
         // ---- data visualisation: attitude + route trace ---------
         viz = VizView(this).apply { background = glassCard() }
         root.addView(
@@ -282,11 +277,14 @@ class MainActivity : Activity() {
         val camIdx = permissions.indexOf(Manifest.permission.CAMERA)
         if (camIdx >= 0 && grantResults.getOrNull(camIdx) ==
             PackageManager.PERMISSION_GRANTED) {
-            if (previewTexture.isAvailable) openIdlePreview()
+            openIdlePreview()
         }
     }
 
-    // ---- idle live preview (Camera2, framing only) -------------
+    // ---- idle preview (Camera2 guest reader, framing only) -----
+    // Same thumbnail path as recording: YUV stills, rotated
+    // upright in software. (The TextureView transform this
+    // replaced put the picture sideways on the user's phone.)
 
     @SuppressLint("MissingPermission") // gated by the toggle/perm flow
     private fun openIdlePreview() {
@@ -295,24 +293,39 @@ class MainActivity : Activity() {
         if (svcState == CaptureController.State.RECORDING) return
         if (checkSelfPermission(Manifest.permission.CAMERA) !=
             PackageManager.PERMISSION_GRANTED) return
-        val st = previewTexture.surfaceTexture ?: return
         val cm = getSystemService(CameraManager::class.java) ?: return
         try {
             val ch = cm.getCameraCharacteristics(caps.chosenCameraId)
             val map = ch.get(
                 android.hardware.camera2.CameraCharacteristics
                     .SCALER_STREAM_CONFIGURATION_MAP) ?: return
-            val sizes = map.getOutputSizes(SurfaceTexture::class.java)
-                .toList()
-            val size = sizes.filter { it.width <= 1280 }
+            val sizes = map.getOutputSizes(
+                android.graphics.ImageFormat.YUV_420_888).toList()
+            val size = sizes.filter { it.width <= 800 }
                 .maxByOrNull { it.width * it.height }
                 ?: sizes.minByOrNull { it.width * it.height } ?: return
-            idleSize = size
-            st.setDefaultBufferSize(size.width, size.height)
-            configureTransform(previewTexture.width, previewTexture.height)
             idleThread = HandlerThread("echo-preview").apply { start() }
             val handler = Handler(idleThread!!.looper)
-            val surface = Surface(st)
+            val reader = ImageReader.newInstance(
+                size.width, size.height,
+                android.graphics.ImageFormat.YUV_420_888, 3)
+            idleReader = reader
+            reader.setOnImageAvailableListener({ r ->
+                val img = r.acquireLatestImage()
+                    ?: return@setOnImageAvailableListener
+                try {
+                    val ts = img.timestamp
+                    if (ts - lastIdleThumbNs >= 100_000_000L) {
+                        lastIdleThumbNs = ts
+                        Thumbs.fromYuv(img, 320)?.let { bmp ->
+                            idleThumb = Thumbs.rotate(
+                                bmp, caps.chosenSensorOrientation)
+                        }
+                    }
+                } finally {
+                    img.close()
+                }
+            }, handler)
             cm.openCamera(caps.chosenCameraId,
                 object : CameraDevice.StateCallback() {
                     override fun onOpened(dev: CameraDevice) {
@@ -320,7 +333,7 @@ class MainActivity : Activity() {
                         try {
                             @Suppress("DEPRECATION")
                             dev.createCaptureSession(
-                                listOf(surface),
+                                listOf(reader.surface),
                                 object :
                                     CameraCaptureSession.StateCallback() {
                                     override fun onConfigured(
@@ -328,7 +341,7 @@ class MainActivity : Activity() {
                                         idleSession = sess
                                         val req = dev.createCaptureRequest(
                                             CameraDevice.TEMPLATE_PREVIEW)
-                                        req.addTarget(surface)
+                                        req.addTarget(reader.surface)
                                         req.set(
                                             CaptureRequest.CONTROL_AF_MODE,
                                             CaptureRequest
@@ -364,37 +377,11 @@ class MainActivity : Activity() {
         idleSession = null
         try { idleDevice?.close() } catch (e: Exception) { /* done */ }
         idleDevice = null
+        try { idleReader?.close() } catch (e: Exception) { /* done */ }
+        idleReader = null
+        idleThumb = null
         idleThread?.quitSafely()
         idleThread = null
-    }
-
-    private fun configureTransform(viewW: Int, viewH: Int) {
-        val size = idleSize ?: return
-        if (viewW <= 0 || viewH <= 0) return
-        val matrix = Matrix()
-        val viewRect = RectF(0f, 0f, viewW.toFloat(), viewH.toFloat())
-        val bufferRect = RectF(
-            0f, 0f, size.height.toFloat(), size.width.toFloat())
-        val cx = viewRect.centerX()
-        val cy = viewRect.centerY()
-        if (caps.chosenSensorOrientation == 90 ||
-            caps.chosenSensorOrientation == 270) {
-            bufferRect.offset(cx - bufferRect.centerX(),
-                cy - bufferRect.centerY())
-            matrix.setRectToRect(viewRect, bufferRect,
-                Matrix.ScaleToFit.FILL)
-            val scale = max(
-                viewH.toFloat() / size.height,
-                viewW.toFloat() / size.width)
-            matrix.postScale(scale, scale, cx, cy)
-            matrix.postRotate(
-                caps.chosenSensorOrientation.toFloat(), cx, cy)
-        } else {
-            matrix.setRectToRect(viewRect,
-                RectF(0f, 0f, size.width.toFloat(), size.height.toFloat()),
-                Matrix.ScaleToFit.FILL)
-        }
-        previewTexture.setTransform(matrix)
     }
 
     private fun writeFirstRunManifest() {
@@ -407,6 +394,53 @@ class MainActivity : Activity() {
     }
 
     private fun capturesDir(): File = Storage.capturesDir(this)
+
+    // -- in-app update (relay first, CDN mirror second) -----------
+    private fun checkForUpdate() {
+        val current = try {
+            @Suppress("DEPRECATION")
+            packageManager.getPackageInfo(packageName, 0)
+                .longVersionCode.toInt()
+        } catch (e: Exception) {
+            return
+        }
+        Thread {
+            val offer = AppUpdate.fetchOffer(current) ?: return@Thread
+            runOnUiThread {
+                updateLine.text =
+                    "采集器有新版 v${offer.version}，点这里更新" +
+                        if (offer.notes.isNotEmpty()) {
+                            "（${offer.notes}）"
+                        } else ""
+                updateLine.visibility = View.VISIBLE
+                updateLine.setOnClickListener {
+                    updateLine.isEnabled = false
+                    statusLine.text = "正在下载新版…"
+                    AppUpdate.download(
+                        this, offer,
+                        onProgress = { pct ->
+                            runOnUiThread {
+                                statusLine.text = "下载新版 $pct%"
+                            }
+                        },
+                        onReady = { file, err ->
+                            runOnUiThread {
+                                if (file != null) {
+                                    statusLine.text =
+                                        "下载好了，跟着系统提示装上就行"
+                                    AppUpdate.install(this, file)
+                                } else {
+                                    statusLine.text =
+                                        err ?: "更新没下成"
+                                    updateLine.isEnabled = true
+                                }
+                            }
+                        }
+                    )
+                }
+            }
+        }.start()
+    }
 
     private fun listCaptures(): List<File> =
         capturesDir().listFiles { f ->
@@ -448,47 +482,13 @@ class MainActivity : Activity() {
         AlertDialog.Builder(this)
             .setTitle("选择要发送的采集")
             .setItems(labels) { _, which ->
-                chooseSendRoute(captures[which])
-            }
-            .show()
-    }
-
-    private fun chooseSendRoute(folder: File) {
-        AlertDialog.Builder(this)
-            .setTitle(folder.name)
-            .setItems(arrayOf("直传回电脑", "通过其他应用发送…")) { _, which ->
-                if (which == 0) {
-                    uploadToPc(folder)
-                } else {
-                    try {
-                        ShareExport.share(this, folder)
-                    } catch (e: Exception) {
-                        statusLine.text = "打包失败： ${e.message}"
-                    }
+                try {
+                    ShareExport.share(this, captures[which])
+                } catch (e: Exception) {
+                    statusLine.text = "打包失败： ${e.message}"
                 }
             }
             .show()
-    }
-
-    private fun uploadToPc(folder: File) {
-        statusLine.text = "正在直传回电脑…"
-        NetUpload.upload(
-            this, folder,
-            onProgress = { pct ->
-                runOnUiThread {
-                    statusLine.text = "直传中 $pct%"
-                }
-            },
-            onDone = { err ->
-                runOnUiThread {
-                    statusLine.text = if (err == null) {
-                        "已送达电脑： ${folder.name}"
-                    } else {
-                        "直传失败： $err"
-                    }
-                }
-            }
-        )
     }
 
     private fun toggle() {
@@ -533,7 +533,6 @@ class MainActivity : Activity() {
             recordButton.text = "■ 停止"
             setRecordingStyle(true)
             backdrop.working = true
-            previewTexture.visibility = View.GONE
             val bmp = CaptureService.latestPreview
             if (bmp != null) {
                 previewImage.setImageBitmap(bmp)
@@ -557,13 +556,18 @@ class MainActivity : Activity() {
         recordButton.text = "● 开始录制"
         setRecordingStyle(false)
         backdrop.working = false
-        previewImage.visibility = View.GONE
-        previewTexture.visibility = View.VISIBLE
-        previewHint.text = "相机预览"
-        previewHint.visibility =
-            if (idleDevice != null) View.GONE else View.VISIBLE
+        val idleBmp = idleThumb
+        if (idleBmp != null) {
+            previewImage.setImageBitmap(idleBmp)
+            previewImage.visibility = View.VISIBLE
+            previewHint.visibility = View.GONE
+        } else {
+            previewImage.visibility = View.GONE
+            previewHint.text = "相机预览"
+            previewHint.visibility = View.VISIBLE
+        }
         viz.update(null, emptyList())
-        if (idleDevice == null && previewTexture.isAvailable) {
+        if (idleDevice == null) {
             openIdlePreview()
         }
         val last = CaptureService.lastCapture
@@ -637,7 +641,10 @@ private class BackdropView(context: Context) : View(context) {
         override fun run() {
             if (!attached) return
             invalidate()
-            postDelayed(this, 50)
+            // While a capture runs the sheet is nearly static;
+            // redraw slowly and leave the UI thread to the
+            // preview and the readouts.
+            postDelayed(this, if (working) 400 else 100)
         }
     }
 

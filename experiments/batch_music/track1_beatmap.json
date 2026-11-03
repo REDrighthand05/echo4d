@@ -1,0 +1,187 @@
+{
+  "source_video": "user/files/_____________________________________24_b0bi.m4a",
+  "audio_file": "echo_scene_app/experiments/batch_music/track1_24.m4a",
+  "duration_s": 36.92,
+  "music_start_s": 0.03,
+  "music_end_s": 36.92,
+  "tempo_bpm": 48.2,
+  "beat_period_s": 1.245,
+  "beats": [
+    {
+      "time": 0.28,
+      "strength": 0.6
+    },
+    {
+      "time": 1.86,
+      "strength": 0.69
+    },
+    {
+      "time": 2.17,
+      "strength": 0.75
+    },
+    {
+      "time": 3.42,
+      "strength": 0.68
+    },
+    {
+      "time": 4.98,
+      "strength": 0.7
+    },
+    {
+      "time": 6.85,
+      "strength": 0.66
+    },
+    {
+      "time": 7.48,
+      "strength": 0.7
+    },
+    {
+      "time": 8.41,
+      "strength": 0.76
+    },
+    {
+      "time": 9.97,
+      "strength": 0.66
+    },
+    {
+      "time": 11.51,
+      "strength": 0.58
+    },
+    {
+      "time": 12.46,
+      "strength": 0.63
+    },
+    {
+      "time": 13.4,
+      "strength": 0.87
+    },
+    {
+      "time": 14.95,
+      "strength": 0.65
+    },
+    {
+      "time": 16.45,
+      "strength": 0.62
+    },
+    {
+      "time": 18.34,
+      "strength": 1.0
+    },
+    {
+      "time": 18.34,
+      "strength": 1.0
+    },
+    {
+      "time": 19.9,
+      "strength": 0.99
+    },
+    {
+      "time": 20.84,
+      "strength": 0.81
+    },
+    {
+      "time": 22.69,
+      "strength": 0.77
+    },
+    {
+      "time": 23.64,
+      "strength": 0.76
+    },
+    {
+      "time": 24.89,
+      "strength": 0.71
+    },
+    {
+      "time": 26.76,
+      "strength": 0.85
+    },
+    {
+      "time": 27.38,
+      "strength": 0.79
+    },
+    {
+      "time": 29.26,
+      "strength": 0.71
+    },
+    {
+      "time": 29.87,
+      "strength": 0.95
+    },
+    {
+      "time": 31.42,
+      "strength": 0.57
+    },
+    {
+      "time": 32.37,
+      "strength": 0.66
+    },
+    {
+      "time": 34.24,
+      "strength": 0.63
+    },
+    {
+      "time": 34.86,
+      "strength": 0.66
+    },
+    {
+      "time": 36.73,
+      "strength": 0.65
+    }
+  ],
+  "accents": [
+    {
+      "time": 13.4,
+      "strength": 0.87
+    },
+    {
+      "time": 18.34,
+      "strength": 1.0
+    },
+    {
+      "time": 19.59,
+      "strength": 0.83
+    },
+    {
+      "time": 19.9,
+      "strength": 0.99
+    },
+    {
+      "time": 20.19,
+      "strength": 0.81
+    },
+    {
+      "time": 20.84,
+      "strength": 0.81
+    },
+    {
+      "time": 26.76,
+      "strength": 0.85
+    },
+    {
+      "time": 27.38,
+      "strength": 0.79
+    },
+    {
+      "time": 29.87,
+      "strength": 0.95
+    }
+  ],
+  "structure": {
+    "music_start_s": 0.03,
+    "loudest_s": 19.73,
+    "biggest_rise_s": 0.23,
+    "biggest_fall_s": 36.68,
+    "end_s": 36.92,
+    "ending": "hard stop (still near full level at the cut)",
+    "head_silence_60db_s": 0.03,
+    "head_silence_40db_s": 0.04
+  },
+  "mood_estimate": "slow tempo (48 BPM), balanced spectrum (centroid ~2899 Hz, low-band share 20%, high-band share 19%), gentle pulse (0.24 accents/s), energy eases off in the second half; dynamics ratio 0.24. Estimate from waveform/spectral numbers only, not from listening.",
+  "notes": [
+    "Measured: first 0.03s are (near-)silence at the -60dB threshold (-40dB threshold gives 0.04s); music runs to ~36.92s of the 36.92s file. Treat 0.03s as music time-zero when cutting.",
+    "Tempo by comb-grid scan: 48.2 BPM, beat period 1.245s, 30 beats on the grid.",
+    "Structure: biggest energy rise ~0.23s, biggest energy fall ~36.68s, loudest moment ~19.73s, ending: hard stop (still near full level at the cut).",
+    "Mood estimate (from numbers, not listening): slow tempo (48 BPM), balanced spectrum (centroid ~2899 Hz, low-band share 20%, high-band share 19%), gentle pulse (0.24 accents/s), energy eases off in the second half; dynamics ratio 0.24. Estimate from waveform/spectral numbers only, not from listening."
+  ],
+  "method": "spectral-flux onset envelope (STFT 2048/512 @44.1k, max-normalised); tempo by direct comb-grid scan 0.40-1.60s over a ~0.06s-smoothed envelope (shortest period reaching >=85% of best per-beat onset strength); beats snapped to local onset maxima; accents = spectral-flux peaks (height>=0.78 of max, prominence>=0.10, min gap 0.30s); scipy/numpy (librosa unavailable). Both calibrations verified against round-1: they reproduce its 100 BPM tempo and its exact 12-accent set."
+}

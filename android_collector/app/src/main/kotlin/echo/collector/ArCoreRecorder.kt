@@ -106,7 +106,14 @@ class ArCoreRecorder(
         val sess = Session(context)
         sess.setCameraTextureName(cameraTexId)
         val config = Config(sess)
-        config.updateMode = Config.UpdateMode.LATEST_CAMERA_IMAGE
+        // BLOCKING, not LATEST_CAMERA_IMAGE: the v0.8 field run
+        // showed LATEST spinning 44,844 updates for 44 distinct
+        // frames — ARCore handed back its cached frame at ~1.7
+        // new frames a second on this phone. BLOCKING makes
+        // update() wait for each genuinely new frame; the loop
+        // counters in the session note will show whether the
+        // delivery rate follows.
+        config.updateMode = Config.UpdateMode.BLOCKING
         val depthSupported =
             sess.isDepthModeSupported(Config.DepthMode.AUTOMATIC)
         val rungs: List<Pair<String, (CameraConfigFilter) -> Unit>> =

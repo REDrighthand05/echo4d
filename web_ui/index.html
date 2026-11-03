@@ -12,12 +12,59 @@
 <div id="frost"></div>
 
 <div id="app">
+  <!-- Chrome skeleton, row 1: the tab strip. The frameless titlebar
+       becomes the tab strip (it was already the drag region with the
+       window buttons at the right, exactly where Chrome puts them);
+       the tabs are views: the main sheet and the settings page. -->
   <div id="titlebar" class="pywebview-drag-region">
-    <span class="tb-title">ECHO 回声</span>
+    <nav id="tabstrip">
+      <button class="tab active" id="tab-main" title="主界面">
+        <img class="tab-ic" src="assets/icons/spark.png" alt="">
+        <span class="tab-title">ECHO 回声</span>
+      </button>
+      <button class="tab" id="tab-settings" title="设置">
+        <img class="tab-ic" src="assets/icons/gear.png" alt="">
+        <span class="tab-title">设置</span>
+      </button>
+    </nav>
     <div class="tb-btns">
       <button id="win-min" title="最小化">─</button>
       <button id="win-max" title="最大化 / 还原">▢</button>
       <button id="win-close" title="关闭">✕</button>
+    </div>
+  </div>
+  <!-- Chrome skeleton, row 2: the toolbar. Nav cluster on the left
+       (back = leave settings, forward has nowhere to go, reload =
+       re-render the lists), the omnibox capsule in the middle
+       carrying the current file/job (click = pick a video), and the
+       overflow menu on the right (settings / update / log / about). -->
+  <div id="toolbar">
+    <div class="nav-cluster">
+      <button class="icon-btn is-disabled" id="nav-back" title="返回">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M20 11H7.5l4.7-4.7L10.8 4.9 5 10.7c-.4.4-.4 1 0 1.4l5.8 5.8 1.4-1.4L7.5 13H20z"/></svg>
+      </button>
+      <button class="icon-btn is-disabled" id="nav-fwd" title="前进">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M4 13h12.5l-4.7 4.7 1.4 1.4 5.8-5.8c.4-.4.4-1 0-1.4L13.2 4.9l-1.4 1.4L16.5 11H4z"/></svg>
+      </button>
+      <button class="icon-btn" id="nav-reload" title="刷新列表">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>
+      </button>
+    </div>
+    <div id="omnibox" title="当前文件 · 点这里选择视频">
+      <svg class="omni-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M16.5 16.5 21 21"/></svg>
+      <span id="omnibox-text">选择或拖入一段视频开始</span>
+    </div>
+    <div class="tb-right">
+      <button class="icon-btn" id="btn-menu" title="菜单">
+        <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="12" cy="19" r="1.7"/></svg>
+      </button>
+      <div id="menu" hidden>
+        <button class="menu-item" id="menu-settings">设置</button>
+        <button class="menu-item" id="menu-update">检查更新</button>
+        <button class="menu-item" id="menu-log">日志面板</button>
+        <div class="menu-sep"></div>
+        <button class="menu-item" id="menu-about">关于 ECHO</button>
+      </div>
     </div>
   </div>
   <aside id="logpanel">
@@ -48,6 +95,19 @@
     </section>
 
     <div id="tiles">
+      <section class="glass tile dark" id="preview">
+        <div class="pv-head">
+          <img class="tic" src="assets/icons/spark_dark.png" alt="">
+          <h2>实时预览</h2>
+          <span id="breathdot"></span>
+          <span class="spacer"></span>
+          <button class="btn dark-btn small" id="btn-full">全屏</button>
+        </div>
+        <canvas id="pvcanvas"></canvas>
+        <video id="pvvideo" loop muted playsinline hidden></video>
+        <p class="pv-hint">场景会在这里长出来</p>
+      </section>
+
       <section class="glass tile" id="hero">
         <div class="tile-head">
           <img class="tic" src="assets/icons/spark.png" alt="">
@@ -74,19 +134,6 @@
           <p class="desc calm">采集器录好、自己同步回电脑的，点一段就选上。</p>
         </div>
         <div id="inboxlist"></div>
-      </section>
-
-      <section class="glass tile dark" id="preview">
-        <div class="pv-head">
-          <img class="tic" src="assets/icons/spark_dark.png" alt="">
-          <h2>实时预览</h2>
-          <span id="breathdot"></span>
-          <span class="spacer"></span>
-          <button class="btn dark-btn small" id="btn-full">全屏</button>
-        </div>
-        <canvas id="pvcanvas"></canvas>
-        <video id="pvvideo" loop muted playsinline hidden></video>
-        <p class="pv-hint">场景会在这里长出来</p>
       </section>
 
       <section class="glass tile" id="history">
@@ -136,31 +183,59 @@
 </div>
 
 <div id="settings-page" hidden>
-  <div class="set-card glass-strong">
+  <div class="set-card">
     <div class="set-head">
       <h2>设置</h2>
+      <div id="set-search">
+        <svg class="omni-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M16.5 16.5 21 21"/></svg>
+        <input type="text" id="set-search-input" placeholder="搜索设置" spellcheck="false">
+      </div>
       <button class="btn glass-btn small" id="btn-set-back">返回</button>
     </div>
-    <div class="set-row">
-      <img class="tic" src="assets/icons/folder.png" alt="">
-      <div class="set-text"><h3>任务文件夹</h3><p id="set-jobs">…</p></div>
-      <button class="btn glass-btn small" id="btn-set-folder">更改…</button>
-    </div>
-    <div class="set-row">
-      <img class="tic" src="assets/icons/spark.png" alt="">
-      <div class="set-text"><h3>使用习惯</h3><p>开机自启、关窗缩到托盘</p></div>
-      <label class="switch"><input type="checkbox" id="set-autostart"><span></span>开机自启</label>
-      <label class="switch"><input type="checkbox" id="set-tray" checked><span></span>系统托盘</label>
-    </div>
-    <div class="set-row">
-      <img class="tic" src="assets/icons/refresh.png" alt="">
-      <div class="set-text"><h3>版本与更新</h3><p id="set-version">当前版本 …</p><p id="set-update-note"></p></div>
-      <button class="btn glass-btn small" id="btn-set-update">检查更新</button>
-    </div>
-    <div class="set-row">
-      <img class="tic" src="assets/icons/refresh.png" alt="">
-      <div class="set-text"><h3>更新代理</h3><p>一般不用填：软件会自己试直连和本机常见代理，通了自动记住。这里填了，就优先用它。</p></div>
-      <input type="text" id="set-proxy" placeholder="http://127.0.0.1:7890" spellcheck="false">
+    <div class="set-body">
+      <nav id="set-nav">
+        <button class="set-nav-item active" data-cat="all">全部设置</button>
+        <button class="set-nav-item" data-cat="jobs">任务文件</button>
+        <button class="set-nav-item" data-cat="habits">使用习惯</button>
+        <button class="set-nav-item" data-cat="update">版本更新</button>
+      </nav>
+      <div id="set-groups">
+        <section class="set-group" data-cat="jobs">
+          <h3 class="set-group-title">任务文件</h3>
+          <div class="set-row">
+            <img class="tic" src="assets/icons/folder.png" alt="">
+            <div class="set-text"><h3>任务文件夹</h3><p id="set-jobs">…</p></div>
+            <button class="btn glass-btn small" id="btn-set-folder">更改…</button>
+          </div>
+        </section>
+        <section class="set-group" data-cat="habits">
+          <h3 class="set-group-title">使用习惯</h3>
+          <div class="set-row">
+            <img class="tic" src="assets/icons/spark.png" alt="">
+            <div class="set-text"><h3>开机自启</h3><p>开机时自动启动 ECHO</p></div>
+            <label class="switch"><input type="checkbox" id="set-autostart"><span></span></label>
+          </div>
+          <div class="set-row">
+            <img class="tic" src="assets/icons/spark.png" alt="">
+            <div class="set-text"><h3>关窗缩到托盘</h3><p>关掉窗口时不退出，缩到系统托盘</p></div>
+            <label class="switch"><input type="checkbox" id="set-tray" checked><span></span></label>
+          </div>
+        </section>
+        <section class="set-group" data-cat="update">
+          <h3 class="set-group-title">版本更新</h3>
+          <div class="set-row">
+            <img class="tic" src="assets/icons/refresh.png" alt="">
+            <div class="set-text"><h3>版本与更新</h3><p id="set-version">当前版本 …</p><p id="set-update-note"></p></div>
+            <button class="btn glass-btn small" id="btn-set-update">检查更新</button>
+          </div>
+          <div class="set-row">
+            <img class="tic" src="assets/icons/refresh.png" alt="">
+            <div class="set-text"><h3>更新代理</h3><p>一般不用填：软件会自己试直连和本机常见代理，通了自动记住。这里填了，就优先用它。</p></div>
+            <input type="text" id="set-proxy" placeholder="http://127.0.0.1:7890" spellcheck="false">
+          </div>
+        </section>
+        <p id="set-noresult" hidden>没有匹配的设置项。</p>
+      </div>
     </div>
   </div>
 </div>

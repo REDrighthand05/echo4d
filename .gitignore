@@ -24,3 +24,5 @@ spec_*_prompt.txt
 # PyInstaller output
 build/
 dist/
+.venv-mus/
+experiments/**/.venv*/

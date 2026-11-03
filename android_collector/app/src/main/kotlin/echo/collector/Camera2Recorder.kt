@@ -136,7 +136,7 @@ class Camera2Recorder(
                         ?: return@setOnImageAvailableListener
                     try {
                         val ts = img.timestamp
-                        if (ts - lastPreviewNs >= 160_000_000L) {
+                        if (ts - lastPreviewNs >= 120_000_000L) {
                             lastPreviewNs = ts
                             Thumbs.fromYuv(img, 256)?.let { onPreview(it) }
                         }

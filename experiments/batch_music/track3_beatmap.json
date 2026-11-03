@@ -1,0 +1,307 @@
+{
+  "source_video": "user/files/__________22_6ruv.m4a",
+  "audio_file": "echo_scene_app/experiments/batch_music/track3_22.m4a",
+  "duration_s": 22.13,
+  "music_start_s": 0.03,
+  "music_end_s": 22.11,
+  "tempo_bpm": 114.3,
+  "beat_period_s": 0.525,
+  "beats": [
+    {
+      "time": 0.5,
+      "strength": 0.94
+    },
+    {
+      "time": 1.15,
+      "strength": 0.78
+    },
+    {
+      "time": 1.54,
+      "strength": 0.87
+    },
+    {
+      "time": 2.07,
+      "strength": 0.77
+    },
+    {
+      "time": 2.6,
+      "strength": 0.86
+    },
+    {
+      "time": 3.25,
+      "strength": 0.72
+    },
+    {
+      "time": 3.65,
+      "strength": 0.84
+    },
+    {
+      "time": 3.91,
+      "strength": 0.7
+    },
+    {
+      "time": 4.7,
+      "strength": 0.98
+    },
+    {
+      "time": 5.22,
+      "strength": 0.82
+    },
+    {
+      "time": 5.75,
+      "strength": 0.82
+    },
+    {
+      "time": 6.54,
+      "strength": 0.76
+    },
+    {
+      "time": 6.8,
+      "strength": 1.0
+    },
+    {
+      "time": 7.45,
+      "strength": 0.8
+    },
+    {
+      "time": 8.12,
+      "strength": 0.78
+    },
+    {
+      "time": 8.12,
+      "strength": 0.78
+    },
+    {
+      "time": 8.9,
+      "strength": 1.0
+    },
+    {
+      "time": 9.43,
+      "strength": 0.86
+    },
+    {
+      "time": 9.96,
+      "strength": 0.77
+    },
+    {
+      "time": 10.48,
+      "strength": 0.72
+    },
+    {
+      "time": 11.01,
+      "strength": 0.84
+    },
+    {
+      "time": 11.27,
+      "strength": 0.74
+    },
+    {
+      "time": 12.06,
+      "strength": 0.87
+    },
+    {
+      "time": 12.32,
+      "strength": 0.8
+    },
+    {
+      "time": 13.11,
+      "strength": 0.89
+    },
+    {
+      "time": 13.63,
+      "strength": 0.79
+    },
+    {
+      "time": 14.16,
+      "strength": 0.81
+    },
+    {
+      "time": 14.69,
+      "strength": 0.86
+    },
+    {
+      "time": 15.21,
+      "strength": 0.89
+    },
+    {
+      "time": 15.48,
+      "strength": 0.85
+    },
+    {
+      "time": 16.27,
+      "strength": 0.84
+    },
+    {
+      "time": 16.52,
+      "strength": 0.71
+    },
+    {
+      "time": 17.29,
+      "strength": 0.9
+    },
+    {
+      "time": 17.81,
+      "strength": 0.96
+    },
+    {
+      "time": 18.34,
+      "strength": 0.77
+    },
+    {
+      "time": 18.87,
+      "strength": 0.8
+    },
+    {
+      "time": 19.39,
+      "strength": 0.99
+    },
+    {
+      "time": 20.18,
+      "strength": 0.67
+    },
+    {
+      "time": 20.31,
+      "strength": 0.8
+    },
+    {
+      "time": 20.97,
+      "strength": 0.63
+    },
+    {
+      "time": 21.49,
+      "strength": 0.56
+    },
+    {
+      "time": 21.77,
+      "strength": 0.09
+    }
+  ],
+  "accents": [
+    {
+      "time": 0.5,
+      "strength": 0.94
+    },
+    {
+      "time": 1.15,
+      "strength": 0.78
+    },
+    {
+      "time": 1.54,
+      "strength": 0.87
+    },
+    {
+      "time": 2.6,
+      "strength": 0.86
+    },
+    {
+      "time": 3.65,
+      "strength": 0.84
+    },
+    {
+      "time": 4.7,
+      "strength": 0.98
+    },
+    {
+      "time": 5.22,
+      "strength": 0.82
+    },
+    {
+      "time": 5.75,
+      "strength": 0.82
+    },
+    {
+      "time": 6.8,
+      "strength": 1.0
+    },
+    {
+      "time": 7.45,
+      "strength": 0.8
+    },
+    {
+      "time": 8.12,
+      "strength": 0.78
+    },
+    {
+      "time": 8.9,
+      "strength": 1.0
+    },
+    {
+      "time": 9.43,
+      "strength": 0.86
+    },
+    {
+      "time": 11.01,
+      "strength": 0.84
+    },
+    {
+      "time": 12.06,
+      "strength": 0.87
+    },
+    {
+      "time": 13.11,
+      "strength": 0.89
+    },
+    {
+      "time": 13.63,
+      "strength": 0.79
+    },
+    {
+      "time": 14.16,
+      "strength": 0.81
+    },
+    {
+      "time": 14.69,
+      "strength": 0.86
+    },
+    {
+      "time": 15.21,
+      "strength": 0.89
+    },
+    {
+      "time": 15.87,
+      "strength": 0.78
+    },
+    {
+      "time": 16.27,
+      "strength": 0.84
+    },
+    {
+      "time": 17.29,
+      "strength": 0.9
+    },
+    {
+      "time": 17.81,
+      "strength": 0.96
+    },
+    {
+      "time": 18.87,
+      "strength": 0.8
+    },
+    {
+      "time": 19.39,
+      "strength": 0.99
+    },
+    {
+      "time": 20.31,
+      "strength": 0.8
+    }
+  ],
+  "structure": {
+    "music_start_s": 0.03,
+    "loudest_s": 3.58,
+    "biggest_rise_s": 0.23,
+    "biggest_fall_s": 20.98,
+    "end_s": 22.13,
+    "ending": "quick decay at the end (short tail, not a long fade)",
+    "head_silence_60db_s": 0.03,
+    "head_silence_40db_s": 0.03
+  },
+  "mood_estimate": "moderate tempo (114 BPM), balanced spectrum (centroid ~3581 Hz, low-band share 20%, high-band share 27%), driving pulse (1.22 accents/s), energy stays level across the track; dynamics ratio 0.18. Estimate from waveform/spectral numbers only, not from listening.",
+  "notes": [
+    "Measured: first 0.03s are (near-)silence at the -60dB threshold (-40dB threshold gives 0.03s); music runs to ~22.11s of the 22.13s file. Treat 0.03s as music time-zero when cutting.",
+    "Tempo by comb-grid scan: 114.3 BPM, beat period 0.525s, 42 beats on the grid.",
+    "Structure: biggest energy rise ~0.23s, biggest energy fall ~20.98s, loudest moment ~3.58s, ending: quick decay at the end (short tail, not a long fade).",
+    "Mood estimate (from numbers, not listening): moderate tempo (114 BPM), balanced spectrum (centroid ~3581 Hz, low-band share 20%, high-band share 27%), driving pulse (1.22 accents/s), energy stays level across the track; dynamics ratio 0.18. Estimate from waveform/spectral numbers only, not from listening."
+  ],
+  "method": "spectral-flux onset envelope (STFT 2048/512 @44.1k, max-normalised); tempo by direct comb-grid scan 0.40-1.60s over a ~0.06s-smoothed envelope (shortest period reaching >=85% of best per-beat onset strength); beats snapped to local onset maxima; accents = spectral-flux peaks (height>=0.78 of max, prominence>=0.10, min gap 0.30s); scipy/numpy (librosa unavailable). Both calibrations verified against round-1: they reproduce its 100 BPM tempo and its exact 12-accent set."
+}

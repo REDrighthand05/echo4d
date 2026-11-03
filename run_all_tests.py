@@ -28,6 +28,7 @@ SUITES = [
     ("align", [sys.executable, "tests/test_up_alignment.py"]),
     ("clean", [sys.executable, "tests/test_continuity_clean.py"]),
     ("replay", [sys.executable, "tests/test_replay.py"]),
+    ("replay", [sys.executable, "tests/test_replay_walk.py"]),
     ("scale", [sys.executable, "tests/test_scale.py"]),
     ("desktop", [sys.executable, "tests/test_desktop.py"]),
     ("webshell", [sys.executable, "tests/test_web_bridge.py"]),
@@ -41,6 +42,10 @@ SUITES = [
     ("parts", [sys.executable, "tests/test_hwaccel.py"]),
     ("parts", [sys.executable, "tests/test_depth_batch.py"]),
     ("parts", [sys.executable, "tests/test_frame_feed.py"]),
+    ("cli", [sys.executable, "tests/test_cli.py"]),
+    ("parts", [sys.executable, "tests/test_voxel_export.py"]),
+    ("parts", [sys.executable, "tests/test_gaussian_adapter.py"]),
+    ("parts", [sys.executable, "tests/test_photo_discovery.py"]),
 ]
 
 

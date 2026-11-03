@@ -1,0 +1,161 @@
+{
+  "source_video": "user/files/_____21_51wt.m4a",
+  "audio_file": "echo_scene_app/experiments/batch_music/track2_21.m4a",
+  "duration_s": 22.31,
+  "music_start_s": 0.03,
+  "music_end_s": 22.22,
+  "tempo_bpm": 65.6,
+  "beat_period_s": 0.915,
+  "beats": [
+    {
+      "time": 0.84,
+      "strength": 0.38
+    },
+    {
+      "time": 1.31,
+      "strength": 0.79
+    },
+    {
+      "time": 2.43,
+      "strength": 0.79
+    },
+    {
+      "time": 3.81,
+      "strength": 0.85
+    },
+    {
+      "time": 4.14,
+      "strength": 0.77
+    },
+    {
+      "time": 5.26,
+      "strength": 1.0
+    },
+    {
+      "time": 5.93,
+      "strength": 0.31
+    },
+    {
+      "time": 6.97,
+      "strength": 0.55
+    },
+    {
+      "time": 7.64,
+      "strength": 0.63
+    },
+    {
+      "time": 8.79,
+      "strength": 0.37
+    },
+    {
+      "time": 9.81,
+      "strength": 0.72
+    },
+    {
+      "time": 10.72,
+      "strength": 0.5
+    },
+    {
+      "time": 12.05,
+      "strength": 0.9
+    },
+    {
+      "time": 12.48,
+      "strength": 0.54
+    },
+    {
+      "time": 13.31,
+      "strength": 0.41
+    },
+    {
+      "time": 14.45,
+      "strength": 0.41
+    },
+    {
+      "time": 15.57,
+      "strength": 0.35
+    },
+    {
+      "time": 16.0,
+      "strength": 0.58
+    },
+    {
+      "time": 16.87,
+      "strength": 0.6
+    },
+    {
+      "time": 18.07,
+      "strength": 0.83
+    },
+    {
+      "time": 18.96,
+      "strength": 0.77
+    },
+    {
+      "time": 19.77,
+      "strength": 0.6
+    },
+    {
+      "time": 20.83,
+      "strength": 0.87
+    },
+    {
+      "time": 21.93,
+      "strength": 0.26
+    }
+  ],
+  "accents": [
+    {
+      "time": 1.31,
+      "strength": 0.79
+    },
+    {
+      "time": 2.43,
+      "strength": 0.79
+    },
+    {
+      "time": 3.27,
+      "strength": 0.84
+    },
+    {
+      "time": 3.81,
+      "strength": 0.85
+    },
+    {
+      "time": 5.26,
+      "strength": 1.0
+    },
+    {
+      "time": 12.05,
+      "strength": 0.9
+    },
+    {
+      "time": 18.07,
+      "strength": 0.83
+    },
+    {
+      "time": 20.83,
+      "strength": 0.87
+    }
+  ],
+  "structure": {
+    "music_start_s": 0.03,
+    "loudest_s": 21.28,
+    "biggest_rise_s": 7.58,
+    "biggest_fall_s": 21.98,
+    "end_s": 22.31,
+    "ending": "hard stop (still near full level at the cut)",
+    "head_silence_60db_s": 0.03,
+    "head_silence_40db_s": 0.04
+  },
+  "mood_estimate": "slow tempo (66 BPM), balanced spectrum (centroid ~3717 Hz, low-band share 5%, high-band share 26%), steady pulse (0.36 accents/s), energy stays level across the track; dynamics ratio 0.24. Estimate from waveform/spectral numbers only, not from listening.",
+  "notes": [
+    "USER DESIGNATION: SENTIMENTAL SPECIAL — this track's video opens with soft glowing lines about memories being precious / keeping life, gentle mood. (User named this the 「去雪峰」 track.)",
+    "Measured: first 0.03s are (near-)silence at the -60dB threshold (-40dB threshold gives 0.04s); music runs to ~22.22s of the 22.31s file. Treat 0.03s as music time-zero when cutting.",
+    "Tempo by comb-grid scan: 65.6 BPM, beat period 0.915s, 24 beats on the grid.",
+    "Structure: biggest energy rise ~7.58s, biggest energy fall ~21.98s, loudest moment ~21.28s, ending: hard stop (still near full level at the cut).",
+    "Mood estimate (from numbers, not listening): slow tempo (66 BPM), balanced spectrum (centroid ~3717 Hz, low-band share 5%, high-band share 26%), steady pulse (0.36 accents/s), energy stays level across the track; dynamics ratio 0.24. Estimate from waveform/spectral numbers only, not from listening."
+  ],
+  "method": "spectral-flux onset envelope (STFT 2048/512 @44.1k, max-normalised); tempo by direct comb-grid scan 0.40-1.60s over a ~0.06s-smoothed envelope (shortest period reaching >=85% of best per-beat onset strength); beats snapped to local onset maxima; accents = spectral-flux peaks (height>=0.78 of max, prominence>=0.10, min gap 0.30s); scipy/numpy (librosa unavailable). Both calibrations verified against round-1: they reproduce its 100 BPM tempo and its exact 12-accent set.",
+  "designation": "SENTIMENTAL SPECIAL"
+}

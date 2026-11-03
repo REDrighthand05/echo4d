@@ -360,6 +360,7 @@ const state = {
   video: null, videoPath: null, busy: false,
   jobDir: null, depthReady: false,
   jobOutputs: { any: false, scene: false, preview: false, replay: false },
+  lastHistory: [], lastInbox: [],
 };
 const logBody = $("logbody");
 function log(line) {
@@ -392,6 +393,7 @@ function refresh() {
 function selectVideo(name, path) {
   state.video = name;
   state.videoPath = path || null;
+  setOmnibox(path || name);
   $("hero-desc").innerHTML =
     `已选：${name}<br>点「开始生成」建模，或者先做一段深度视频。`;
   setStatus("已选好视频，点「开始生成」就行。", 0);
@@ -405,7 +407,7 @@ $("win-min").addEventListener("click", () => { if (bridge) bridge.win_minimize()
 $("win-max").addEventListener("click", () => { if (bridge) bridge.win_toggle_max(); });
 $("win-close").addEventListener("click", () => { if (bridge) bridge.win_close(); });
 $("titlebar").addEventListener("dblclick", (e) => {
-  if (e.target.closest(".tb-btns")) return;
+  if (e.target.closest(".tb-btns, #tabstrip")) return;
   if (bridge) bridge.win_toggle_max();
 });
 
@@ -581,6 +583,7 @@ $("btn-markers").addEventListener("click", async () => {
 
 /* history */
 function renderHistory(items) {
+  state.lastHistory = items;
   const box = $("histlist");
   box.innerHTML = "";
   for (const it of items) {
@@ -592,6 +595,7 @@ function renderHistory(items) {
       `<span class="when">${it.when}</span>`;
     div.addEventListener("click", async () => {
       state.jobDir = it.dir;
+      setOmnibox(it.name);
       state.jobOutputs = { any: true, scene: it.finished,
                            preview: it.preview, replay: it.replay };
       if (bridge) await bridge.select_job(it.dir);
@@ -604,6 +608,7 @@ function renderHistory(items) {
 
 /* phone-capture inbox: captures that synced themselves home */
 function renderInbox(items) {
+  state.lastInbox = items;
   const tile = $("inbox");
   const box = $("inboxlist");
   tile.hidden = !items || items.length === 0;
@@ -635,10 +640,16 @@ function openSettings() {
   page.classList.remove("leave");
   page.hidden = false;
   page.classList.add("enter");
+  settingsOpen = true;
+  syncTabs();
+  syncNav();
 }
 $("btn-settings").addEventListener("click", openSettings);
 $("btn-settings-top").addEventListener("click", openSettings);
 $("btn-set-back").addEventListener("click", () => {
+  settingsOpen = false;
+  syncTabs();
+  syncNav();
   const page = $("settings-page");
   page.classList.remove("enter");
   page.classList.add("leave");
@@ -692,6 +703,98 @@ $("set-autostart").addEventListener("change", async e => {
 $("set-tray").addEventListener("change", async e => {
   if (bridge) await bridge.save_settings({ closeToTray: e.target.checked });
 });
+
+/* ------------------------------------------------------------------ */
+/* chrome frame: tabs, nav cluster, omnibox, overflow menu. Every    */
+/* control only re-aims an action the shell already has -- no new    */
+/* behaviour, just Chrome's skeleton over the same logic.            */
+/* ------------------------------------------------------------------ */
+let settingsOpen = false;
+function setOmnibox(text) {
+  if (text) $("omnibox-text").textContent = text;
+}
+function syncNav() {
+  $("nav-back").classList.toggle("is-disabled", !settingsOpen);
+}
+function syncTabs() {
+  $("tab-main").classList.toggle("active", !settingsOpen);
+  $("tab-settings").classList.toggle("active", settingsOpen);
+}
+$("tab-main").addEventListener("click", () => {
+  if (settingsOpen) $("btn-set-back").click();
+});
+$("tab-settings").addEventListener("click", () => {
+  if (!settingsOpen) openSettings();
+});
+$("nav-back").addEventListener("click", () => {
+  if (settingsOpen) $("btn-set-back").click();
+});
+$("nav-fwd").addEventListener("click", () => { /* nowhere forward to go */ });
+$("nav-reload").addEventListener("click", () => {
+  renderHistory(state.lastHistory || []);
+  renderInbox(state.lastInbox || []);
+  const b = $("nav-reload");
+  b.classList.remove("spinning");
+  void b.offsetWidth;
+  b.classList.add("spinning");
+  if (!bridge) log("已刷新列表。");
+});
+$("omnibox").addEventListener("click", () => { $("btn-pick").click(); });
+
+const menuEl = $("menu");
+function closeMenu() { menuEl.hidden = true; }
+$("btn-menu").addEventListener("click", e => {
+  e.stopPropagation();
+  menuEl.hidden = !menuEl.hidden;
+});
+document.addEventListener("click", e => {
+  if (!menuEl.hidden && !e.target.closest(".tb-right")) closeMenu();
+});
+document.addEventListener("keydown", e => {
+  if (e.key === "Escape") closeMenu();
+});
+$("menu-settings").addEventListener("click", () => { closeMenu(); openSettings(); });
+$("menu-update").addEventListener("click", () => {
+  closeMenu(); openSettings();
+  $("btn-set-update").click();
+});
+$("menu-log").addEventListener("click", () => { closeMenu(); $("logtab").click(); });
+$("menu-about").addEventListener("click", () => {
+  closeMenu(); openSettings(); setSetFilter("update");
+});
+
+/* settings page: category nav + live search -- both are pure
+   filters over the rows that are already on the page */
+function applySetFilter() {
+  const input = $("set-search-input");
+  const q = (input ? input.value : "").trim().toLowerCase();
+  const active = document.querySelector(".set-nav-item.active");
+  const cat = active ? active.dataset.cat : "all";
+  let any = false;
+  document.querySelectorAll(".set-group").forEach(g => {
+    let groupVisible = false;
+    g.querySelectorAll(".set-row").forEach(r => {
+      const vis = q ? r.textContent.toLowerCase().includes(q)
+                    : (cat === "all" || g.dataset.cat === cat);
+      r.style.display = vis ? "" : "none";
+      if (vis) groupVisible = true;
+    });
+    g.style.display = groupVisible ? "" : "none";
+    if (groupVisible) any = true;
+  });
+  $("set-noresult").hidden = any;
+}
+function setSetFilter(cat) {
+  document.querySelectorAll(".set-nav-item").forEach(b =>
+    b.classList.toggle("active", b.dataset.cat === cat));
+  applySetFilter();
+}
+document.querySelectorAll(".set-nav-item").forEach(b =>
+  b.addEventListener("click", () => {
+    $("set-search-input").value = "";
+    setSetFilter(b.dataset.cat);
+  }));
+$("set-search-input").addEventListener("input", applySetFilter);
 
 /* preview screen: frames, depth video, orbit drag */
 const pvc = $("pvcanvas").getContext("2d");

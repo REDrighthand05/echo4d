@@ -1,0 +1,251 @@
+{
+  "source_video": "user/media_library/promo_music_video.mp4",
+  "audio_file": "echo_scene_app/experiments/promo_music.m4a",
+  "duration_s": 26.56,
+  "music_start_s": 0.76,
+  "music_end_s": 26.56,
+  "tempo_bpm": 100.0,
+  "beat_period_s": 0.6,
+  "beats": [
+    {
+      "time": 0.33,
+      "strength": 0.0
+    },
+    {
+      "time": 1.01,
+      "strength": 0.61
+    },
+    {
+      "time": 1.63,
+      "strength": 0.78
+    },
+    {
+      "time": 2.23,
+      "strength": 0.5
+    },
+    {
+      "time": 2.82,
+      "strength": 0.83
+    },
+    {
+      "time": 3.39,
+      "strength": 0.51
+    },
+    {
+      "time": 4.02,
+      "strength": 0.6
+    },
+    {
+      "time": 4.66,
+      "strength": 0.44
+    },
+    {
+      "time": 5.22,
+      "strength": 0.72
+    },
+    {
+      "time": 5.82,
+      "strength": 0.33
+    },
+    {
+      "time": 6.42,
+      "strength": 0.32
+    },
+    {
+      "time": 7.01,
+      "strength": 0.33
+    },
+    {
+      "time": 7.62,
+      "strength": 0.92
+    },
+    {
+      "time": 8.21,
+      "strength": 0.57
+    },
+    {
+      "time": 8.82,
+      "strength": 0.69
+    },
+    {
+      "time": 9.39,
+      "strength": 0.53
+    },
+    {
+      "time": 10.02,
+      "strength": 1.0
+    },
+    {
+      "time": 10.6,
+      "strength": 0.63
+    },
+    {
+      "time": 11.22,
+      "strength": 0.71
+    },
+    {
+      "time": 11.82,
+      "strength": 0.6
+    },
+    {
+      "time": 12.42,
+      "strength": 0.68
+    },
+    {
+      "time": 13.0,
+      "strength": 0.59
+    },
+    {
+      "time": 13.62,
+      "strength": 0.79
+    },
+    {
+      "time": 14.2,
+      "strength": 0.6
+    },
+    {
+      "time": 14.81,
+      "strength": 0.95
+    },
+    {
+      "time": 15.39,
+      "strength": 0.68
+    },
+    {
+      "time": 16.02,
+      "strength": 0.74
+    },
+    {
+      "time": 16.59,
+      "strength": 0.63
+    },
+    {
+      "time": 17.22,
+      "strength": 0.85
+    },
+    {
+      "time": 17.8,
+      "strength": 0.54
+    },
+    {
+      "time": 18.41,
+      "strength": 0.76
+    },
+    {
+      "time": 18.99,
+      "strength": 0.69
+    },
+    {
+      "time": 19.61,
+      "strength": 0.73
+    },
+    {
+      "time": 20.2,
+      "strength": 0.74
+    },
+    {
+      "time": 20.82,
+      "strength": 0.83
+    },
+    {
+      "time": 21.4,
+      "strength": 0.59
+    },
+    {
+      "time": 22.01,
+      "strength": 0.9
+    },
+    {
+      "time": 22.59,
+      "strength": 0.66
+    },
+    {
+      "time": 23.21,
+      "strength": 0.76
+    },
+    {
+      "time": 23.79,
+      "strength": 0.6
+    },
+    {
+      "time": 24.42,
+      "strength": 0.9
+    },
+    {
+      "time": 24.98,
+      "strength": 0.6
+    },
+    {
+      "time": 25.61,
+      "strength": 0.67
+    },
+    {
+      "time": 26.2,
+      "strength": 0.41
+    }
+  ],
+  "accents": [
+    {
+      "time": 2.82,
+      "strength": 0.83
+    },
+    {
+      "time": 4.32,
+      "strength": 1.0
+    },
+    {
+      "time": 7.62,
+      "strength": 0.92
+    },
+    {
+      "time": 10.02,
+      "strength": 1.0
+    },
+    {
+      "time": 11.52,
+      "strength": 0.79
+    },
+    {
+      "time": 13.62,
+      "strength": 0.79
+    },
+    {
+      "time": 14.81,
+      "strength": 0.95
+    },
+    {
+      "time": 17.22,
+      "strength": 0.85
+    },
+    {
+      "time": 20.82,
+      "strength": 0.83
+    },
+    {
+      "time": 22.01,
+      "strength": 0.9
+    },
+    {
+      "time": 24.42,
+      "strength": 0.9
+    },
+    {
+      "time": 25.91,
+      "strength": 0.81
+    }
+  ],
+  "structure": {
+    "music_start_s": 0.76,
+    "loudest_s": 23.38,
+    "biggest_rise_s": 0.88,
+    "biggest_fall_s": 5.38,
+    "end_s": 26.56
+  },
+  "notes": [
+    "Measured: the audio track is digitally silent for the first ~0.76s, then the music starts abruptly at full level at 0.76s and runs to 26.56s (file ends 26.56s). When assembling, treat 0.76s as music time-zero.",
+    "Steady tempo confirmed by direct comb scan: 100 BPM, beat period 0.600s, 44 beats on the grid; tail accents (~20.2/20.8/21.4/22.0s) sit exactly on this grid. (A naive autocorrelation reads 50 BPM — that is the half-time shadow of the same pulse.)",
+    "Structure: biggest energy rise (drop-in) ~0.88s, biggest energy fall (break) ~5.38s, loudest moment ~23.38s, final accent 25.91s.",
+    "Length: full unedited track 26.56s (video container 26.64s). That is ~2.5s longer than the ~24s split (15s rebuild + 9s Blender) sketched before — plan the assembly for 26.6s of music; the music itself must not be trimmed."
+  ],
+  "method": "spectral-flux onset envelope (STFT 2048/512 @44.1k, max-normalised); tempo by direct comb-grid scan 0.40-1.60s (shortest period reaching >=85% of best per-beat onset strength); beats snapped to local onset maxima; accents = top spectral-flux peaks (prominence>=0.10, min gap 0.30s); scipy/numpy (librosa unavailable)"
+}

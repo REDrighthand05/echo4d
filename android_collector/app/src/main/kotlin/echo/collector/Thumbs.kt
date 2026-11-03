@@ -13,6 +13,22 @@ import android.media.Image
  */
 object Thumbs {
 
+    /**
+     * Rotate a sensor-frame bitmap upright for display. The
+     * record itself is never rotated — this is display-only,
+     * by the camera's sensor orientation (the platform's own
+     * convention: rotate clockwise by that many degrees and
+     * the image stands upright in the natural orientation).
+     */
+    fun rotate(bmp: Bitmap, deg: Int): Bitmap {
+        if (deg == 0) return bmp
+        val m = android.graphics.Matrix().apply {
+            postRotate(deg.toFloat())
+        }
+        return Bitmap.createBitmap(
+            bmp, 0, 0, bmp.width, bmp.height, m, true)
+    }
+
     fun fromYuv(image: Image, targetW: Int): Bitmap? {
         return try {
             val w = image.width

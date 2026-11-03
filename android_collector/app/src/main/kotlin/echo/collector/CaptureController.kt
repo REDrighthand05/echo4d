@@ -73,6 +73,13 @@ class CaptureController(
      *  shared latest-preview slot for the Activity to show. */
     var onPreviewFrame: ((android.graphics.Bitmap) -> Unit)? = null
 
+    /** Preview frames leave the recorders in sensor frame;
+     *  rotate them upright here, once, for display only. */
+    private fun emitPreview(bmp: android.graphics.Bitmap) {
+        onPreviewFrame?.invoke(
+            Thumbs.rotate(bmp, caps.chosenSensorOrientation))
+    }
+
     @Volatile private var latestQuat: DoubleArray? = null
     private val trailPoints = ArrayDeque<DoubleArray>()
     private var frameSink: ((Long) -> Unit)? = null
@@ -199,7 +206,7 @@ class CaptureController(
                     }
                 },
                 onDepth,
-                { bmp -> onPreviewFrame?.invoke(bmp) })
+                { bmp -> emitPreview(bmp) })
             val err = rec.prepareBlocking(onError)
             if (err == null) {
                 arcore = rec
@@ -245,7 +252,7 @@ class CaptureController(
                         exposureNs, iso, focusM, ae, af)
                 }
             },
-            onPreview = { bmp -> onPreviewFrame?.invoke(bmp) }
+            onPreview = { bmp -> emitPreview(bmp) }
         )
         camera2 = rec
         rec.start(onError)
@@ -292,6 +299,26 @@ class CaptureController(
                 onError("相机没有出画面，已自动停止——这次没有录上")
                 onAutoStop?.invoke(f)
             }
+        }
+        // Rate watchdog: frames crawling at a couple per second
+        // are nearly as bad as none — the record's frame rate is
+        // sacred and poses are the auxiliary, never the reverse.
+        // (Field evidence 2026-11-03: ARCore alive but delivering
+        // 44 frames in 25 s.) Same heal as the no-frame case.
+        if (activeBackend == "arcore" && !watchdogRetried &&
+            elapsedMs > RATE_CHECK_MS && frameCount > 0 &&
+            frameCount * 1000.0 / elapsedMs < MIN_USABLE_FPS) {
+            watchdogRetried = true
+            notes.add(
+                "watchdog: arcore frame rate too low " +
+                    "($frameCount frames in ${elapsedMs / 1000}s); " +
+                    "swapped to camera2 mid-capture")
+            try { arcore?.stop() } catch (e: Exception) { /* swap on */ }
+            arcore?.let { notes.add(it.note) }
+            arcore = null
+            activeBackend = "camera2"
+            startCamera2Backend()
+            backendSinceMs = SystemClock.elapsedRealtime()
         }
     }
 
@@ -341,7 +368,7 @@ class CaptureController(
             .put("device", JsonObj()
                 .put("name", "ECHO Collector")
                 .put("board", "${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}")
-                .put("firmware", "android-collector 0.6"))
+                .put("firmware", "android-collector 0.9"))
             .put("clock", JsonObj()
                 .put("type", "monotonic")
                 .put("unit", "s")
@@ -408,5 +435,7 @@ class CaptureController(
         const val MIN_FREE_START_BYTES = 1_500_000_000L
         const val MIN_FREE_STOP_BYTES = 300_000_000L
         const val NO_FRAME_GRACE_MS = 3_000L
+        const val RATE_CHECK_MS = 6_000L
+        const val MIN_USABLE_FPS = 8.0
     }
 }

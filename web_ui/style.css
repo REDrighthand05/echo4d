@@ -1,7 +1,11 @@
-/* ECHO web shell -- Meta-style real glass.
+/* ECHO web shell -- Meta-style real glass, Chrome skeleton.
    One continuous sheet: a living bead-graffiti wall behind,
    translucent panels frosted by real backdrop blur, text with
-   no background at all (HTML text never had one). */
+   no background at all (HTML text never had one). The window's
+   frame follows Chrome: a tab strip on top (views as tabs), one
+   toolbar row under it (nav cluster, omnibox capsule, overflow
+   menu), then the content. All colours come from the graffiti
+   blue plus Chrome's restrained greys -- no third palette. */
 
 :root {
   --ink: #14171a;
@@ -14,18 +18,39 @@
                   inset 0 1px 0 rgba(255, 255, 255, 0.65),
                   inset 0 -1px 0 rgba(255, 255, 255, 0.25);
   --radius: 26px;
+  /* Chrome rhythm: one radius ladder, one grey ladder */
+  --r-card: 12px;
+  --r-row: 8px;
+  --r-pill: 999px;
+  --grey-hover: rgba(32, 33, 36, 0.07);
+  --grey-press: rgba(32, 33, 36, 0.12);
+  --grey-icon: #5f6368;
+  --frame-bg: rgba(255, 255, 255, 0.55);
+  --frame-shadow: 0 1px 3px rgba(30, 50, 100, 0.10);
+  /* hairlines: the only separators the content area may use --
+     its text sits on the one shared sheet of glass, never on
+     a filled block of its own */
+  --hairline: rgba(20, 40, 90, 0.10);
+  --hairline-soft: rgba(20, 40, 90, 0.06);
 }
 /* while a job runs the scene sits behind the glass and the whole
    sheet turns to dark glass: ink flips light so text stays easy */
 body.working {
   --ink: #e9eff7;
   --subink: #a9bccd;
+  --grey-hover: rgba(255, 255, 255, 0.10);
+  --grey-press: rgba(255, 255, 255, 0.16);
+  --grey-icon: #a9bccd;
+  --frame-bg: rgba(15, 22, 34, 0.58);
+  --frame-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+  --hairline: rgba(255, 255, 255, 0.16);
+  --hairline-soft: rgba(255, 255, 255, 0.09);
 }
 body.working .btn {
-  background: rgba(18, 26, 40, 0.42);
-  border-color: rgba(255, 255, 255, 0.14);
+  background: transparent;
+  border-color: transparent;
 }
-body.working .btn:hover:not(:disabled) { background: rgba(30, 42, 62, 0.55); }
+body.working .btn:hover:not(:disabled) { background: rgba(255, 255, 255, 0.10); }
 body.working .btn:disabled { color: rgba(233, 239, 247, 0.38); }
 body.working #track { background: rgba(255, 255, 255, 0.18); }
 
@@ -87,28 +112,123 @@ body.working #echo { opacity: 1; }
 
 #center {
   height: 100%;
-  padding: 42px 34px 8px 8px;
-  display: flex; flex-direction: column; gap: 6px;
+  padding: 100px 40px 8px 20px;
+  display: flex; flex-direction: column; gap: 8px;
 }
 
-/* -- frameless window caption: our own strip, glass language -------
-   The native Win32 caption is gone (frameless window): this strip is
-   the drag handle (pywebview drag region) and carries the window
-   buttons, borderless and transparent like everything else. */
+/* -- Chrome frame, row 1: the tab strip --------------------------
+   The frameless caption strip becomes Chrome's tab strip: it is
+   still the drag handle (pywebview drag region) and still carries
+   the window buttons at the right, but its left half now holds
+   view tabs. The active tab takes the toolbar's surface colour
+   and melts into it (rounded top corners, square bottom edge),
+   the way Chrome's current tab sits on its toolbar. */
 #titlebar {
-  position: fixed; top: 0; left: 0; right: 0; height: 34px;
-  z-index: 60; display: flex; align-items: center;
-  justify-content: space-between; padding: 0 6px 0 14px;
+  position: fixed; top: 0; left: 0; right: 0; height: 40px;
+  z-index: 60; display: flex; align-items: flex-end;
+  justify-content: space-between; padding: 0 6px 0 10px;
   -webkit-user-select: none; user-select: none; cursor: default;
 }
-.tb-title { font-size: 12px; letter-spacing: .14em; color: #5a6675; }
-.tb-btns { display: flex; gap: 2px; }
-.tb-btns button {
-  width: 42px; height: 28px; border: none; background: transparent;
-  color: #46525f; font-size: 12px; cursor: pointer; border-radius: 6px;
+#tabstrip { display: flex; align-items: flex-end; gap: 4px; height: 100%; }
+.tab {
+  font: inherit; display: flex; align-items: center; gap: 8px;
+  height: 34px; min-width: 148px; max-width: 200px;
+  padding: 0 14px; margin-bottom: 0;
+  border: none; background: transparent; cursor: pointer;
+  border-radius: 10px 10px 0 0;
+  color: var(--subink); font-size: 12.5px; font-weight: 500;
+  transition: background 0.15s ease, color 0.15s ease;
 }
-.tb-btns button:hover { background: rgba(255, 255, 255, .45); }
-#win-close:hover { background: rgba(216, 74, 56, .85); color: #fff; }
+.tab:hover { background: rgba(255, 255, 255, 0.35); }
+body.working .tab:hover { background: rgba(255, 255, 255, 0.10); }
+.tab.active {
+  background: var(--frame-bg);
+  -webkit-backdrop-filter: blur(18px) saturate(150%);
+  backdrop-filter: blur(18px) saturate(150%);
+  color: var(--ink);
+  box-shadow: 0 1px 0 var(--frame-bg);
+}
+.tab-ic { width: 14px; height: 14px; flex: none; }
+.tab-title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tb-btns { display: flex; gap: 2px; align-items: center; padding-bottom: 4px; }
+.tb-btns button {
+  width: 44px; height: 30px; border: none; background: transparent;
+  color: var(--subink); font-size: 12px; cursor: pointer; border-radius: 6px;
+}
+.tb-btns button:hover { background: var(--grey-hover); color: var(--ink); }
+#win-close:hover { background: #d93025; color: #fff; }
+
+/* -- Chrome frame, row 2: the toolbar ---------------------------- */
+#toolbar {
+  position: fixed; top: 40px; left: 0; right: 0; height: 48px;
+  z-index: 55; display: flex; align-items: center; gap: 8px;
+  padding: 0 10px;
+  background: var(--frame-bg);
+  -webkit-backdrop-filter: blur(18px) saturate(150%);
+  backdrop-filter: blur(18px) saturate(150%);
+  box-shadow: var(--frame-shadow);
+  transition: background 1.2s ease;
+}
+.nav-cluster { display: flex; gap: 2px; flex: none; }
+.icon-btn {
+  width: 32px; height: 32px; flex: none;
+  display: flex; align-items: center; justify-content: center;
+  border: none; border-radius: 50%; background: transparent;
+  color: var(--grey-icon); cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.icon-btn svg { width: 18px; height: 18px; }
+.icon-btn:hover { background: var(--grey-hover); color: var(--ink); }
+.icon-btn:active { background: var(--grey-press); }
+.icon-btn.is-disabled { color: rgba(95, 99, 104, 0.38); cursor: default; }
+.icon-btn.is-disabled:hover { background: transparent; color: rgba(95, 99, 104, 0.38); }
+body.working .icon-btn.is-disabled { color: rgba(233, 239, 247, 0.30); }
+body.working .icon-btn.is-disabled:hover { color: rgba(233, 239, 247, 0.30); }
+#nav-reload.spinning svg { animation: spin 0.7s ease; }
+@keyframes spin { from { transform: rotate(0); } to { transform: rotate(360deg); } }
+/* the omnibox: one full-round capsule, light fill, carrying the
+   current file/job; clicking it is the main entry (pick a video) */
+#omnibox {
+  flex: 1; min-width: 0; height: 36px;
+  display: flex; align-items: center; gap: 9px;
+  padding: 0 15px; border-radius: var(--r-pill);
+  background: rgba(255, 255, 255, 0.78);
+  box-shadow: inset 0 0 0 1px rgba(20, 40, 90, 0.05),
+              0 1px 2px rgba(30, 50, 100, 0.05);
+  color: var(--ink); font-size: 13px; font-weight: 500;
+  cursor: pointer; transition: background 0.15s ease, box-shadow 0.15s ease;
+}
+#omnibox:hover {
+  background: rgba(255, 255, 255, 0.95);
+  box-shadow: inset 0 0 0 1px rgba(20, 40, 90, 0.07),
+              0 1px 4px rgba(30, 50, 100, 0.10);
+}
+body.working #omnibox { background: rgba(255, 255, 255, 0.13); }
+body.working #omnibox:hover { background: rgba(255, 255, 255, 0.20); }
+.omni-ic { width: 15px; height: 15px; flex: none; color: var(--grey-icon); }
+#omnibox-text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tb-right { position: relative; flex: none; }
+#menu {
+  position: absolute; top: calc(100% + 6px); right: 0;
+  min-width: 212px; padding: 6px; z-index: 70;
+  background: rgba(255, 255, 255, 0.94);
+  -webkit-backdrop-filter: blur(22px) saturate(150%);
+  backdrop-filter: blur(22px) saturate(150%);
+  border-radius: var(--r-card);
+  box-shadow: 0 4px 18px rgba(20, 30, 60, 0.20),
+              0 0 0 1px rgba(20, 40, 90, 0.06);
+}
+#menu[hidden] { display: none; }
+body.working #menu { background: rgba(22, 30, 44, 0.95); }
+.menu-item {
+  font: inherit; display: block; width: 100%; text-align: left;
+  padding: 8px 10px; border: none; background: transparent;
+  border-radius: var(--r-row); cursor: pointer;
+  color: var(--ink); font-size: 13px; font-weight: 500;
+}
+.menu-item:hover { background: var(--grey-hover); }
+.menu-sep { height: 1px; margin: 5px 8px; background: rgba(20, 40, 90, 0.09); }
+body.working .menu-sep { background: rgba(255, 255, 255, 0.12); }
 
 /* -- the glass material ---------------------------------------- */
 /* No frames: no border, no shadow, no rounded corners. The frost
@@ -132,35 +252,23 @@ body.working #echo { opacity: 1; }
   box-shadow: none;
 }
 .glass-strong::before {
-  content: "";
-  position: absolute; inset: 0;
-  z-index: -1;
-  background: rgba(255, 255, 255, 0.85);
-  -webkit-backdrop-filter: blur(28px) saturate(160%);
-  backdrop-filter: blur(28px) saturate(160%);
-  -webkit-mask-image:
-    linear-gradient(to right, transparent, black 22px, black calc(100% - 22px), transparent),
-    linear-gradient(to bottom, transparent, black 22px, black calc(100% - 22px), transparent);
-  -webkit-mask-composite: source-in;
-  mask-image:
-    linear-gradient(to right, transparent, black 22px, black calc(100% - 22px), transparent),
-    linear-gradient(to bottom, transparent, black 22px, black calc(100% - 22px), transparent);
-  mask-composite: intersect;
+  content: none;
 }
 
-/* -- header ------------------------------------------------------ */
+/* -- header: a slim title row now (the brand lives in the tab) --- */
 #header {
-  display: flex; align-items: flex-start;
-  padding: 12px 18px 12px;
+  display: flex; align-items: center;
+  padding: 2px 6px 0;
 }
-#header h1 { font-size: 24px; font-weight: 600; letter-spacing: 0.04em; }
-#header .sub { font-size: 12.5px; font-weight: 500; color: var(--subink); margin-top: 2px; }
-.hdr-actions { margin-left: auto; display: flex; gap: 10px; align-items: flex-start; }
+.hdr-text { display: flex; align-items: baseline; gap: 10px; }
+#header h1 { font-size: 16.5px; font-weight: 600; letter-spacing: 0.04em; }
+#header .sub { font-size: 12.5px; font-weight: 500; color: var(--subink); }
+.hdr-actions { margin-left: auto; display: flex; gap: 10px; align-items: center; }
 #updatebox { text-align: right; }
 #updatebox p { font-size: 12.5px; font-weight: 500; margin-bottom: 4px; }
 
 /* -- status band -------------------------------------------------- */
-#band { padding: 8px 16px 10px; }
+#band { padding: 4px 6px 8px; }
 #status { font-size: 13px; font-weight: 500; }
 #track {
   position: relative; height: 6px; margin-top: 5px;
@@ -183,82 +291,100 @@ body.working #echo { opacity: 1; }
 }
 #track.active #filldot { opacity: 1; }
 
-/* -- tile grid ---------------------------------------------------- */
-/* The tile deck scrolls inside its own area: at ANY window size
-   every tile -- settings included, at the very bottom -- stays
-   reachable, while header and status band never move. */
+/* -- content layout ---------------------------------------------
+   One flow on the one sheet of glass, no blocks anywhere: the
+   preview stage takes the centre, the console of actions sits
+   directly under it, the two lists share a row as pure text
+   columns, and the small utilities close the page in one row.
+   Sections are told apart by whitespace and hairlines only.
+   The deck scrolls inside its own area: at ANY window size
+   every section stays reachable, while header and status band
+   never move. */
 #tiles {
   flex: 1; min-height: 0;
   overflow-y: auto; overflow-x: hidden;
-  padding-right: 4px;
+  width: 100%; max-width: 1140px; margin: 0 auto;
+  padding: 10px 8px 30px;
   scrollbar-width: thin;
   scrollbar-color: rgba(20, 40, 90, 0.25) transparent;
-  display: grid; gap: 6px;
+  display: grid; gap: 30px 38px;
   align-content: start;
-  grid-template-columns: 1.55fr 1fr;
-  grid-template-rows: auto auto auto auto;
+  grid-template-columns: repeat(6, 1fr);
   grid-template-areas:
-    "hero preview"
-    "history preview"
-    "depth marker"
-    "settings settings";
+    "stage stage stage stage stage stage"
+    "hero hero hero hero hero hero"
+    "inbox inbox inbox history history history"
+    "depth depth marker marker settings settings";
 }
 #tiles::-webkit-scrollbar { width: 8px; }
 #tiles::-webkit-scrollbar-thumb {
   background: rgba(20, 40, 90, 0.20); border-radius: 99px;
 }
 #tiles::-webkit-scrollbar-track { background: transparent; }
-#preview { min-height: 340px; }
-#history { max-height: 308px; }
+#preview { grid-area: stage; height: 46vh; min-height: 380px; }
 #hero { grid-area: hero; }
-#preview { grid-area: preview; }
+#inbox { grid-area: inbox; }
 #history { grid-area: history; }
 #depth { grid-area: depth; }
 #marker { grid-area: marker; }
 #settings-strip { grid-area: settings; }
+/* a column rule between neighbours sharing a row */
+#history, #marker, #settings-strip {
+  border-left: 1px solid var(--hairline-soft);
+  padding-left: 24px;
+}
+#history { max-height: 300px; }
 
-.tile { padding: 4px 6px 12px; display: flex; flex-direction: column; }
-.tile-head { padding: 8px 8px 2px; }
-.tic { width: 20px; height: 20px; display: block; }
-.tile h2 { font-size: 14.5px; font-weight: 600; letter-spacing: 0.03em; margin-top: 5px; }
-.tile .desc { font-size: 12.5px; font-weight: 450; color: var(--subink); line-height: 1.65; margin-top: 3px; }
+.tile { padding: 0; display: flex; flex-direction: column; }
+.tile-head {
+  display: flex; align-items: center; gap: 9px; flex-wrap: wrap;
+  padding: 0;
+}
+.tic { width: 18px; height: 18px; display: block; }
+.tile h2 { font-size: 14px; font-weight: 600; letter-spacing: 0.03em; }
+.tile .desc {
+  flex: 1 1 100%;
+  font-size: 12.5px; font-weight: 450; color: var(--subink);
+  line-height: 1.65; margin-top: 3px;
+}
+/* the console under the stage: two decks of ghost actions split
+   by a hairline -- make things on the first deck, open what the
+   job produced on the second */
+#hero { border-top: 1px solid var(--hairline); padding-top: 16px; }
+#hero .btnrow + .btnrow {
+  border-top: 1px solid var(--hairline-soft);
+  margin-top: 8px; padding-top: 10px;
+}
 
-/* -- buttons (Meta pills) ------------------------------------------ */
-.btnrow { display: flex; gap: 8px; padding: 6px 8px 0; flex-wrap: wrap; }
+/* -- buttons: ghosts. No fill, no border, no shadow -- the label
+   itself is the button. Weight and the accent colour rank them;
+   a faint grey wash on hover is the only surface they ever get. */
+.btnrow { display: flex; gap: 4px; padding: 8px 0 0; flex-wrap: wrap; }
 .btn {
   font: inherit; font-size: 13px; font-weight: 500;
-  height: 36px; padding: 0 20px;
+  height: 36px; padding: 0 16px;
   border-radius: 999px; border: 1px solid transparent;
+  background: transparent; box-shadow: none;
   cursor: pointer; color: var(--ink);
-  transition: transform 0.15s ease, box-shadow 0.2s ease,
-              background 0.2s ease, opacity 0.2s ease;
+  transition: background 0.2s ease, opacity 0.2s ease;
 }
-.btn.small { height: 30px; font-size: 12px; padding: 0 14px; }
+.btn.small { height: 30px; font-size: 12px; padding: 0 12px; }
 .btn.primary {
-  background: rgba(0, 100, 209, 0.82);
-  -webkit-backdrop-filter: blur(8px);
-  backdrop-filter: blur(8px);
-  color: #fff; font-weight: 600;
-  box-shadow: 0 4px 16px rgba(0, 100, 209, 0.28),
-              inset 0 1px 0 rgba(255, 255, 255, 0.25);
+  background: transparent; box-shadow: none;
+  color: var(--accent); font-weight: 600;
 }
-.btn.primary:hover:not(:disabled) { background: rgba(0, 83, 173, 0.88); }
+.btn.primary:hover:not(:disabled) { background: var(--grey-hover); }
 .btn.glass-btn {
-  background: rgba(255, 255, 255, 0.55);
-  -webkit-backdrop-filter: blur(10px);
-  backdrop-filter: blur(10px);
-  border-color: rgba(255, 255, 255, 0.5);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7),
-              0 2px 8px rgba(30, 50, 100, 0.06);
+  background: transparent; border-color: transparent; box-shadow: none;
 }
-.btn.glass-btn:hover:not(:disabled) { background: rgba(255, 255, 255, 0.78); }
+.btn.glass-btn:hover:not(:disabled) { background: var(--grey-hover); }
+.btn.glass-btn:active:not(:disabled) { background: var(--grey-press); }
 .btn.dark-btn {
-  background: rgba(255, 255, 255, 0.10); color: #e8ecf4;
-  border-color: rgba(255, 255, 255, 0.14);
+  background: transparent; color: #e8ecf4;
+  border-color: transparent;
 }
-.btn.dark-btn:hover { background: rgba(255, 255, 255, 0.18); }
-.btn:not(:disabled):hover { transform: translateY(-1px); }
-.btn:not(:disabled):active { transform: translateY(0) scale(0.98); }
+.btn.dark-btn:hover { background: rgba(255, 255, 255, 0.12); }
+.btn:not(:disabled):active { transform: scale(0.98); }
 .btn:disabled { opacity: 0.42; cursor: default; box-shadow: none; }
 
 /* -- hero drag state ------------------------------------------------ */
@@ -320,26 +446,36 @@ body.working #echo { opacity: 1; }
 @keyframes breathe { 0%, 100% { opacity: 0.35; } 50% { opacity: 1; } }
 #preview:fullscreen::before { -webkit-mask-image: none; mask-image: none; }
 
-/* -- history list ------------------------------------------------------ */
-#histlist { flex: 1; min-height: 0; overflow-y: auto; margin: 4px 8px 0; }
+/* -- history / inbox lists -------------------------------------------- */
+#histlist { flex: 1; min-height: 0; overflow-y: auto; margin: 6px 0 0; }
+#inboxlist { margin: 6px 0 0; }
+/* .tile sets display:flex, which would defeat the hidden
+   attribute app.js toggles on the inbox: say it plainly */
+#inbox[hidden] { display: none; }
 .hist-item {
   display: flex; align-items: center; gap: 8px;
-  padding: 7px 10px; border-radius: 12px; cursor: pointer;
+  padding: 7px 10px; border-radius: var(--r-row); cursor: pointer;
   font-size: 13px; font-weight: 500;
+  transition: background 0.12s ease;
 }
-.hist-item:hover { background: rgba(255, 255, 255, 0.55); }
-.hist-item.sel { background: rgba(0, 100, 209, 0.12); }
+.hist-item:hover { background: var(--grey-hover); }
+.hist-item:active { background: var(--grey-press); }
+.hist-item.sel {
+  background: transparent; color: var(--accent); font-weight: 600;
+  box-shadow: inset 3px 0 0 var(--accent);
+}
 .hist-item .when { margin-left: auto; color: var(--subink); font-size: 11.5px; }
 
 /* -- log side panel ----------------------------------------------------- */
 #logpanel {
-  position: fixed; top: 34px; right: 0; bottom: 0; width: 308px;
+  position: fixed; top: 88px; right: 0; bottom: 0; width: 308px;
   transform: translateX(100%);
   transition: transform 0.35s cubic-bezier(0.22, 0.9, 0.3, 1);
-  background: rgba(255, 255, 255, 0.60);
-  -webkit-backdrop-filter: blur(24px) saturate(150%);
-  backdrop-filter: blur(24px) saturate(150%);
-  box-shadow: -16px 0 44px rgba(20, 40, 90, 0.10);
+  background: transparent;
+  -webkit-backdrop-filter: blur(22px) saturate(150%);
+  backdrop-filter: blur(22px) saturate(150%);
+  box-shadow: none;
+  border-left: 1px solid var(--hairline);
   z-index: 30; display: flex; flex-direction: column;
 }
 #logpanel.open { transform: translateX(0); }
@@ -351,25 +487,31 @@ body.working #echo { opacity: 1; }
   white-space: pre-wrap; user-select: text;
 }
 #logtab {
-  position: fixed; top: 14px; right: 6px; z-index: 31;
+  position: fixed; top: 102px; right: 6px; z-index: 31;
   width: 22px; padding: 8px 0;
   font: inherit; font-size: 11px; line-height: 1.5; color: var(--subink);
-  background: rgba(255, 255, 255, 0.5);
-  -webkit-backdrop-filter: blur(10px);
-  backdrop-filter: blur(10px);
-  border: 1px solid var(--glass-edge); border-radius: 0;
+  background: transparent;
+  border: none; border-radius: 0;
   cursor: pointer;
 }
-#logtab:hover { color: var(--ink); background: rgba(255, 255, 255, 0.8); }
+#logtab:hover { color: var(--ink); background: var(--grey-hover); }
+body.working #logbody { color: #c9d6e6; }
 
-/* -- settings page -------------------------------------------------------- */
+/* -- settings page: browser layout ---------------------------------
+   Left category nav, a search pill in the header, and on the right
+   grouped cards whose rows are full-width entries (title + note on
+   the left, the control -- switch / button / field -- on the
+   right). Same glass, same grey/radius ladder as the main sheet. */
 #settings-page {
   position: fixed; inset: 0; z-index: 40;
   display: flex; align-items: flex-start; justify-content: center;
-  padding: 46px 16px;
-  background: rgba(230, 236, 245, 0.35);
-  -webkit-backdrop-filter: blur(6px);
-  backdrop-filter: blur(6px);
+  padding: 100px 22px 26px;
+  /* the veil is the same sheet of glass, frosted hard enough
+     that the dark preview stage behind it washes out to a grey
+     breath -- the settings text never sits on the smudge */
+  background: rgba(240, 244, 249, 0.88);
+  -webkit-backdrop-filter: blur(30px) saturate(150%);
+  backdrop-filter: blur(30px) saturate(150%);
 }
 #settings-page[hidden] { display: none; }
 .btn:active:not(:disabled) { transform: scale(0.96); }
@@ -380,13 +522,18 @@ body.working #echo { opacity: 1; }
   animation: card-in 0.62s cubic-bezier(0.22, 1.35, 0.36, 1) both;
 }
 #settings-page.enter .set-head,
-#settings-page.enter .set-row {
+#settings-page.enter .set-nav-item,
+#settings-page.enter .set-group {
   animation: row-in 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 #settings-page.enter .set-head { animation-delay: 0.06s; }
-#settings-page.enter .set-row:nth-child(2) { animation-delay: 0.12s; }
-#settings-page.enter .set-row:nth-child(3) { animation-delay: 0.18s; }
-#settings-page.enter .set-row:nth-child(4) { animation-delay: 0.24s; }
+#settings-page.enter .set-nav-item:nth-child(1) { animation-delay: 0.10s; }
+#settings-page.enter .set-nav-item:nth-child(2) { animation-delay: 0.14s; }
+#settings-page.enter .set-nav-item:nth-child(3) { animation-delay: 0.18s; }
+#settings-page.enter .set-nav-item:nth-child(4) { animation-delay: 0.22s; }
+#settings-page.enter .set-group:nth-child(1) { animation-delay: 0.16s; }
+#settings-page.enter .set-group:nth-child(2) { animation-delay: 0.22s; }
+#settings-page.enter .set-group:nth-child(3) { animation-delay: 0.28s; }
 #settings-page.leave { animation: veil-in 0.23s ease reverse both; }
 #settings-page.leave .set-card { animation: card-out 0.23s ease-in both; }
 @keyframes veil-in { from { opacity: 0; } to { opacity: 1; } }
@@ -405,23 +552,71 @@ body.working #echo { opacity: 1; }
 @media (prefers-reduced-motion: reduce) {
   #settings-page.enter, #settings-page.leave,
   #settings-page.enter .set-card, #settings-page.leave .set-card,
-  #settings-page.enter .set-head, #settings-page.enter .set-row {
+  #settings-page.enter .set-head, #settings-page.enter .set-nav-item,
+  #settings-page.enter .set-group {
     animation: none;
   }
 }
-.set-card { width: 620px; max-width: 94vw; padding: 18px 20px 20px; }
-.set-head { display: flex; align-items: center; margin-bottom: 8px; }
-.set-head h2 { font-size: 17px; font-weight: 600; letter-spacing: 0.03em; }
-.set-head .btn { margin-left: auto; }
+.set-card { width: 1080px; max-width: 96vw; padding: 8px 4px 12px; }
+.set-head { display: flex; align-items: center; gap: 16px; margin-bottom: 14px; }
+.set-head h2 { font-size: 17px; font-weight: 600; letter-spacing: 0.03em; flex: none; }
+.set-head .btn { margin-left: auto; flex: none; }
+#set-search {
+  flex: 1; max-width: 360px; margin: 0 auto; height: 34px;
+  display: flex; align-items: center; gap: 8px;
+  padding: 0 14px; border-radius: var(--r-pill);
+  background: transparent;
+  box-shadow: inset 0 0 0 1px rgba(20, 40, 90, 0.16);
+}
+#set-search .omni-ic { width: 14px; height: 14px; }
+#set-search-input {
+  flex: 1; min-width: 0; border: none; background: transparent;
+  outline: none; font: inherit; font-size: 13px; font-weight: 500;
+  color: var(--ink);
+}
+.set-body { display: flex; gap: 20px; align-items: flex-start; }
+#set-nav {
+  width: 168px; flex: none; display: flex; flex-direction: column;
+  gap: 2px; padding-top: 2px;
+}
+.set-nav-item {
+  font: inherit; text-align: left; padding: 8px 12px;
+  border: none; background: transparent; cursor: pointer;
+  border-radius: var(--r-row);
+  color: var(--subink); font-size: 13px; font-weight: 500;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+.set-nav-item:hover { background: var(--grey-hover); color: var(--ink); }
+.set-nav-item.active {
+  background: transparent; color: var(--ink); font-weight: 600;
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+#set-groups { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+.set-group {
+  background: transparent;
+  border-radius: 0;
+  box-shadow: none;
+  padding: 12px 2px 4px;
+}
+.set-group + .set-group { border-top: 1px solid var(--hairline-soft); }
+.set-group-title {
+  font-size: 12px; font-weight: 600; letter-spacing: 0.06em;
+  color: var(--subink); padding: 4px 4px 2px;
+}
 .set-row {
   display: flex; align-items: center; gap: 12px;
   padding: 13px 4px;
   border-top: 1px solid rgba(20, 40, 90, 0.07);
 }
+.set-group-title + .set-row { border-top: none; }
 .set-row .tic { width: 22px; height: 22px; }
 .set-text { flex: 1; }
 .set-text h3 { font-size: 13.5px; font-weight: 600; letter-spacing: 0.02em; }
 .set-text p { font-size: 12.5px; font-weight: 450; color: var(--subink); margin-top: 2px; }
+#set-noresult {
+  font-size: 12.5px; font-weight: 500; color: var(--subink);
+  text-align: center; padding: 20px 6px;
+}
 .switch { display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px; font-weight: 500; cursor: pointer; }
 .switch input { display: none; }
 .switch span {
@@ -441,30 +636,41 @@ body.working #echo { opacity: 1; }
 /* -- adaptability: narrow windows stack to one column ------------- */
 body.working #tiles { scrollbar-color: rgba(255, 255, 255, 0.32) transparent; }
 body.working #tiles::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.28); }
+body.working .hist-item.sel {
+  background: transparent; color: #9ec8ff;
+  box-shadow: inset 3px 0 0 #6fb2ff;
+}
 
 @media (max-width: 800px) {
   #tiles {
     grid-template-columns: 1fr;
     grid-template-rows: none;
+    gap: 24px;
     grid-template-areas:
+      "stage"
       "hero"
-      "preview"
+      "inbox"
       "history"
       "depth"
       "marker"
       "settings";
   }
-  #preview { min-height: 300px; }
+  #preview { height: 320px; min-height: 300px; }
   #history { max-height: 240px; }
-  #center { padding: 8px 26px 6px 6px; }
-  #header h1 { font-size: 21px; }
+  #history, #marker, #settings-strip { border-left: none; padding-left: 0; }
+  #center { padding: 100px 30px 6px 12px; }
+  #header h1 { font-size: 15px; }
+  .tab { min-width: 0; }
+  .set-body { flex-direction: column; }
+  #set-nav { width: 100%; flex-direction: row; flex-wrap: wrap; }
+  .set-card { padding: 14px 14px 16px; }
 }
 
 /* -- settings: proxy input ----------------------------------------- */
 #set-proxy {
   font: inherit; font-size: 12.5px; font-weight: 500;
   color: var(--ink);
-  background: rgba(255, 255, 255, 0.35);
+  background: transparent;
   border: 1px solid rgba(20, 40, 90, 0.14);
   border-radius: 99px; padding: 7px 14px; width: 210px;
   outline: none;
@@ -476,6 +682,6 @@ body.working #tiles::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0
 #demobadge {
   color: #a4123f; font-weight: 700; font-size: 12px;
   border: 1.5px solid rgba(164, 18, 63, 0.55);
-  background: rgba(255, 235, 242, 0.65);
+  background: transparent;
   padding: 3px 10px; border-radius: 999px; white-space: nowrap;
 }

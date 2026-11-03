@@ -1,7 +1,16 @@
 """Kernel packages that live outside adapters.py.
 
-Currently: Echo Render (echo_render/) — the native CPU point/line renderer,
-registered here following the adapters.py pattern (an EchoObject-level
+Currently:
+  Echo Render (echo_render/) — the native CPU point/line renderer.
+  Gaussian Splat adapter (gaussian_splat/) — 3DGS .ply -> coloured
+  points ("gaussians" -> "points"); its register function lives in the
+  package itself and is re-exported below.
+  Photo Discovery (photo_discovery/) — catalogue entries recognised
+  in a job's frames (OWLv2 + SAM), lifted with the job's depth+poses,
+  solidified against its cloud ("job" -> "objects"); its register
+  function lives in the package itself and is re-exported below.
+
+Registered here following the adapters.py pattern (an EchoObject-level
 wrapper + a register_* function + an evidence entry).
 
     from echo_super.kernels import register_echo_render_kernels
@@ -78,3 +87,8 @@ def register_echo_render_kernels(registry: Registry | None = None) -> Registry:
     reg.add(Kernel("echo_render_frame", ("points",), "frame",
                    _echo_render_kernel, cost=1.0))
     return reg
+
+
+from .gaussian_splat import register_gaussian_kernels  # noqa: E402,F401
+
+from .photo_discovery import register_photo_discovery_kernels  # noqa: E402,F401

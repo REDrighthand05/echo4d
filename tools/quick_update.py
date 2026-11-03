@@ -135,6 +135,43 @@ def payload_candidates():
     return cands
 
 
+def only_changes(base, only_paths):
+    """Change set for --only: the listed paths, and nothing else.
+
+    The target manifest is the base manifest with at most the
+    listed entries replaced by their local bytes -- the rest of
+    the working tree is never scanned, so unrelated WIP cannot
+    leak into the pack. Each path's ship encoding follows the
+    rule select_changes applies to a new/changed file (CRLF for
+    text, raw otherwise); a path whose local bytes already match
+    the base entry under either encoding is not a change.
+    Deletions are not expressible in this mode.
+    """
+    changed, ship = [], {}
+    seen = set()
+    for path in only_paths:
+        path = path.strip().lstrip("./")
+        if not path.startswith("app/"):
+            path = "app/" + path
+        if path in seen:
+            raise ValueError(f"--only path listed twice: {path}")
+        seen.add(path)
+        if "ds_out" in path.split("/"):
+            raise ValueError(f"--only path is DS scratch: {path}")
+        f = ROOT / path[len("app/"):]
+        if not f.is_file():
+            raise ValueError(f"--only path not found locally: {path}")
+        raw = f.read_bytes()
+        entry = base["files"].get(path)
+        if entry is not None and entry in (sha(raw),
+                                           sha(align_crlf(raw))):
+            continue
+        changed.append(path)
+        ship[path] = "crlf" if looks_text(raw) else "raw"
+    changed.sort()
+    return {"changed": changed, "deleted": [], "ship": ship}
+
+
 def tracked(rel: str) -> bool:
     return subprocess.run(
         ["git", "-C", str(ROOT), "ls-files", "--error-unmatch", rel],
@@ -202,6 +239,12 @@ def main(argv=None) -> int:
     ap.add_argument("--notes-file", required=True)
     ap.add_argument("--yes", action="store_true",
                     help="skip the plan confirmation prompt")
+    ap.add_argument("--only", nargs="+", default=None,
+                    metavar="app/PATH",
+                    help="ship ONLY these payload files: the target "
+                         "manifest is the base manifest with just "
+                         "these paths replaced by their local bytes, "
+                         "and the pack carries nothing else")
     args = ap.parse_args(argv)
     version = args.version.lstrip("v")
     notes = Path(args.notes_file).read_text(encoding="utf-8")
@@ -232,23 +275,26 @@ def main(argv=None) -> int:
     assert base["version"] != version, "already at that version"
 
     bump_version_inc(version)
-    cands = payload_candidates()
-    # Visible universe: local candidates + base payload entries that
-    # are tracked locally (so genuine deletions register). Foreign
-    # base entries (branch-only files) stay untouched.
-    visible = {}
-    for path, entry in base["files"].items():
-        if "ds_out" in path.split("/"):
-            continue  # DS scratch, wherever it lives: never ours to
-            # change or delete through the quick line
-        if not path.startswith("app/"):
-            visible[path] = entry
-        elif path in cands or tracked(path[len("app/"):]):
-            visible[path] = entry
-    for pin in PINNED:
-        cands.pop(pin, None)
-        visible.pop(pin, None)
-    sel = select_changes(visible, cands)
+    if args.only is not None:
+        sel = only_changes(base, args.only)
+    else:
+        cands = payload_candidates()
+        # Visible universe: local candidates + base payload entries
+        # that are tracked locally (so genuine deletions register).
+        # Foreign base entries (branch-only files) stay untouched.
+        visible = {}
+        for path, entry in base["files"].items():
+            if "ds_out" in path.split("/"):
+                continue  # DS scratch, wherever it lives: never
+                # ours to change or delete through the quick line
+            if not path.startswith("app/"):
+                visible[path] = entry
+            elif path in cands or tracked(path[len("app/"):]):
+                visible[path] = entry
+        for pin in PINNED:
+            cands.pop(pin, None)
+            visible.pop(pin, None)
+        sel = select_changes(visible, cands)
     if PINNED & set(sel["changed"]):
         raise AssertionError("pinned file leaked into the change set")
     print(f"changed: {sel['changed']}")
@@ -278,6 +324,18 @@ def main(argv=None) -> int:
     for path in sel["deleted"]:
         overrides[path] = None
     target = merge_manifest(base, overrides, version)
+    if args.only is not None:
+        # --only contract, proven before anything is built or
+        # published: the target's file set is the base's plus the
+        # listed paths, and every unlisted entry is byte-identical
+        # to the base's.
+        assert set(target["files"]) == \
+            set(base["files"]) | set(sel["changed"]), \
+            "only-mode manifest file set drifted"
+        for p, e in base["files"].items():
+            if p not in sel["changed"]:
+                assert target["files"][p] == e, \
+                    f"only-mode touched unlisted path {p}"
     work = Path(tempfile.mkdtemp(prefix="quickwork-"))
     target_p = work / "target-manifest.json"
     target_p.write_text(json.dumps(target, ensure_ascii=False, indent=1),
@@ -301,9 +359,18 @@ def main(argv=None) -> int:
     # the working tree carries unrelated WIP (above all the pinned
     # echo_scene/preview.py, whose local state must never move the
     # pin the snapshot pusher reads from HEAD).
-    stage_paths = ["echo_scene", "echo_app", "echo_super", "web_ui",
-                   "app.py", "web_app.py", "installer/version.inc",
-                   "tools/quick_update.py", "tests/test_hot_update.py"]
+    if args.only is not None:
+        # Commit exactly the shipped files plus the version bump --
+        # never a blanket directory add: the working tree carries
+        # other lines' unfinished work.
+        stage_paths = [p[len("app/"):] for p in sel["changed"]] + \
+            ["installer/version.inc"]
+    else:
+        stage_paths = ["echo_scene", "echo_app", "echo_super",
+                       "web_ui", "app.py", "web_app.py",
+                       "installer/version.inc",
+                       "tools/quick_update.py",
+                       "tests/test_hot_update.py"]
     subprocess.run(["git", "-C", str(ROOT), "add", "--"] + stage_paths,
                    check=True)
     subprocess.run(["git", "-C", str(ROOT), "reset", "-q", "--",

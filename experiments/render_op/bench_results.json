@@ -1,0 +1,18 @@
+{
+  "1280x720": {
+    "median_ms": 277.6,
+    "min_ms": 195.9,
+    "max_ms": 474.7,
+    "fps": 3.6,
+    "points": 208666,
+    "route_segments": 229
+  },
+  "1920x1080": {
+    "median_ms": 316.4,
+    "min_ms": 206.5,
+    "max_ms": 790.4,
+    "fps": 3.16,
+    "points": 208666,
+    "route_segments": 229
+  }
+}
