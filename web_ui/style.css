@@ -5,7 +5,24 @@
    frame follows Chrome: a tab strip on top (views as tabs), one
    toolbar row under it (nav cluster, omnibox capsule, overflow
    menu), then the content. All colours come from the graffiti
-   blue plus Chrome's restrained greys -- no third palette. */
+   blue plus Chrome's restrained greys -- no third palette.
+
+   v3 (user, 2026-11-04): the sheet is LIGHT glass, always -- it
+   never flips dark. There is no black preview stage: while a
+   job runs, its frames ghost through the whole window's light
+   frost. The graffiti is giant -- window-filling sweeps cropped
+   by the edges -- and the idle sheet is never still: the great
+   strokes breathe and wander, the mist drifts, a pale sheen
+   crosses now and then. Calm, slow, seamless; no gloss.
+
+   v4 (user, 2026-11-04): three point fixes, nothing else moves.
+   The sheet is switchable glass (his words: hotel-bathroom
+   电控玻璃) -- frosted at rest; in the running state the haze
+   drops to nearly transparent and the scene behind shows
+   through untouched, so the content sheet's ink flips light
+   in that state only. The settings veil goes one notch
+   deeper, its blur unchanged, and the wall behind it comes
+   through more saturated (v3 washed it out). */
 
 :root {
   --ink: #14171a;
@@ -33,26 +50,53 @@
   --hairline: rgba(20, 40, 90, 0.10);
   --hairline-soft: rgba(20, 40, 90, 0.06);
 }
-/* while a job runs the scene sits behind the glass and the whole
-   sheet turns to dark glass: ink flips light so text stays easy */
+/* while a job runs, the switchable glass clears (v4): the
+   frame keeps its own light surfaces and dark ink, but the
+   content sheet now sits on near-transparent glass over the
+   scene itself -- so ITS ink flips light, with a soft shadow,
+   in this state only */
 body.working {
-  --ink: #e9eff7;
-  --subink: #a9bccd;
-  --grey-hover: rgba(255, 255, 255, 0.10);
-  --grey-press: rgba(255, 255, 255, 0.16);
-  --grey-icon: #a9bccd;
-  --frame-bg: rgba(15, 22, 34, 0.58);
-  --frame-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
-  --hairline: rgba(255, 255, 255, 0.16);
-  --hairline-soft: rgba(255, 255, 255, 0.09);
+  --frame-bg: rgba(255, 255, 255, 0.62);
+  --frame-shadow: 0 1px 3px rgba(30, 50, 100, 0.10);
 }
-body.working .btn {
-  background: transparent;
-  border-color: transparent;
+body.working #center {
+  --ink: #f4f7fc;
+  --subink: rgba(224, 232, 245, 0.82);
+  --accent: #6db3ff;
+  --accent-hover: #93c5ff;
+  --hairline: rgba(255, 255, 255, 0.22);
+  --hairline-soft: rgba(255, 255, 255, 0.13);
+  --grey-hover: rgba(255, 255, 255, 0.12);
+  --grey-press: rgba(255, 255, 255, 0.20);
+  color: #f4f7fc;
+  text-shadow: 0 1px 10px rgba(5, 10, 25, 0.55),
+               0 0 3px rgba(5, 10, 25, 0.40);
 }
-body.working .btn:hover:not(:disabled) { background: rgba(255, 255, 255, 0.10); }
-body.working .btn:disabled { color: rgba(233, 239, 247, 0.38); }
-body.working #track { background: rgba(255, 255, 255, 0.18); }
+/* the log tab and panel ride the same cleared glass */
+body.working #logtab {
+  color: rgba(232, 238, 248, 0.85);
+  text-shadow: 0 1px 6px rgba(5, 10, 25, 0.40);
+}
+body.working #logtab:hover {
+  color: #fff; background: rgba(255, 255, 255, 0.12);
+}
+body.working .log-head { color: #f4f7fc; }
+body.working #logbody { color: rgba(230, 236, 246, 0.85); }
+body.working #logpanel { border-left-color: rgba(255, 255, 255, 0.18); }
+body.working #track { background: rgba(255, 255, 255, 0.20); }
+/* the tab strip has no surface of its own either, so its
+   resting labels clear with the sheet; the active tab keeps
+   the frame's light surface and its dark ink */
+body.working .tab {
+  color: rgba(232, 238, 248, 0.88);
+  text-shadow: 0 1px 6px rgba(5, 10, 25, 0.40);
+}
+body.working .tab.active { color: var(--ink); text-shadow: none; }
+body.working .tb-btns button { color: rgba(232, 238, 248, 0.88); }
+body.working .tb-btns button:hover {
+  background: rgba(255, 255, 255, 0.14); color: #fff;
+}
+body.working #win-close:hover { background: #d93025; color: #fff; }
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -66,10 +110,10 @@ body {
   color: var(--ink);
   overflow: hidden;
   background:
-    radial-gradient(600px 380px at 16% 8%, rgba(120, 165, 255, 0.20), transparent 70%),
-    radial-gradient(560px 420px at 86% 20%, rgba(160, 190, 255, 0.16), transparent 70%),
-    radial-gradient(700px 500px at 55% 95%, rgba(190, 205, 245, 0.18), transparent 70%),
-    linear-gradient(180deg, #f0f3f7 0%, #dbe2eb 100%);
+    radial-gradient(600px 380px at 16% 8%, rgba(120, 165, 255, 0.17), transparent 70%),
+    radial-gradient(560px 420px at 86% 20%, rgba(160, 190, 255, 0.13), transparent 70%),
+    radial-gradient(700px 500px at 55% 95%, rgba(190, 205, 245, 0.15), transparent 70%),
+    linear-gradient(180deg, #f7f9fc 0%, #e7edf4 100%);
   -webkit-font-smoothing: antialiased;
   user-select: none;
 }
@@ -86,27 +130,69 @@ body {
   width: 100%; height: 100%;
   pointer-events: none;
   opacity: 0;
-  transition: opacity 1.4s ease;
+  transition: opacity 1.4s ease, filter 1.2s ease;
 }
 #frost {
   position: fixed; inset: 0;
   z-index: 1;
-  background: rgba(247, 249, 252, 0.10);
-  -webkit-backdrop-filter: blur(1px) saturate(150%);
-  backdrop-filter: blur(1px) saturate(150%);
+  /* the light sheet itself: a milk-white wash over the living
+     wall, just frosted enough that the giant strokes read as
+     art behind glass, never as noise behind text */
+  background: rgba(250, 251, 253, 0.26);
+  -webkit-backdrop-filter: blur(2.5px) saturate(155%);
+  backdrop-filter: blur(2.5px) saturate(155%);
   pointer-events: none;
   transition: background 1.2s ease, backdrop-filter 1.2s ease,
               -webkit-backdrop-filter 1.2s ease;
 }
-/* while syncing, the glass all but clears: the scene behind it
-   is the point, so only a breath of frost and a shade remain */
+/* while syncing, the switchable glass clears (v4): the haze
+   drops to nearly transparent -- a whisper of veil and half a
+   pixel of blur are all that say "glass" -- and the scene
+   shows through at full strength. The 1.2 s frost transition
+   is the switch flipping. No black anywhere; the sheet does
+   not darken, it clears */
 body.working #frost {
-  background: rgba(12, 17, 26, 0.28);
-  -webkit-backdrop-filter: blur(1.5px) saturate(140%);
-  backdrop-filter: blur(1.5px) saturate(140%);
+  background: rgba(248, 250, 252, 0.05);
+  -webkit-backdrop-filter: blur(0.5px) saturate(108%);
+  backdrop-filter: blur(0.5px) saturate(108%);
 }
-body.working #beads { opacity: 0.16; }
-body.working #echo { opacity: 1; }
+body.working #beads { opacity: 0.10; }
+/* the scene layer arrives untouched in the running state:
+   no lifted blacks, no squeezed contrast, full presence */
+body.working #echo {
+  opacity: 1;
+  filter: none;
+}
+
+/* ambient light: one very pale sheen crosses the sheet every
+   half minute or so, slow and quiet -- light moving on glass,
+   not a shine on a balloon. It retires while a job runs. */
+#sheen {
+  position: fixed; inset: 0; z-index: 1;
+  overflow: hidden; pointer-events: none;
+  transition: opacity 1.2s ease;
+}
+#sheen::before {
+  content: "";
+  position: absolute; top: -25%; bottom: -25%; left: 0; width: 34%;
+  background: linear-gradient(100deg,
+    transparent,
+    rgba(255, 255, 255, 0.13) 42%,
+    rgba(255, 255, 255, 0.24) 50%,
+    rgba(255, 255, 255, 0.13) 58%,
+    transparent);
+  transform: translateX(-170%) skewX(-8deg);
+  animation: sheen-pass 34s ease-in-out infinite;
+}
+@keyframes sheen-pass {
+  0% { transform: translateX(-170%) skewX(-8deg); }
+  38% { transform: translateX(430%) skewX(-8deg); }
+  100% { transform: translateX(430%) skewX(-8deg); }
+}
+body.working #sheen { opacity: 0; }
+@media (prefers-reduced-motion: reduce) {
+  #sheen::before { animation: none; }
+}
 
 #app { position: relative; z-index: 2; height: 100%; }
 
@@ -140,7 +226,6 @@ body.working #echo { opacity: 1; }
   transition: background 0.15s ease, color 0.15s ease;
 }
 .tab:hover { background: rgba(255, 255, 255, 0.35); }
-body.working .tab:hover { background: rgba(255, 255, 255, 0.10); }
 .tab.active {
   background: var(--frame-bg);
   -webkit-backdrop-filter: blur(18px) saturate(150%);
@@ -182,8 +267,6 @@ body.working .tab:hover { background: rgba(255, 255, 255, 0.10); }
 .icon-btn:active { background: var(--grey-press); }
 .icon-btn.is-disabled { color: rgba(95, 99, 104, 0.38); cursor: default; }
 .icon-btn.is-disabled:hover { background: transparent; color: rgba(95, 99, 104, 0.38); }
-body.working .icon-btn.is-disabled { color: rgba(233, 239, 247, 0.30); }
-body.working .icon-btn.is-disabled:hover { color: rgba(233, 239, 247, 0.30); }
 #nav-reload.spinning svg { animation: spin 0.7s ease; }
 @keyframes spin { from { transform: rotate(0); } to { transform: rotate(360deg); } }
 /* the omnibox: one full-round capsule, light fill, carrying the
@@ -203,8 +286,6 @@ body.working .icon-btn.is-disabled:hover { color: rgba(233, 239, 247, 0.30); }
   box-shadow: inset 0 0 0 1px rgba(20, 40, 90, 0.07),
               0 1px 4px rgba(30, 50, 100, 0.10);
 }
-body.working #omnibox { background: rgba(255, 255, 255, 0.13); }
-body.working #omnibox:hover { background: rgba(255, 255, 255, 0.20); }
 .omni-ic { width: 15px; height: 15px; flex: none; color: var(--grey-icon); }
 #omnibox-text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tb-right { position: relative; flex: none; }
@@ -219,7 +300,6 @@ body.working #omnibox:hover { background: rgba(255, 255, 255, 0.20); }
               0 0 0 1px rgba(20, 40, 90, 0.06);
 }
 #menu[hidden] { display: none; }
-body.working #menu { background: rgba(22, 30, 44, 0.95); }
 .menu-item {
   font: inherit; display: block; width: 100%; text-align: left;
   padding: 8px 10px; border: none; background: transparent;
@@ -228,7 +308,6 @@ body.working #menu { background: rgba(22, 30, 44, 0.95); }
 }
 .menu-item:hover { background: var(--grey-hover); }
 .menu-sep { height: 1px; margin: 5px 8px; background: rgba(20, 40, 90, 0.09); }
-body.working .menu-sep { background: rgba(255, 255, 255, 0.12); }
 
 /* -- the glass material ---------------------------------------- */
 /* No frames: no border, no shadow, no rounded corners. The frost
@@ -293,9 +372,10 @@ body.working .menu-sep { background: rgba(255, 255, 255, 0.12); }
 
 /* -- content layout ---------------------------------------------
    One flow on the one sheet of glass, no blocks anywhere: the
-   preview stage takes the centre, the console of actions sits
-   directly under it, the two lists share a row as pure text
-   columns, and the small utilities close the page in one row.
+   console of actions leads, the two lists share a row as pure
+   text columns, and the small utilities close the page in one
+   row. There is NO preview stage (v3): what a running job sees
+   lives behind the whole window's glass, not in a box here.
    Sections are told apart by whitespace and hairlines only.
    The deck scrolls inside its own area: at ANY window size
    every section stays reachable, while header and status band
@@ -311,7 +391,6 @@ body.working .menu-sep { background: rgba(255, 255, 255, 0.12); }
   align-content: start;
   grid-template-columns: repeat(6, 1fr);
   grid-template-areas:
-    "stage stage stage stage stage stage"
     "hero hero hero hero hero hero"
     "inbox inbox inbox history history history"
     "depth depth marker marker settings settings";
@@ -321,7 +400,9 @@ body.working .menu-sep { background: rgba(255, 255, 255, 0.12); }
   background: rgba(20, 40, 90, 0.20); border-radius: 99px;
 }
 #tiles::-webkit-scrollbar-track { background: transparent; }
-#preview { grid-area: stage; height: 46vh; min-height: 380px; }
+/* the retired preview section: out of the layout for good
+   (.tile sets display:flex, so say it plainly, like the inbox) */
+#preview[hidden] { display: none; }
 #hero { grid-area: hero; }
 #inbox { grid-area: inbox; }
 #history { grid-area: history; }
@@ -347,7 +428,7 @@ body.working .menu-sep { background: rgba(255, 255, 255, 0.12); }
   font-size: 12.5px; font-weight: 450; color: var(--subink);
   line-height: 1.65; margin-top: 3px;
 }
-/* the console under the stage: two decks of ghost actions split
+/* the console leads the sheet: two decks of ghost actions split
    by a hairline -- make things on the first deck, open what the
    job produced on the second */
 #hero { border-top: 1px solid var(--hairline); padding-top: 16px; }
@@ -394,7 +475,9 @@ body.working .menu-sep { background: rgba(255, 255, 255, 0.12); }
   box-shadow: 0 0 0 2px rgba(0, 100, 209, 0.45), var(--glass-shadow);
 }
 
-/* -- preview (the one dark screen) ----------------------------------- */
+/* -- preview (RETIRED in v3: the section is hidden and out of
+   the layout; these rules only matter if it is ever revived,
+   e.g. as a fullscreen-only screen) ------------------------------ */
 #preview {
   background: transparent;
   border: none;
@@ -495,7 +578,6 @@ body.working .menu-sep { background: rgba(255, 255, 255, 0.12); }
   cursor: pointer;
 }
 #logtab:hover { color: var(--ink); background: var(--grey-hover); }
-body.working #logbody { color: #c9d6e6; }
 
 /* -- settings page: browser layout ---------------------------------
    Left category nav, a search pill in the header, and on the right
@@ -506,12 +588,16 @@ body.working #logbody { color: #c9d6e6; }
   position: fixed; inset: 0; z-index: 40;
   display: flex; align-items: flex-start; justify-content: center;
   padding: 100px 22px 26px;
-  /* the veil is the same sheet of glass, frosted hard enough
-     that the dark preview stage behind it washes out to a grey
-     breath -- the settings text never sits on the smudge */
-  background: rgba(240, 244, 249, 0.88);
-  -webkit-backdrop-filter: blur(30px) saturate(150%);
-  backdrop-filter: blur(30px) saturate(150%);
+  /* the veil is the same LIGHT sheet of glass, frosted enough
+     that the wall behind it softens to a breath -- the settings
+     text never sits on the smudge, and the veil never turns
+     into a solid slab: the graffiti still ghosts through.
+     v4: one notch deeper than v3's near-white wash, the blur
+     exactly as it was, and the wall's colour comes through
+     more saturated instead of washed pale */
+  background: rgba(216, 224, 238, 0.72);
+  -webkit-backdrop-filter: blur(24px) saturate(200%);
+  backdrop-filter: blur(24px) saturate(200%);
 }
 #settings-page[hidden] { display: none; }
 .btn:active:not(:disabled) { transform: scale(0.96); }
@@ -634,20 +720,12 @@ body.working #logbody { color: #c9d6e6; }
 .switch input:checked + span::after { left: 17px; }
 
 /* -- adaptability: narrow windows stack to one column ------------- */
-body.working #tiles { scrollbar-color: rgba(255, 255, 255, 0.32) transparent; }
-body.working #tiles::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.28); }
-body.working .hist-item.sel {
-  background: transparent; color: #9ec8ff;
-  box-shadow: inset 3px 0 0 #6fb2ff;
-}
-
 @media (max-width: 800px) {
   #tiles {
     grid-template-columns: 1fr;
     grid-template-rows: none;
     gap: 24px;
     grid-template-areas:
-      "stage"
       "hero"
       "inbox"
       "history"
@@ -655,7 +733,6 @@ body.working .hist-item.sel {
       "marker"
       "settings";
   }
-  #preview { height: 320px; min-height: 300px; }
   #history { max-height: 240px; }
   #history, #marker, #settings-strip { border-left: none; padding-left: 0; }
   #center { padding: 100px 30px 6px 12px; }

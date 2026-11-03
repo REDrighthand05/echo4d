@@ -5,7 +5,10 @@
    sheet of frosted glass -- borderless transparent components.
 
    The graffiti is redrawn at random on every launch: one to three
-   strokes, never more, each from a family of hand-like archetypes.
+   strokes, never more. Since v3 the hand is GIANT -- each stroke
+   is a thick sweep wider than the window, cropped by its edges --
+   and the idle wall carries ambient motion: the strokes breathe
+   and wander very slowly, the mist drifts, a pale sheen passes.
 
    If a pywebview bridge is present it drives everything for real;
    in a plain browser a demo state machine mirrors the app's own
@@ -63,80 +66,65 @@ function smoothLine(pts, sub = 7) {
 function randomStrokes(w, h, rng) {
   const R = (a, b) => a + rng() * (b - a);
   const pick = arr => arr[Math.floor(rng() * arr.length)];
+  /* GIANT hand (v3, user 2026-11-04): every stroke is a window-
+     filling sweep with a thick brush, cropped by the window's
+     edges -- only part of each gesture is ever on stage. Still
+     one to three strokes per launch, never more. The small
+     doodle kinds (spiral, loop) retire: at giant scale only the
+     sweep family reads as a hand passing over the whole wall. */
   const kinds = {
-    // a freehand zigzag wave (the signature scrawl, re-dealt)
+    // a freehand zigzag wave clear across the window
     wave(cx, cy, span) {
-      const n = 4 + Math.floor(rng() * 3), pts = [];
+      const n = 5 + Math.floor(rng() * 3), pts = [];
       let up = rng() < 0.5;
       for (let i = 0; i < n; i++) {
         pts.push([cx - span / 2 + (span * i) / (n - 1),
-                  cy + (up ? -1 : 1) * span * R(0.10, 0.20)]);
+                  cy + (up ? -1 : 1) * span * R(0.07, 0.13)]);
         up = !up;
       }
-      return { pts: smoothLine(pts, 6), width: R(0.038, 0.056) * w };
+      return { pts: smoothLine(pts, 6) };
     },
-    // one long swoosh / underline curve
+    // one huge swoosh / underline curve, edge to edge and beyond
     swoosh(cx, cy, span) {
-      const pts = [[cx - span / 2, cy + R(-0.03, 0.03) * h],
-                   [cx - span * 0.15, cy + R(0.05, 0.13) * h],
-                   [cx + span * 0.25, cy + R(-0.10, -0.02) * h],
-                   [cx + span / 2, cy + R(-0.04, 0.05) * h]];
-      return { pts: smoothLine(pts, 9), width: R(0.008, 0.014) * w };
+      const pts = [[cx - span / 2, cy + R(-0.04, 0.04) * h],
+                   [cx - span * 0.15, cy + R(0.10, 0.20) * h],
+                   [cx + span * 0.25, cy + R(-0.16, -0.05) * h],
+                   [cx + span / 2, cy + R(-0.05, 0.06) * h]];
+      return { pts: smoothLine(pts, 9) };
     },
-    // a spiral doodle
-    spiral(cx, cy) {
-      const pts = [], turns = R(1.6, 2.6), rMax = R(0.035, 0.065) * w;
-      const steps = 52, dir = rng() < 0.5 ? 1 : -1;
-      for (let i = 0; i <= steps; i++) {
-        const t = i / steps, th = dir * t * Math.PI * 2 * turns;
-        const r = (0.12 + 0.88 * t) * rMax;
-        pts.push([cx + r * Math.cos(th), cy + r * 0.82 * Math.sin(th)]);
-      }
-      return { pts, width: R(0.007, 0.011) * w };
-    },
-    // a loose loop / squashed circle with a tail
-    loop(cx, cy) {
-      const pts = [], rx = R(0.02, 0.045) * w, ry = rx * R(0.8, 1.35);
-      const rot = R(-0.5, 0.5), steps = 30;
-      for (let i = 0; i <= steps; i++) {
-        const th = (i / steps) * Math.PI * 2 * R(0.92, 1.0);
-        const x = rx * Math.cos(th), y = ry * Math.sin(th);
-        pts.push([cx + x * Math.cos(rot) - y * Math.sin(rot),
-                  cy + x * Math.sin(rot) + y * Math.cos(rot)]);
-      }
-      return { pts, width: R(0.006, 0.010) * w };
-    },
-    // a sharp pulse / mountain polyline
+    // a sharp pulse / mountain polyline across the whole width
     pulse(cx, cy, span) {
       const n = 5 + Math.floor(rng() * 3), pts = [];
       for (let i = 0; i < n; i++)
         pts.push([cx - span / 2 + (span * i) / (n - 1),
-                  cy + (i % 2 ? -1 : 1) * span * R(0.05, 0.14)]);
-      return { pts, width: R(0.018, 0.028) * w };
+                  cy + (i % 2 ? -1 : 1) * span * R(0.05, 0.11)]);
+      return { pts: smoothLine(pts, 6) };
     },
-    // a big gentle arc, part of some unseen circle
+    // a vast gentle arc -- part of a circle far bigger than
+    // the window, its centre thrown well off-stage
     arc(cx, cy) {
-      const pts = [], rad = R(0.25, 0.45) * w;
-      const a0 = R(0, Math.PI * 2), sweep = R(0.5, 1.1);
-      for (let i = 0; i <= 30; i++) {
-        const th = a0 + (i / 30) * sweep;
-        pts.push([cx + rad * Math.cos(th), cy + rad * Math.sin(th)]);
+      const pts = [], rad = R(0.55, 1.05) * w, dir = rng() < 0.5 ? 1 : -1;
+      const ccx = cx + R(-0.15, 0.15) * w,
+            ccy = cy + R(0.30, 0.80) * h * (rng() < 0.5 ? 1 : -1);
+      const a0 = Math.atan2(cy - ccy, cx - ccx), sweep = R(0.5, 0.95);
+      for (let i = 0; i <= 36; i++) {
+        const th = a0 + dir * (i / 36) * sweep;
+        pts.push([ccx + rad * Math.cos(th), ccy + rad * Math.sin(th)]);
       }
-      return { pts, width: R(0.020, 0.032) * w };
+      return { pts };
     },
   };
   const count = rng() < 0.4 ? 1 : rng() < 0.62 ? 2 : 3;
-  const names = Object.keys(kinds);
   const strokes = [];
   for (let i = 0; i < count; i++) {
-    const kind = i === 0 ? pick(["wave", "wave", "pulse", "arc"])
-                         : pick(names);
-    const span = R(0.30, 0.52) * w;
-    let cx = R(0.16, 0.84) * w, cy = R(0.14, 0.86) * h;
-    // keep the art out from behind the preview screen (right-top),
-    // so every launch's drawing stays visible on the glass
-    if (cx > 0.55 * w && cy < 0.70 * h) cx = Math.max(0.12 * w, 1.04 * w - cx);
+    const kind = i === 0 ? pick(["wave", "wave", "swoosh", "arc"])
+                         : pick(["wave", "swoosh", "pulse", "arc"]);
+    // every span overflows the window: the brush enters one
+    // edge and leaves by another (or the same one, for the arc)
+    const span = (i === 0 ? R(1.18, 1.50) : R(0.92, 1.30)) * w;
+    const cx = w / 2 + R(-0.10, 0.10) * w, cy = R(0.08, 0.92) * h;
     const st = kinds[kind](cx, cy, span);
+    st.width = (i === 0 ? R(0.11, 0.18) : R(0.06, 0.115)) * w;
     st.color = i === 0 ? INK_BLUE : pick([INK_SOFT, INK_PALE, INK_SOFT]);
     st.alpha = i === 0 ? 238 : Math.round(R(130, 165));
     strokes.push(st);
@@ -153,6 +141,12 @@ const echoCanvas = document.getElementById("echo");
 const echoCtx = echoCanvas.getContext("2d");
 let W = 0, H = 0, beads = [], mouse = null, lastT = 0;
 let wallStrokes = [];
+/* ambient motion (v3): each giant stroke gets its own slow
+   clock -- a two-to-three-minute wander and a ~48 s breath.
+   Reduced-motion users get a still wall. */
+let strokeAnim = [];
+const REDUCED_MOTION = !!(window.matchMedia &&
+  matchMedia("(prefers-reduced-motion: reduce)").matches);
 let echoSrc = null;  // image/canvas/video shown behind the glass
 
 function gauss() {
@@ -178,18 +172,27 @@ function buildField() {
   beads = [];
   const zones = calmZones();
   wallStrokes = randomStrokes(W, H, launchRng);
+  strokeAnim = wallStrokes.map(() => ({
+    phX: Math.random() * Math.PI * 2,
+    phY: Math.random() * Math.PI * 2,
+    phB: Math.random() * Math.PI * 2,
+  }));
   wallStrokes.forEach((st, si) => {
     // The stroke is not painted -- it is CONSTITUTED by micro
     // particles: a dense jittered lattice fills the whole band,
     // each dot a tiny fraction of the whole, overlapping into
     // one rich solid ribbon whose rim feathers out particle by
     // particle. Same bead objects, same physics as always.
-    const step = 2.4;
+    // The lattice step grows with the brush: a giant ribbon
+    // keeps the same ~30 rows of mist across its band instead
+    // of exploding the bead count (and the frame budget).
+    const step = Math.max(2.4, Math.min(6.5, st.width / 30));
     let sAcc = 0, carry = 0;
     const pushBead = (hx, hy, hz) => {
       const [px, py] = pushOutOfZones(hx, hy, zones);
       const ang = Math.random() * Math.PI * 2;
       beads.push({
+        si,
         rx: hx, ry: hy, hx: px, hy: py, hz, x: px, y: py, z: hz,
         vx: 0, vy: 0, vz: 0,
         rj: 0.85 + Math.random() * 0.3,
@@ -214,7 +217,7 @@ function buildField() {
           const hx = cxp + nx * off + (Math.random() * 2 - 1) * 1.15;
           const hy = cyp + ny * off + (Math.random() * 2 - 1) * 1.15;
           let hz = 0.45 * Math.cos(u * Math.PI / 2)
-                 + 0.38 * Math.sin(sHere * 0.010 + si * 1.7)
+                 + 0.24 * Math.sin(sHere * 0.010 + si * 1.7)
                  + (Math.random() * 2 - 1) * 0.30;
           pushBead(hx, hy, Math.max(-1, Math.min(1, hz)));
         }
@@ -307,11 +310,22 @@ function tick(t) {
   const time = t / 1000;
   drawEcho(t);
   ctx.clearRect(0, 0, W, H);
+  /* ambient motion: the giant strokes themselves are alive --
+     each wanders a few centimetres over minutes and breathes
+     in and out over ~48 s, on top of the mist's own shimmer.
+     Everything stays slow enough to read as weather, not UI. */
+  const driftX = [], driftY = [], breathA = [];
+  for (let s = 0; s < strokeAnim.length; s++) {
+    const a = strokeAnim[s];
+    driftX[s] = REDUCED_MOTION ? 0 : Math.sin(time * 0.045 + a.phX) * 15;
+    driftY[s] = REDUCED_MOTION ? 0 : Math.cos(time * 0.037 + a.phY) * 10;
+    breathA[s] = REDUCED_MOTION ? 1 : 0.85 + 0.15 * Math.sin(time * 0.13 + a.phB);
+  }
   const order = beads.map((b, i) => [b.z, i]).sort((a, b) => a[0] - b[0]);
   for (const [, i] of order) {
     const b = beads[i];
-    const swayx = b.hx + Math.sin(time * 0.9 + b.phase) * 3.0;
-    const swayy = b.hy + Math.cos(time * 0.7 + b.phase * 1.3) * 2.1;
+    const swayx = b.hx + (driftX[b.si] || 0) + Math.sin(time * 0.9 + b.phase) * 3.0;
+    const swayy = b.hy + (driftY[b.si] || 0) + Math.cos(time * 0.7 + b.phase * 1.3) * 2.1;
     const swayz = b.hz + Math.sin(time * 0.5 + b.phase) * 0.12;
     let ax = 30 * (swayx - b.x) - 9.3 * b.vx;
     let ay = 30 * (swayy - b.y) - 9.3 * b.vy;
@@ -334,7 +348,7 @@ function tick(t) {
     b.z = Math.max(-1.3, Math.min(1.3, b.z + b.vz * dt));
     const zn = Math.max(0, Math.min(1, (b.z + 1.15) / 2.3));
     const r = (1.7 + 1.15 * zn) * b.rj;
-    ctx.globalAlpha = b.alpha * (0.6 + 0.4 * zn);
+    ctx.globalAlpha = b.alpha * (breathA[b.si] || 1) * (0.6 + 0.4 * zn);
     ctx.drawImage(spriteFor(b.color, zn), b.x - r, b.y - r, r * 2, r * 2);
   }
   ctx.globalAlpha = 1;

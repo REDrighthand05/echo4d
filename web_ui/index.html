@@ -10,6 +10,7 @@
 <canvas id="beads"></canvas>
 <canvas id="echo"></canvas>
 <div id="frost"></div>
+<div id="sheen"></div>
 
 <div id="app">
   <!-- Chrome skeleton, row 1: the tab strip. The frameless titlebar
@@ -95,7 +96,13 @@
     </section>
 
     <div id="tiles">
-      <section class="glass tile dark" id="preview">
+      <!-- v3: the black preview stage is RETIRED from the layout.
+           While a job runs, its frames live behind the whole
+           window's light glass (the echo layer) -- no dark screen
+           sits on the main sheet any more. The section stays in
+           the DOM, hidden, because app.js binds its canvas,
+           video and fullscreen button at load. -->
+      <section class="glass tile dark" id="preview" hidden>
         <div class="pv-head">
           <img class="tic" src="assets/icons/spark_dark.png" alt="">
           <h2>实时预览</h2>
