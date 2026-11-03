@@ -105,6 +105,14 @@ _ENV_HEADER = ["t_s", "temp_c", "humidity_pct", "pressure_hpa", "gas_ohm"]
 _MAG_HEADER = ["t_s", "mx", "my", "mz"]
 _SPEC_HEADER = (["t_s"] + [f"f{i}" for i in range(1, 9)]
                 + ["clear", "nir", "flicker"])
+# Collector v0.2 streams (phone app; both optional, absent on the
+# tethered/Pi captures): the capture device's own metric trajectory
+# (poses.csv, backend world frame, metres, quat xyzw, per-row
+# tracking state) and per-frame camera state (frame_meta.csv).
+_POSES_HEADER = ["t_s", "tx", "ty", "tz", "qx", "qy", "qz", "qw", "tracking"]
+_POSES_HEADER_LEGACY = _POSES_HEADER[:-1]  # collector v0.1: no state column
+_FRAME_META_HEADER = ["frame", "t_s", "exposure_ns", "iso", "focus_m",
+                      "ae_state", "af_state"]
 
 
 # ---------------------------------------------------------------------------
@@ -209,6 +217,9 @@ class Capture:
     tof_t, tof_mm (M,64)
     Optional streams: env_t/env (N,4), mag_t/mag (N,3), spec_t/spec (N,11)
     -- each pair is None when the capture predates that stream.
+    Collector streams: traj_t/traj_pos (N,3 m)/traj_quat_xyzw/traj_tracking
+    from poses.csv, and fm_* per-frame camera state from frame_meta.csv --
+    None when the capture has no such stream.
     cam_from_device: (3,3) from meta calibration, or None.
     """
 
@@ -264,6 +275,47 @@ class Capture:
             setattr(self, t_attr, arr[:, 0])
             setattr(self, d_attr, arr[:, 1:])
 
+        # Collector trajectory + per-frame camera state (v0.2).
+        # Each group stays None when the capture has no such stream.
+        self.traj_t = self.traj_pos = self.traj_quat_xyzw = None
+        self.traj_tracking = None
+        poses_path = folder / "poses.csv"
+        if poses_path.exists():
+            with open(poses_path, newline="") as f:
+                rows = list(csv.reader(f))
+            if rows[0] == _POSES_HEADER:
+                states = [r[8] for r in rows[1:]]
+                nums = [[float(v) for v in r[:8]] for r in rows[1:]]
+            elif rows[0] == _POSES_HEADER_LEGACY:
+                states = ["UNKNOWN"] * (len(rows) - 1)
+                nums = [[float(v) for v in r] for r in rows[1:]]
+            else:
+                raise AssertionError("poses.csv header mismatch")
+            arr = np.array(nums, dtype=np.float64)
+            self.traj_t = arr[:, 0]
+            self.traj_pos = arr[:, 1:4]
+            self.traj_quat_xyzw = arr[:, 4:8]
+            self.traj_tracking = states
+
+        self.fm_frame = self.fm_t = None
+        self.fm_exposure_ns = self.fm_iso = self.fm_focus_m = None
+        self.fm_ae_state = self.fm_af_state = None
+        fm_path = folder / "frame_meta.csv"
+        if fm_path.exists():
+            with open(fm_path, newline="") as f:
+                rows = list(csv.reader(f))
+            assert rows[0] == _FRAME_META_HEADER, \
+                "frame_meta.csv header mismatch"
+            self.fm_frame = np.array([int(r[0]) for r in rows[1:]],
+                                     dtype=np.int64)
+            fm = np.array([[float(v) for v in r[1:]] for r in rows[1:]])
+            self.fm_t = fm[:, 0]
+            self.fm_exposure_ns = fm[:, 1].astype(np.int64)
+            self.fm_iso = fm[:, 2].astype(np.int64)
+            self.fm_focus_m = fm[:, 3]
+            self.fm_ae_state = fm[:, 4].astype(np.int64)
+            self.fm_af_state = fm[:, 5].astype(np.int64)
+
         cal = self.meta.get("calibration", {})
         R = cal.get("cam_from_device")
         self.cam_from_device = (np.array(R, dtype=np.float64)
@@ -273,7 +325,8 @@ class Capture:
         stamp_sets = [("frames", self.frame_t), ("imu", self.imu_t),
                       ("tof", self.tof_t)]
         for name, t in (("env", self.env_t), ("mag", self.mag_t),
-                        ("spec", self.spec_t)):
+                        ("spec", self.spec_t), ("poses", self.traj_t),
+                        ("frame_meta", self.fm_t)):
             if t is not None:
                 stamp_sets.append((name, t))
         for name, arr in stamp_sets:
@@ -283,6 +336,46 @@ class Capture:
     def imu_rotation(self) -> Rotation:
         """World-from-device rotations at imu_t (scipy, xyzw order)."""
         return Rotation.from_quat(self.imu_quat[:, [1, 2, 3, 0]])
+
+    def trajectory_length_m(self, only_tracking: bool = True) -> float:
+        """Path length of the recorded device trajectory, in metres.
+
+        With only_tracking, only segments whose BOTH endpoints were
+        TRACKING count — a LIMITED/STOPPED stretch contributes
+        nothing rather than a guessed distance. NaN when the capture
+        has no trajectory stream.
+        """
+        if self.traj_pos is None or len(self.traj_pos) < 2:
+            return float("nan")
+        seg = np.linalg.norm(np.diff(self.traj_pos, axis=0), axis=1)
+        if only_tracking and self.traj_tracking is not None:
+            ok = np.array([a == "TRACKING" and b == "TRACKING" for a, b in
+                           zip(self.traj_tracking[:-1],
+                               self.traj_tracking[1:])])
+            seg = seg[ok]
+        return float(seg.sum())
+
+    def exposure_report(self) -> dict | None:
+        """Per-frame exposure summary from frame_meta.csv (measured
+        camera state, not an estimate): median/p90 shutter time,
+        the share of frames slower than 1/60 s (hand-shake blur
+        territory at walking speed), and median ISO. None when the
+        capture has no frame_meta stream; rows the device did not
+        report (exposure -1) are excluded."""
+        if self.fm_exposure_ns is None:
+            return None
+        exp = self.fm_exposure_ns[self.fm_exposure_ns > 0]
+        if len(exp) == 0:
+            return None
+        ms = exp / 1e6
+        iso = self.fm_iso[self.fm_iso > 0]
+        return {
+            "frames": int(len(exp)),
+            "median_exposure_ms": float(np.median(ms)),
+            "p90_exposure_ms": float(np.percentile(ms, 90)),
+            "frac_slower_than_1_60": float(np.mean(exp > 1e9 / 60.0)),
+            "median_iso": float(np.median(iso)) if len(iso) else None,
+        }
 
 
 def read_capture(folder: Path) -> Capture:

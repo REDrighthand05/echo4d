@@ -184,4 +184,70 @@ class FormatTest {
             dir.deleteRecursively()
         }
     }
+
+    @Test
+    fun rowsAreOnDiskBeforeFinalize() {
+        // The anti-kill property: rows stream out as they arrive, so
+        // a process death mid-capture leaves a readable folder.
+        val dir = createTempDir("echo_fmt_stream")
+        try {
+            val w = CaptureWriter(dir)
+            w.addFrame(1, 0.0, "frame_00001.jpg")
+            w.addImu(0.0, doubleArrayOf(1.0, 0.0, 0.0, 0.0),
+                doubleArrayOf(0.0, 0.0, 9.81), doubleArrayOf(0.0, 0.0, 0.0))
+            w.flush()
+            val frames = java.io.File(dir, "frames.csv").readLines()
+            assertEquals(2, frames.size)
+            assertEquals("1,0.000000,frame_00001.jpg", frames[1])
+            val imu = java.io.File(dir, "imu.csv").readLines()
+            assertEquals(2, imu.size)
+            w.writeStreams()
+        } finally {
+            dir.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun poseAndFrameMetaSidecars() {
+        val dir = createTempDir("echo_fmt_v02")
+        try {
+            val w = CaptureWriter(dir)
+            w.addPose(0.5, 1.0, 1.6, 0.25, 0.0, 0.0, 0.0, 1.0, "TRACKING")
+            w.addPose(1.0, 1.1, 1.6, 0.3, 0.0, 0.0, 0.0, 1.0, "LIMITED")
+            w.addFrameMeta(1, 0.5, 8_000_000L, 200, 2.5, 2, 4)
+            w.addMag(0.5, doubleArrayOf(10.0, 20.0, 30.0))
+            w.writeStreams()
+            val poses = java.io.File(dir, "poses.csv").readLines()
+            assertEquals("t_s,tx,ty,tz,qx,qy,qz,qw,tracking", poses[0])
+            assertTrue(poses[1].endsWith(",TRACKING"))
+            assertTrue(poses[2].endsWith(",LIMITED"))
+            val fm = java.io.File(dir, "frame_meta.csv").readLines()
+            assertEquals("frame,t_s,exposure_ns,iso,focus_m,ae_state,af_state",
+                fm[0])
+            assertEquals("1,0.500000,8000000,200,2.500000,2,4", fm[1])
+            // mag header must match the Python reader's contract.
+            val mag = java.io.File(dir, "mag.csv").readLines()
+            assertEquals("t_s,mx,my,mz", mag[0])
+            assertEquals(2, w.poseCount)
+            assertEquals(1, w.frameMetaCount)
+        } finally {
+            dir.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun trimDropsTrailingFrameRows() {
+        val dir = createTempDir("echo_fmt_trim")
+        try {
+            val w = CaptureWriter(dir)
+            for (i in 1..5) w.addFrame(i, (i - 1) * 0.5, "frame_%05d.jpg".format(i))
+            w.trimFramesTo(3)
+            w.writeStreams()
+            val frames = java.io.File(dir, "frames.csv").readLines()
+            assertEquals(4, frames.size) // header + 3 rows
+            assertEquals("3,1.000000,frame_00003.jpg", frames[3])
+        } finally {
+            dir.deleteRecursively()
+        }
+    }
 }

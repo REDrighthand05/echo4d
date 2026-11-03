@@ -16,6 +16,7 @@ Run:  python web_app.py           (needs pywebview; on Windows it
 import base64
 import io
 import json
+import os
 import subprocess
 import sys
 import threading
@@ -65,6 +66,7 @@ class Bridge:
         self._pending_log = []
         self._all_log = []
         self._hist_sig = None
+        self._inbox_sig = None
         self._preview_seq = 0
         self._preview_data = None
         self._preview_stop = threading.Event()
@@ -134,10 +136,103 @@ class Bridge:
             })
         return out
 
+    # -- phone-capture inbox -----------------------------------------
+    # The collector's captures sync themselves home (Syncthing)
+    # into an "ECHO Captures" folder; the newest finished ones are
+    # offered in the page, one click selects their video through
+    # the same path as a drag-in. A capture counts as arrived only
+    # when its meta says the phone finished it and no Syncthing
+    # temp file remains -- a half-synced folder is never offered.
+    @staticmethod
+    def _inbox_roots():
+        roots = []
+        env = os.environ.get("ECHO_INBOX_DIR")
+        if env:
+            roots.append(Path(env))
+        for letter in "CDEFG":
+            roots.append(Path(f"{letter}:\\ECHO Captures"))
+        roots.append(Path.home() / "ECHO Captures")
+        return roots
+
+    def _inbox(self):
+        out = []
+        for root in self._inbox_roots():
+            try:
+                if not root.is_dir():
+                    continue
+                for cap in root.glob("capture_*"):
+                    if cap.is_dir():
+                        entry = self._inbox_entry(cap)
+                        if entry is not None:
+                            out.append(entry)
+            except OSError:
+                continue
+        out.sort(key=lambda e: e["mtime"], reverse=True)
+        for entry in out:
+            del entry["mtime"]
+        return out
+
+    @staticmethod
+    def _inbox_entry(cap):
+        video = cap / "video.mp4"
+        if not video.exists():
+            return None
+        try:
+            names = [p.name for p in cap.iterdir()]
+        except OSError:
+            return None
+        if any(n.startswith(".syncthing") for n in names):
+            return None
+        meta = cap / "meta.json"
+        if meta.exists():
+            try:
+                info = json.loads(meta.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                return None
+            if not info.get("finalized", False):
+                return None
+        try:
+            total = sum(p.stat().st_size
+                        for p in cap.rglob("*") if p.is_file())
+            mtime = video.stat().st_mtime
+        except OSError:
+            return None
+        return {
+            "name": cap.name,
+            "dir": str(cap),
+            "video": str(video),
+            "when": time.strftime("%m-%d %H:%M",
+                                  time.localtime(mtime)),
+            "mb": round(total / 1e6),
+            "mtime": mtime,
+        }
+
+    def select_inbox_capture(self, dir_path):
+        if self.busy:
+            return {"ok": False, "message": "正在忙，先等这一件事做完。"}
+        cap = Path(str(dir_path))
+        try:
+            parent = cap.resolve().parent
+        except OSError:
+            parent = None
+        roots = []
+        for root in self._inbox_roots():
+            try:
+                roots.append(root.resolve())
+            except OSError:
+                pass
+        if parent is None or parent not in roots:
+            return {"ok": False, "message": "这段采集不在收件夹里。"}
+        if self._inbox_entry(cap) is None:
+            return {"ok": False, "message": "这段采集还没传完。"}
+        return self.select_video_path(cap / "video.mp4")
+
     # -- snapshot + polling ------------------------------------------
     def get_snapshot(self):
         hist = self._history()
         self._hist_sig = json.dumps(hist, ensure_ascii=False)
+        inbox = self._inbox()
+        self._inbox_sig = json.dumps(inbox, ensure_ascii=False)
         return {
             "version": APP_VERSION,
             "jobsRoot": str(self.jobs_root),
@@ -147,6 +242,7 @@ class Bridge:
                 "updateProxy": self.settings.update_proxy,
             },
             "history": hist,
+            "inbox": inbox,
             "status": self.status,
             "frac": self.frac,
             "busy": self.busy,
@@ -171,6 +267,11 @@ class Bridge:
         if sig != self._hist_sig:
             self._hist_sig = sig
             out["history"] = hist
+        inbox = self._inbox()
+        isig = json.dumps(inbox, ensure_ascii=False)
+        if isig != self._inbox_sig:
+            self._inbox_sig = isig
+            out["inbox"] = inbox
         if self._preview_data is not None:
             out["preview"] = self._preview_data
         if self.depth_out is not None:

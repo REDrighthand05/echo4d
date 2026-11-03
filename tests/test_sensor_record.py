@@ -140,9 +140,63 @@ def test_payoff_on_simulated_capture():
           f"registration error {reg_err:.2f} deg")
 
 
+def test_collector_v02_streams():
+    """Collector v0.2: poses.csv (with and without the tracking
+    column) and frame_meta.csv parse as first-class optional streams;
+    trajectory length honours the tracking filter; the exposure
+    report summarises only rows the device actually reported."""
+    with tempfile.TemporaryDirectory() as td:
+        folder = Path(td) / "cap"
+        sr.write_meta(folder, {"device": {"name": "test"}})
+        sr.write_frames(folder, np.arange(3), np.array([0.0, 0.5, 1.0]),
+                        ["frame_00000.jpg", "frame_00001.jpg",
+                         "frame_00002.jpg"])
+        t_imu = np.arange(0.0, 1.0, 0.1)
+        sr.write_imu(folder, t_imu,
+                     np.tile([1.0, 0.0, 0.0, 0.0], (len(t_imu), 1)),
+                     np.tile([0.0, 9.80665, 0.0], (len(t_imu), 1)),
+                     np.zeros((len(t_imu), 3)))
+        sr.write_tof(folder, np.array([0.0]),
+                     np.full((1, 64), 1000, dtype=np.int32))
+        # straight 3 m walk, middle row LIMITED
+        (folder / "poses.csv").write_text(
+            "t_s,tx,ty,tz,qx,qy,qz,qw,tracking\n"
+            "0.000000,0.000000,1.600000,0.000000,0.000000,0.000000,"
+            "0.000000,1.000000,TRACKING\n"
+            "0.500000,1.500000,1.600000,0.000000,0.000000,0.000000,"
+            "0.000000,1.000000,LIMITED\n"
+            "1.000000,3.000000,1.600000,0.000000,0.000000,0.000000,"
+            "0.000000,1.000000,TRACKING\n")
+        (folder / "frame_meta.csv").write_text(
+            "frame,t_s,exposure_ns,iso,focus_m,ae_state,af_state\n"
+            "1,0.000000,8000000,200,2.500000,2,4\n"
+            "2,0.500000,20000000,400,2.500000,2,4\n"
+            "3,1.000000,-1,-1,-1.000000,-1,-1\n")
+        cap = sr.read_capture(folder)
+        assert cap.traj_pos.shape == (3, 3)
+        assert cap.trajectory_length_m(only_tracking=False) == 3.0
+        assert cap.trajectory_length_m(only_tracking=True) == 0.0
+        rep = cap.exposure_report()
+        assert rep["frames"] == 2  # the -1 row is excluded
+        assert rep["median_exposure_ms"] == 14.0
+        assert rep["frac_slower_than_1_60"] == 0.5
+        # legacy 8-column poses (collector v0.1) still parse
+        (folder / "poses.csv").write_text(
+            "t_s,tx,ty,tz,qx,qy,qz,qw\n"
+            "0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,"
+            "0.000000,1.000000\n"
+            "1.000000,1.000000,0.000000,0.000000,0.000000,0.000000,"
+            "0.000000,1.000000\n")
+        cap = sr.read_capture(folder)
+        assert cap.traj_tracking == ["UNKNOWN", "UNKNOWN"]
+        assert cap.trajectory_length_m(only_tracking=False) == 1.0
+
+
 if __name__ == "__main__":
     test_round_trip()
     print("round-trip: PASS")
+    test_collector_v02_streams()
+    print("collector v0.2 streams: PASS")
     test_zone_model_plane()
     print("zone model: PASS")
     test_device_program_contract()

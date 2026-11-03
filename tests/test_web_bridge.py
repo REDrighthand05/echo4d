@@ -201,6 +201,51 @@ def main():
     check("start guards: no double start while busy",
           (bridge.__dict__.update(busy=True) or
            bridge.start_scene()["ok"] is False))
+    bridge.__dict__.update(busy=False)
+
+    # -- phone-capture inbox --------------------------------------
+    inbox_root = tmp / "ECHO Captures"
+    inbox_root.mkdir()
+    os.environ["ECHO_INBOX_DIR"] = str(inbox_root)
+    try:
+        cap_ok = inbox_root / "capture_20261103_190000"
+        cap_ok.mkdir()
+        (cap_ok / "video.mp4").write_bytes(b"\0" * 2048)
+        (cap_ok / "meta.json").write_text(
+            json.dumps({"finalized": True}))
+        cap_open = inbox_root / "capture_20261103_190100"
+        cap_open.mkdir()
+        (cap_open / "video.mp4").write_bytes(b"\0" * 16)
+        (cap_open / "meta.json").write_text(
+            json.dumps({"finalized": False}))
+        cap_tmp = inbox_root / "capture_20261103_190200"
+        cap_tmp.mkdir()
+        (cap_tmp / "video.mp4").write_bytes(b"\0" * 16)
+        (cap_tmp / ".syncthing.video.mp4.tmp").write_bytes(b"\0")
+
+        inbox = bridge._inbox()
+        check("inbox lists only the finished capture",
+              [e["name"] for e in inbox] == [cap_ok.name],
+              str([e["name"] for e in inbox]))
+        snap = bridge.get_snapshot()
+        check("snapshot carries the inbox", snap["inbox"] == inbox)
+        poll = bridge.poll()
+        check("poll stays silent when the inbox is unchanged",
+              "inbox" not in poll)
+
+        bridge.video = None
+        sel = bridge.select_inbox_capture(str(cap_ok))
+        check("inbox click selects the capture's video",
+              sel["ok"] is True
+              and bridge.video == cap_ok / "video.mp4")
+        outside = bridge.select_inbox_capture(str(tmp))
+        check("a folder outside the inbox roots is refused",
+              outside["ok"] is False)
+        notyet = bridge.select_inbox_capture(str(cap_tmp))
+        check("a half-synced capture cannot be selected",
+              notyet["ok"] is False)
+    finally:
+        del os.environ["ECHO_INBOX_DIR"]
 
     print(f"FAILURES: {len(failures)}")
     return 1 if failures else 0

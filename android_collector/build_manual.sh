@@ -67,7 +67,7 @@ sed 's|<manifest xmlns:android="http://schemas.android.com/apk/res/android">|<ma
     --manifest "$B/apk/AndroidManifest.merged.xml" \
     --java "$B/gen" --extra-packages com.google.ar.core \
     --min-sdk-version 26 --target-sdk-version 34 \
-    --version-code 1 --version-name 0.1 "$B/apk/arcore-res.zip"
+    --version-code 6 --version-name 0.6 "$B/apk/arcore-res.zip"
 mkdir -p "$B/rclasses" "$B/dex"
 javac -cp "$ANDROID_JAR" -d "$B/rclasses" \
     "$B/gen/echo/collector/R.java" "$B/gen/com/google/ar/core/R.java"
@@ -84,7 +84,9 @@ mkdir -p "$B/apk/lib/arm64-v8a" "$B/apk/lib/armeabi-v7a"
 cp "$AT/arcore/jni/arm64-v8a/"*.so "$B/apk/lib/arm64-v8a/"
 cp "$AT/arcore/jni/armeabi-v7a/"*.so "$B/apk/lib/armeabi-v7a/"
 cp "$B/dex/classes.dex" "$B/apk/classes.dex"
-(cd "$B/apk" && zip -q unsigned.apk classes.dex \
+mkdir -p "$B/apk/assets"
+cp app/src/main/assets/* "$B/apk/assets/"
+(cd "$B/apk" && zip -q unsigned.apk classes.dex assets/* \
     lib/arm64-v8a/*.so lib/armeabi-v7a/*.so)
 "$BT/zipalign" -f 4 "$B/apk/unsigned.apk" "$B/apk/aligned.apk"
 if [ ! -f "$B/apk/debug.keystore" ]; then

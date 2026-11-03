@@ -90,6 +90,32 @@ fun main(args: Array<String>) {
         writer.addTof(t, outZones)
     }
 
+    // --- Poses + frame_meta (collector v0.2 streams) ------------------
+    // A synthetic device trajectory at the frame times: a slow arc at
+    // head height, identity orientation (the harness proves format
+    // transport, not pose realism), TRACKING except one deterministic
+    // LIMITED stretch. frame_meta carries plausible Camera2 result
+    // values. validate_capture.py asserts the Python reader exposes
+    // both streams and the trajectory length matches the arc.
+    for ((i, row) in frames.withIndex()) {
+        val tSec = row[1].toDouble()
+        val th = tSec * 0.1
+        val t = clock.stamp("poses", ts(tSec))
+        val tracking = if (i % 97 in 40..49) "LIMITED" else "TRACKING"
+        writer.addPose(
+            t,
+            1.2 * Math.sin(th), 1.6, 1.2 * (1.0 - Math.cos(th)),
+            0.0, 0.0, 0.0, 1.0, tracking
+        )
+        val tm = clock.stamp("framemeta", ts(tSec))
+        writer.addFrameMeta(
+            i + 1, tm,
+            6_000_000L + (i % 5) * 1_000_000L,
+            100 + (i % 7) * 50,
+            2.5, 2, 4
+        )
+    }
+
     writer.writeStreams()
 
     val camFd = Convert.camFromDevice(0)
@@ -145,5 +171,6 @@ fun main(args: Array<String>) {
     writer.writeMeta(meta.render())
 
     println("harness capture written to $out")
-    println("frames=${writer.frameCount} imu=${writer.imuCount} tof=${writer.tofCount}")
+    println("frames=${writer.frameCount} imu=${writer.imuCount} tof=${writer.tofCount} " +
+        "poses=${writer.poseCount} frame_meta=${writer.frameMetaCount}")
 }

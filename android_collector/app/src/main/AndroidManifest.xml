@@ -6,6 +6,20 @@
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <!-- >200 Hz sensor sampling on Android 12+ -->
     <uses-permission android:name="android.permission.HIGH_SAMPLING_RATE_SENSORS" />
+    <!-- Recording lives in a camera-type foreground service so it
+         survives the screen going off mid-walk. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- The pipe home: uploads to the PC receiver / Syncthing. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- Captures live in a shared folder (sdcard/ECHO) when the
+         user grants all-files access, so Syncthing can sync them
+         off the phone automatically. Without the grant the app
+         falls back to its private folder. -->
+    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
 
     <uses-feature android:name="android.hardware.camera" android:required="true" />
     <uses-feature android:name="android.hardware.camera.ar" android:required="false" />
@@ -46,5 +60,14 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <service
+            android:name=".CaptureService"
+            android:exported="false"
+            android:foregroundServiceType="camera" />
+        <provider
+            android:name=".ShareProvider"
+            android:authorities="echo.collector.files"
+            android:exported="false"
+            android:grantUriPermissions="true" />
     </application>
 </manifest>

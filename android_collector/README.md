@@ -1,6 +1,8 @@
 # ECHO Collector — Android 采集端
 
-**状态：UNTESTED ON HARDWARE（从未在真机上运行过）。**
+**状态：v0.2，UNTESTED ON HARDWARE（从未在真机上运行过）。**
+v0.2 是「第一次真机采集之前」的完善版：位姿转正、流式落盘抗杀、前台服务防杀、
+逐帧相机参数、物理超广角选择、内参入册、一键打包回传（详见下文 v0.2 一节）。
 本机（无 GPU 的 Linux VM）只能做到：JVM 单元测试全过 + 桌面 harness 用应用自身的
 转换/写盘代码从模拟数据生成完整采集文件夹、被 PC 端 Python 读取器与原 payoff
 原样验证通过 + APK 编译打包签名验证通过。真机行为见文末「无法在此验证的边界」。
@@ -25,12 +27,21 @@
 | 视频 + 逐帧时刻 | Camera2，最宽 FoV 的镜头，1080p，H.264 | `video.mp4` + `frames.csv` |
 | IMU | 旋转矢量（融合姿态）+ 加速度 + 陀螺，最高稳定频率 | `imu.csv` |
 | 深度/ToF | Camera2 DEPTH16，或 ARCore Depth | `tof.csv`（8×8 分区） |
-| 位姿（额外流） | ARCore 6DoF | `poses.csv`（旁路文件，导入器忽略未知文件） |
+| 位姿 | ARCore 6DoF（米制轨迹） | `poses.csv`（含逐行跟踪状态 TRACKING/LIMITED/STOPPED；桌面读取器已认作正式流，有轨迹长度与可信段统计） |
+| 逐帧相机状态 | Camera2 捕获结果 | `frame_meta.csv`（曝光/ISO/对焦距离/AE/AF；桌面端有曝光报告：中位快门、慢于 1/60 的帧占比） |
 | 附加 | 磁力计 / 气压计 / GPS(1Hz)，有则录 | `mag.csv` / `baro.csv` / `gps.csv` |
 
-后端优先级：Camera2+DEPTH16 → ARCore（视频+位姿+深度）→ 纯 Camera2（无深度，
-在 meta.json 里如实记录 `tof: none`）。**核心功能不依赖 root**；root 不被使用
-（所有核心流都是公开 API）。
+后端优先级（v0.2 起位姿优先）：Camera2+DEPTH16（实测深度最贵）→ ARCore
+（只要设备支持就用：视频+位姿，深度有则加；ARCore 独占相机，位姿流只能
+由它产生，v0.1 把它绑在「ARCore 深度可用」上，导致位姿可用但深度不可用
+的机器——正如目标一加——根本录不到位姿，v0.2 已解耦）→ 纯 Camera2。
+**核心功能不依赖 root**；root 不被使用（所有核心流都是公开 API）。
+
+镜头选择（v0.2）：候选 = 每个后置逻辑相机 + 逻辑多摄里的每个**物理相机**
+（一加 12 的超广角只以物理相机形式存在，v0.1 只枚举逻辑相机，选中了
+72° 主摄）。取 FoV 最宽者；物理镜头通过会话输出配置定向，设备拒绝时
+自动退回逻辑流并在 meta 里如实记录。录制相机的内参（焦距/主点，含厂家
+标定数组若有）写入 meta.json 的 `calibration.camera`（v0.1 恒为 null）。
 
 ## 时间与坐标转换（格式的关键，都有测试锁定）
 
@@ -60,13 +71,13 @@
   （kotlinc + aapt2 + d8 + apksigner）产出同一 APK，并顺带跑完单元测试
   与 harness 证明。工具链在 `~/workspace/android-tools/`（JDK 17、
   SDK platform 34 / build-tools 34、Kotlin 2.0.20、ARCore 1.44 AAR）。
-- 产物：`EchoCollector.apk`（debug 签名；versionName 0.1）。
+- 产物：`EchoCollector.apk`（debug 签名；versionName 0.2）。
 
 ## 无手机证明（已在本机跑通）
 
 `build_manual.sh` 第 2–4 步（也可单独看 `validate_capture.py`）：
 
-- `shared/` 的 JVM 单元测试 14 个全过：时刻换算与严格递增、旋转矢量重排、
+- `shared/` 的 JVM 单元测试 17 个全过：时刻换算与严格递增、旋转矢量重排、
   `camFromDevice(0)` = 参考安装、8×8 下采样（置信位掩码、中位数、−1 哨兵）、
   CSV/JSON 写出后可被解析。
 - 桌面 harness 把模拟采集（`experiments/sensor_sim/capture_room2_sim`）当作
@@ -77,13 +88,35 @@
   - payoff 复现：ToF 尺度 **0.2500 m/unit**（参照 0.25，+0.00%），
     IMU 水平 **0.13°**（门槛 1.0°）。
 
+## v0.2 完善清单（本轮改了什么）
+
+- **位姿转正**：ARCore 可用即走位姿后端（见上）；位姿逐行带跟踪状态；
+  ARCore 后端只给真正进入编码器的帧打戳，停止时返回实际编码帧数供对账裁剪
+  （v0.1 曾在编码输入队列满时凭空记帧）。桌面读取器解析 poses/frame_meta
+  为正式可选流并做时刻单调校验；`Capture.trajectory_length_m()`（可只计
+  TRACKING 段）与 `Capture.exposure_report()` 是两个现成的读数。
+- **落盘抗杀**：写盘层改为流式（行到达即写、周期 flush）；meta.json 在
+  录制开始就落盘（`finalized: false`），停止时改写为 `true` 并补齐统计。
+  App 被杀/手机断电不再整段丢失，留下的文件夹如实标记未封口，桌面照常可读；
+  App 再打开会提示发现未封口采集。
+- **前台服务防杀**：录制由相机型前台服务 + 部分唤醒锁托管，通知栏可停；
+  屏幕可以熄灭，手机可以揣兜里走。界面只是它的视图。
+- **存储硬闸**：剩余 < 1.5 GB 拒绝开始；录制中跌破 300 MB 自动干净停止。
+- **一键回传**：停止后（或从列表选任何一次采集）「打包发送」→ 整文件夹
+  zip → 系统分享面板，自选通道发回电脑。自带一个只读 ContentProvider
+  供分享授权（无 androidx 依赖）。
+- **顺手修的真 bug**：mag.csv 的表头与 Python 读取器契约不一致
+  （`mx_ut` vs `mx`）——带磁力计的真机采集会被读取器拒收，现已对齐。
+
 ## 第一次真机运行清单
 
 1. 把 `EchoCollector.apk` 拷到手机，安装（需允许「安装未知应用」；debug 签名）。
 2. 打开 App：看顶部能力行（机型、摄像头 FoV、深度后端是哪一种），
    并确认 `capabilities.json` 已生成（App 文件目录 `captures/` 的上一层）。
 3. 点大按钮录 30 秒：慢走、环视房间一圈（最好走回起点闭环），再点一次停止。
-4. 把生成的 `capture_*` 文件夹整个拷回电脑。
+   录制中状态行应出现「位姿 N」在涨——那是这次完善的主角。
+4. 点「打包发送采集…」选刚录的这次，用顺手的通道发回电脑（或 USB 拷回
+   `capture_*` 文件夹整个）。
 5. 在电脑上跑：`.venv/bin/python android_collector/validate_capture.py <文件夹>`
    —— 输出 VALID 即格式过关；把结果发回来，据此决定下一步（深度后端是否命中、
    帧数对账是否吻合）。
@@ -98,7 +131,9 @@
 - MediaRecorder 实际编码帧数与 frames.csv 的对账在本机的帧丢弃行为
   （App 里已写了对账与裁剪逻辑，未在真机跑过）；
 - 旋转矢量在 OxygenOS 上的实际采样率与长时间漂移；
-- ARCore 后端的 MediaCodec 编码路径（代码完整，未运行过）；
+- ARCore 后端的 MediaCodec 编码路径（代码完整，未运行过）；物理镜头定向
+  （OutputConfiguration.setPhysicalCameraId）在这台一加上的接受度、被拒时
+  的退回路径；前台服务在 OxygenOS 省电策略下的存活时长；
 - 权限弹窗、发热、长时间录制的稳定性。
 
 文件夹布局：`shared/`（纯 JVM：格式/转换/写盘，App 与 harness 共用）、

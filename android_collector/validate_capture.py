@@ -70,6 +70,34 @@ def main() -> int:
               f"imu_quat {d_imu:.2e}, tof identical: {tof_same}")
         ok &= d_frame < 1e-6 and d_imu_t < 1e-6 and d_imu < 1e-5 and tof_same
 
+    if cap.traj_t is not None:
+        # Collector v0.2 streams: the harness writes a synthetic arc
+        # (radius 1.2 m, angle = 0.1 * t) at the frame times, TRACKING
+        # except a LIMITED stretch, and 6-10 ms exposures.
+        n = len(cap.traj_t)
+        states = set(cap.traj_tracking or [])
+        full = cap.trajectory_length_m(only_tracking=False)
+        trusted = cap.trajectory_length_m(only_tracking=True)
+        expected = 1.2 * 0.1 * float(cap.frame_t[-1])
+        rep = cap.exposure_report()
+        traj_ok = (
+            n == len(cap.frame_t)
+            and "TRACKING" in states and "LIMITED" in states
+            and abs(full - expected) / expected < 0.02
+            and 0.0 < trusted < full
+        )
+        exp_ok = (
+            rep is not None
+            and 6.0 <= rep["median_exposure_ms"] <= 10.0
+            and rep["frac_slower_than_1_60"] == 0.0
+            and rep["median_iso"] is not None
+        )
+        print(f"[v0.2 streams] poses {n} rows, states {sorted(states)}, "
+              f"traj {full:.3f} m (expected {expected:.3f}), "
+              f"trusted-only {trusted:.3f} m; exposure median "
+              f"{rep['median_exposure_ms'] if rep else float('nan'):.1f} ms")
+        ok &= traj_ok and exp_ok
+
     job = Path(args.job)
     poses = json.loads((job / "poses.json").read_text())
     points = load_points(job)

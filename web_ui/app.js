@@ -602,6 +602,28 @@ function renderHistory(items) {
   }
 }
 
+/* phone-capture inbox: captures that synced themselves home */
+function renderInbox(items) {
+  const tile = $("inbox");
+  const box = $("inboxlist");
+  tile.hidden = !items || items.length === 0;
+  box.innerHTML = "";
+  for (const it of items || []) {
+    const div = document.createElement("div");
+    div.className = "hist-item";
+    div.innerHTML = `<span>${it.name}</span>` +
+      `<span class="when">${it.mb} MB</span>` +
+      `<span class="when">${it.when}</span>`;
+    div.addEventListener("click", async () => {
+      if (state.busy || !bridge) return;
+      const r = await bridge.select_inbox_capture(it.dir);
+      if (r && r.ok) selectVideo(r.name, it.video);
+      else if (r) setStatus(r.message);
+    });
+    box.appendChild(div);
+  }
+}
+
 /* log panel + settings page + fullscreen */
 $("logtab").addEventListener("click", () => {
   const p = $("logpanel");
@@ -730,6 +752,7 @@ async function initBridge() {
   $("set-proxy").value = snap.settings.updateProxy || "";
   (snap.log || []).forEach(l => log(l));
   renderHistory(snap.history || []);
+  renderInbox(snap.inbox || []);
   setStatus(snap.status, snap.frac);
   bridge.check_update();
   let wasBusy = false;
@@ -743,6 +766,7 @@ async function initBridge() {
     wasBusy = !!out.busy;
     (out.logs || []).forEach(l => log(l));
     if (out.history) renderHistory(out.history);
+    if (out.inbox) renderInbox(out.inbox);
     if (!out.busy && out.hasJob && !state.jobDir && out.jobOutputs) {
       // Only outputs the job really holds may light their buttons;
       // a failed job used to light them all and every click then
