@@ -100,5 +100,5 @@ def register_photo_discovery_kernels(
     """Register the photo discovery kernel; returns the registry."""
     reg = registry if registry is not None else Registry()
     reg.add(Kernel("photo_discovery", ("job",), "objects",
-                   _photo_discovery_kernel, cost=25.0))
+                   _photo_discovery_kernel, cost=25.0, version="0.3"))
     return reg

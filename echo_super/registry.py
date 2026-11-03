@@ -25,6 +25,10 @@ class Kernel:
     produces: str
     fn: Callable
     cost: float = 1.0  # relative; cheaper routes win ties
+    # Module version ("0.1", "0.2", ...). The ledger of record is
+    # VERSIONS.md at the repo root; this field must match it
+    # (tests/test_versions_ledger.py enforces the alignment).
+    version: str = "0.1"
 
 
 class NoPath(Exception):
@@ -35,9 +39,10 @@ class Registry:
     def __init__(self):
         self.kernels: dict[str, Kernel] = {}
 
-    def register(self, name, consumes, produces, cost=1.0):
+    def register(self, name, consumes, produces, cost=1.0, version="0.1"):
         def deco(fn):
-            self.kernels[name] = Kernel(name, tuple(consumes), produces, fn, cost)
+            self.kernels[name] = Kernel(name, tuple(consumes), produces,
+                                        fn, cost, version)
             return fn
         return deco
 

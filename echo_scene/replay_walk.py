@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
-"""ECHO holder replay v1: the device holder walks the scene again.
+"""ECHO holder replay: the device holder walks the scene again.
+
+模块版本: v0.2
 
 Reads a finished job directory (points.bin + poses.json) and renders a
 third-person MP4 of a procedural skeleton figure walking the recovered
@@ -7,17 +9,20 @@ camera route -- with real limb motion this time:
 
   * the route is the job's camera path (the registered build_replay_path
     kernel, same as the HTML route replay), laid on the floor;
-  * the floor is ONE dominant plane fitted procedurally to the floor
-    band of the cloud inside the route corridor (trimmed least squares);
-    the figure's feet answer to that plane everywhere;
+  * the walking surface is a local ground curve tracked along the
+    route (coarse floor track -> windowed column surface -> smoothed),
+    with ONE dominant plane (fitted to the floor band of the cloud
+    inside the route corridor, trimmed least squares) as the fallback
+    where the cloud has no floor; the figure's feet answer to that
+    curve everywhere;
   * the figure is a segmented point-built humanoid (head / torso /
     upper+fore arms / thighs / shins / feet) driven by an analytic
     gait: hip swing, swing-phase knee flexion, ankle compensation with
     toe-off, opposite arm swing, pelvis bob at twice stride frequency,
     lateral sway, and a ground clamp (a correction curve over the
     route, solved once) that keeps the support foot planted on the
-    plane without ever pushing the other foot through it -- no
-    gliding, no floating;
+    walking surface without ever pushing the other foot through
+    it -- no gliding, no floating;
   * the camera follows behind and above the figure, smoothed;
   * frames are drawn by the registered MUS rasterizer
     (echo_super.kernels.echo_render) and encoded with the pipeline's
@@ -51,6 +56,7 @@ from .depth_video import _run_ffmpeg
 from .preview import _read_points_bin
 from .replay import _camera_route, _route_floor
 
+MODULE_VERSION = "v0.2"
 FIG_SEED = 20261031
 FIG_RGB = (255, 166, 66)          # gold accent (the approved sample)
 SAMPLES_PER_SEGMENT = 8
@@ -162,15 +168,134 @@ def floor_height_at(plane: dict, x, z):
 
 
 # ---------------------------------------------------------------------------
-# ground path: the camera route laid on the floor plane
+# local ground: the walking surface tracked along the route
 # ---------------------------------------------------------------------------
 
-def ground_path(path: np.ndarray, plane: dict, ds: float):
-    """Uniform arc-length resampling of the route on the floor plane.
+def _smooth_along(vals: np.ndarray, k: int) -> np.ndarray:
+    """Moving average over samples (edge-padded), k forced odd."""
+    vals = np.asarray(vals, dtype=np.float64)
+    if k <= 1 or len(vals) == 0:
+        return vals.copy()
+    if k % 2 == 0:
+        k += 1
+    pad = k // 2
+    return np.convolve(np.pad(vals, pad, mode="edge"),
+                       np.ones(k) / k, mode="valid")[:len(vals)]
 
-    Returns (points (M,3) with y on the plane, tangents (M,3) unit,
-    cumulative arc (M,)). Tangents are smoothed over a short window;
-    near-stationary stretches inherit the last real heading."""
+
+def local_ground_heights(pts: np.ndarray, xz: np.ndarray,
+                         arc: np.ndarray, plane: dict,
+                         fig_h: float):
+    """Walking-surface height for route samples at `xz` (M,2).
+
+    Layered, all deterministic:
+
+      * coarse -- robust low percentile (5th) of the cloud points
+        within 0.47H of the sample (the route-floor recipe),
+        smoothed over ~0.6H of arc;
+      * column -- the lowest well-populated height bin (0.05H bins,
+        >=6 points) within 0.30H, inside a +-0.30H window around the
+        coarse track: warped upper sheets and wall points sit above
+        the window or in higher bins and cannot win. The height is
+        read from a local plane fitted to that lowest band and
+        evaluated at the sample (a percentile of the band would read
+        the disc's downhill edge on slopes and sink the figure into
+        uphill ground); a bad fit falls back to the band percentile;
+      * plane -- the fitted dominant plane wherever the cloud offers
+        nothing usable, and wherever the local estimate strays more
+        than 0.45H from the plane (that is furniture, not floor).
+
+    Returns (heights (M,), src (M,)): src 2 = column surface,
+    1 = coarse track only, 0 = plane fallback."""
+    xz = np.asarray(xz, dtype=np.float64)
+    arc = np.asarray(arc, dtype=np.float64)
+    n = len(xz)
+    plane_h = np.asarray(floor_height_at(plane, xz[:, 0], xz[:, 1]),
+                         dtype=np.float64)
+    src = np.zeros(n, dtype=int)
+    if n == 0 or len(pts) == 0:
+        return plane_h.copy(), src
+    try:
+        from scipy.spatial import cKDTree
+    except ImportError:
+        return plane_h.copy(), src
+    pts = np.asarray(pts, dtype=np.float64)
+    tree = cKDTree(pts[:, [0, 2]])
+    ys_all = pts[:, 1]
+    ds = float(np.median(np.diff(arc))) if n > 1 else 1.0
+    win = max(ds, 1e-9)
+    coarse = plane_h.copy()
+    for i in range(n):
+        idx = tree.query_ball_point(xz[i], 0.47 * fig_h)
+        if len(idx) >= 50:
+            coarse[i] = float(np.percentile(ys_all[np.asarray(idx)], 5))
+            src[i] = 1
+    coarse = _smooth_along(coarse, int(round(0.60 * fig_h / win)))
+    heights = coarse.copy()
+    binw = 0.05 * fig_h
+    max_sheet_slope = float(np.tan(np.radians(40.0)))
+    for i in range(n):
+        idx = np.asarray(tree.query_ball_point(xz[i], 0.30 * fig_h))
+        if len(idx) < 6:
+            continue
+        disc = pts[idx]
+        ys = disc[:, 1]
+        lo = coarse[i] - 0.30 * fig_h
+        inw = (ys >= lo) & (ys <= coarse[i] + 0.30 * fig_h)
+        if int(inw.sum()) < 6:
+            continue
+        disc, ys = disc[inw], ys[inw]
+        bins = np.floor((ys - lo) / binw).astype(np.int64)
+        counts = np.bincount(bins)
+        good = np.nonzero(counts >= 6)[0]
+        if not len(good):
+            continue
+        b0 = int(good[0])
+        h_col = float(np.percentile(ys[bins == b0], 25))
+        band = disc[(bins >= b0) & (bins <= b0 + 2)]
+        if len(band) >= 10:
+            A = np.stack([band[:, 0] - xz[i, 0],
+                          band[:, 2] - xz[i, 1],
+                          np.ones(len(band))], axis=1)
+            sol, *_ = np.linalg.lstsq(A, band[:, 1], rcond=None)
+            resid = band[:, 1] - A @ sol
+            # engage the fit only where a real slope makes the
+            # percentile read wrong; on flat ground the percentile
+            # is the steadier estimate (a fit over a handful of
+            # stray points above the sheet jitters sample to sample)
+            if 0.10 <= float(np.hypot(sol[0], sol[1])) \
+                    <= max_sheet_slope \
+                    and abs(float(sol[2]) - h_col) >= 0.02 * fig_h \
+                    and float(np.percentile(np.abs(resid), 75)) \
+                    <= 0.05 * fig_h:
+                h_col = float(sol[2])
+        heights[i] = h_col
+        src[i] = 2
+    dev = heights - plane_h
+    bad = np.abs(dev) > 0.45 * fig_h
+    if bool(bad.any()):
+        heights[bad] = plane_h[bad]
+        src[bad] = 0
+    heights = _smooth_along(heights, int(round(0.35 * fig_h / win)))
+    return heights, src
+
+
+# ---------------------------------------------------------------------------
+# ground path: the camera route laid on the walking surface
+# ---------------------------------------------------------------------------
+
+def ground_path(path: np.ndarray, plane: dict, ds: float,
+                pts: np.ndarray | None = None,
+                fig_h: float | None = None):
+    """Uniform arc-length resampling of the route on the floor.
+
+    When the scene cloud is given, each resampled point's height is
+    the local ground curve tracked along the route (see
+    local_ground_heights); without a cloud it is the fitted plane.
+    Returns (points (M,3) with y on the walking surface, tangents
+    (M,3) unit, cumulative arc (M,), ground source (M,)). Tangents
+    are smoothed over a short window; near-stationary stretches
+    inherit the last real heading."""
     xz = path[:, [0, 2]]
     seg = np.linalg.norm(np.diff(xz, axis=0), axis=1)
     arc = np.concatenate([[0.0], np.cumsum(seg)])
@@ -181,9 +306,14 @@ def ground_path(path: np.ndarray, plane: dict, ds: float):
     s_new = np.linspace(0.0, total, m)
     gx = np.interp(s_new, arc, xz[:, 0])
     gz = np.interp(s_new, arc, xz[:, 1])
-    gy = floor_height_at(plane, gx, gz)
-    pts = np.stack([gx, gy, gz], axis=1)
-    tan = np.gradient(pts, axis=0)
+    if pts is not None and fig_h:
+        gy, gsrc = local_ground_heights(pts, np.stack([gx, gz], axis=1),
+                                        s_new, plane, fig_h)
+    else:
+        gy = floor_height_at(plane, gx, gz)
+        gsrc = np.zeros(m, dtype=int)
+    out = np.stack([gx, gy, gz], axis=1)
+    tan = np.gradient(out, axis=0)
     tan[:, 1] = 0.0
     n = np.linalg.norm(tan, axis=1, keepdims=True)
     ok = n[:, 0] > 1e-9
@@ -213,7 +343,7 @@ def ground_path(path: np.ndarray, plane: dict, ds: float):
             last = tan[i]
         elif last is not None:
             tan[i] = last
-    return pts, tan, s_new
+    return out, tan, s_new, gsrc
 
 
 # ---------------------------------------------------------------------------
@@ -253,16 +383,34 @@ def arm_angles(psi_leg):
     return shoulder, elbow
 
 
+def _stance_weight(psi):
+    """Raised-sine support weight over one leg's cycle: zero in
+    swing, peaking mid-stance (wrapped phase in [-0.1pi, 1.1pi])."""
+    w = psi % (2.0 * np.pi)
+    if w >= 1.9 * np.pi:
+        w -= 2.0 * np.pi
+    if -0.1 * np.pi <= w <= 1.1 * np.pi:
+        return float(np.sin(np.clip((w + 0.1 * np.pi)
+                                    / (1.2 * np.pi), 0.0, 1.0)
+                            * np.pi))
+    return 0.0
+
+
 class Walker:
     """Articulated point figure walking a ground path.
 
     Pose is a pure function of travelled distance s. The ground clamp
     is a correction curve over the route arc, solved once at build:
     at each route sample it lowers the figure until the support foot
-    meets the plane, but never by more than the lower foot's own
-    clearance (so the departing toe at a step transition is not
-    pushed through the floor), smoothed over a short window.
+    meets the walking surface, but never by more than the lower
+    foot's own clearance (so the departing toe at a step transition
+    is not pushed through the floor), smoothed over a short window.
     All sizes scale with the figure height H.
+
+    Height discipline: the ground path's own y IS the walking
+    surface (local ground curve, plane fallback). The pelvis rides
+    exactly that height plus the hip offset -- never the surface
+    plus a second copy of it.
     """
 
     def __init__(self, height: float, plane: dict, gpath: np.ndarray,
@@ -272,9 +420,24 @@ class Walker:
         self.gpath = gpath
         self.tangents = tangents
         self.arc = arc
+        self.ground_h = np.asarray(gpath[:, 1], dtype=np.float64).copy()
         self.stride = STRIDE_LEN * self.H
         self.template = _build_template(self.H)
         self._corr = self._build_clamp_table()
+
+    def _ground_on_arc(self, sp: float) -> float:
+        """Ground-curve height at arc position sp."""
+        return float(np.interp(min(max(sp, 0.0), float(self.arc[-1])),
+                               self.arc, self.ground_h))
+
+    def _ground_at(self, s: float, point: np.ndarray,
+                   fwd: np.ndarray, root: np.ndarray) -> float:
+        """Walking-surface height under a point near the route (a
+        foot contact): project the point onto the route arc at s
+        along the heading and read the ground curve there."""
+        ds_off = float((point[0] - root[0]) * fwd[0]
+                       + (point[2] - root[2]) * fwd[2])
+        return self._ground_on_arc(s + ds_off)
 
     def _clamp_target(self, diag) -> float:
         """Wanted clamp at one sample, from raw (unclamped) diag."""
@@ -286,7 +449,7 @@ class Walker:
         target = min(active)
         if target > 0.0:
             # lowering budget: the lowest foot (either one) may not
-            # be pushed below the plane
+            # be pushed below the walking surface
             target = min(target, min(diag["clear_L"], diag["clear_R"])
                          + 0.002 * H)
         return float(np.clip(target, -0.030 * H, 0.055 * H))
@@ -295,7 +458,10 @@ class Walker:
         raw = np.array([self._clamp_target(self._pose_raw(float(s))
                                            ["diag"])
                         for s in self.arc])
-        k = 5
+        # a narrow window: a wide one smears one stretch's
+        # raise-the-figure target into the next stretch, where the
+        # figure may need lowering instead
+        k = 3
         smooth = np.convolve(np.pad(raw, k // 2, mode="edge"),
                              np.ones(k) / k, mode="valid")[:len(raw)]
         return smooth
@@ -321,13 +487,49 @@ class Walker:
         root_xz, fwd = self._at(s)
         right = np.cross(np.array([0.0, 1.0, 0.0]), fwd)
         up = np.array([0.0, 1.0, 0.0])
-        floor_y = float(floor_height_at(self.plane, root_xz[0],
-                                        root_xz[2]))
-
+        # Legs first (their angles are pelvis-independent). Two
+        # slope adaptations, one per error component:
+        # - the pelvis rides the stance-weighted ground under the
+        #   two feet, not just the ground under the root: mid-stance
+        #   the support foot stands almost under the pelvis, and if
+        #   the root happens to sit on a local bump the foot floats
+        #   by the bump's height unless the pelvis follows it;
+        # - each leg is also slope-compensated: its hip angle and
+        #   foot pitch shift by -atan(ground slope at its own
+        #   landing point), so at heel strike / toe-off, where the
+        #   foot lands a step ahead of or behind the pelvis, it
+        #   reaches down a downslope and up an upslope and the sole
+        #   stays parallel to the surface.
+        # On flat ground both adaptations vanish and the gait is
+        # the original one. The pelvis height comes from the
+        # ground curve only: v0.1 also added
+        # floor_height_at(plane) on top of the ground-path point,
+        # and wherever the floor sits below y=0 the figure sank by
+        # that second copy and walked under the floor.
+        legs = {}
+        num = 0.0
+        den = 0.0
+        for side_name, psi in (("L", phi), ("R", phi + np.pi)):
+            hip_ang, knee_ang, foot_pitch = leg_angles(psi)
+            st = _stance_weight(psi)
+            off = H * (THIGH * np.sin(hip_ang)
+                       + SHIN * np.sin(hip_ang - knee_ang)) + 0.03 * H
+            d = 0.45 * H
+            slope = (self._ground_on_arc(s + off + d)
+                     - self._ground_on_arc(s + off - d)) / (2.0 * d)
+            gain = float(np.clip((abs(slope) - 0.02) / 0.06,
+                                 0.0, 1.0))
+            ang_off = -float(np.arctan(slope)) * gain
+            legs[side_name] = (hip_ang + ang_off, knee_ang,
+                               foot_pitch + ang_off, st)
+            num += st * self._ground_on_arc(s + off)
+            den += st
+        ground_y = num / den if den > 1e-6 else float(root_xz[1])
         bob = -BOB_AMP * H * (0.5 + 0.5 * np.cos(2.0 * phi))
         sway = SWAY_AMP * H * np.sin(phi)
         pelvis = (root_xz + right * sway
-                  + up * (floor_y + HIP_Y * H + bob))
+                  + up * (ground_y - float(root_xz[1])
+                          + HIP_Y * H + bob))
         pelvis_yaw = 0.07 * np.sin(phi)
         chest_yaw = -0.05 * np.sin(phi)
         pelvis_pitch = 0.06 + 0.015 * np.sin(2.0 * phi)
@@ -354,7 +556,7 @@ class Walker:
         diag = {}
         for side_name, sgn, psi in (("L", 1.0, phi),
                                     ("R", -1.0, phi + np.pi)):
-            hip_ang, knee_ang, foot_pitch = leg_angles(psi)
+            hip_ang, knee_ang, foot_pitch, st = legs[side_name]
             hip_j = place(pelvis, sgn * HIP_HALF * H, 0.0, 0.0,
                           pelvis_yaw, pelvis_pitch)
             d_thigh = fwd * np.sin(hip_ang) + up * (-np.cos(hip_ang))
@@ -380,22 +582,12 @@ class Walker:
             joints[f"toe_{side_name}"] = toe
             joints[f"heel_{side_name}"] = heel
             clear = min(
-                float(toe[1] - floor_height_at(self.plane, toe[0],
-                                               toe[2])),
-                float(heel[1] - floor_height_at(self.plane, heel[0],
-                                                heel[2])))
+                float(toe[1] - self._ground_at(s, toe, fwd, root_xz)),
+                float(heel[1] - self._ground_at(s, heel, fwd,
+                                                root_xz)))
             diag[f"clear_{side_name}"] = clear
             diag[f"hip_{side_name}"] = float(hip_ang)
             diag[f"knee_{side_name}"] = float(knee_ang)
-            # stance window: wrapped phase in [-0.1pi, 1.1pi],
-            # raised sine across it, zero in swing
-            w = psi % (2.0 * np.pi)
-            if w >= 1.9 * np.pi:
-                w -= 2.0 * np.pi
-            st = float(np.sin(np.clip((w + 0.1 * np.pi)
-                                      / (1.2 * np.pi), 0.0, 1.0)
-                              * np.pi)) \
-                if -0.1 * np.pi <= w <= 1.1 * np.pi else 0.0
             diag[f"stance_{side_name}"] = st
             # arm on the same side swings against this leg
             sh_ang, el_ang = arm_angles(psi)
@@ -544,11 +736,18 @@ def load_walk(job_dir: Path):
         fig_h = max(float(np.percentile(pts[:, 1], 95)
                           - np.percentile(pts[:, 1], 5)) * 0.6, 1e-6)
     plane = fit_floor_plane(pts, path, fig_h)
-    gpath, tangents, arc = ground_path(path, plane, ds=0.03 * fig_h)
+    gpath, tangents, arc, gsrc = ground_path(path, plane,
+                                             ds=0.03 * fig_h,
+                                             pts=pts, fig_h=fig_h)
     walker = Walker(fig_h, plane, gpath, tangents, arc)
     info = {"route_length": float(arc[-1]), "fig_height": fig_h,
             "floor": plane, "knots": int(len(centres)),
-            "scene_points": int(len(pts))}
+            "scene_points": int(len(pts)),
+            "module_version": MODULE_VERSION,
+            "ground": {"samples": int(len(arc)),
+                       "local": int((gsrc == 2).sum()),
+                       "coarse": int((gsrc == 1).sum()),
+                       "plane_fallback": int((gsrc == 0).sum())}}
     return pts, rgb, walker, info
 
 
@@ -693,6 +892,16 @@ def render_walk_replay(job_dir, out_dir, width=1024, height=576,
                 a_t = 1.0 - np.exp(-(1.0 / fps) / 0.30)
                 cam_eye = cam_eye + a_e * (eye_goal - cam_eye)
                 cam_tgt = cam_tgt + a_t * (tgt_goal - cam_tgt)
+            # floor for the eye: it trails the figure by ~2H along
+            # the arc and may never sink below the walking surface
+            # under its own route position -- a camera under the
+            # floor makes an on-floor figure read as ceiling-walking
+            s_eye = max(0.0, s - 2.0 * H)
+            g_eye = float(np.interp(s_eye, walker.arc,
+                                    walker.gpath[:, 1]))
+            if cam_eye[1] < g_eye + 0.45 * H:
+                cam_eye = cam_eye.copy()
+                cam_eye[1] = g_eye + 0.45 * H
             cam = _look_camera(cam_eye, cam_tgt, width, height)
             lines = _bone_lines(j)
             if line_rgb is None or len(line_rgb) != len(lines):
