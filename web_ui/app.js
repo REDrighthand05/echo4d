@@ -25,6 +25,55 @@ let bridge = null;
 let bridgeMode = "waiting";   // "waiting" -> "real" | "demo"
 
 /* ------------------------------------------------------------------ */
+/* appearance （设置 → 显示）: every tunable number of the look.     */
+/* The defaults ARE v0.6.4's shipped values, so an untouched       */
+/* install looks untouched; the bridge overwrites them from the    */
+/* saved settings at boot, the settings page rewrites them live,   */
+/* and each change is saved back through the bridge.               */
+/* ------------------------------------------------------------------ */
+const APPEARANCE_DEFAULTS = {
+  frostBlur: 2.5, frostVeil: 0.26, frostSaturate: 155,
+  workHaze: 0,
+  setBlur: 24, setVeil: 0.72, setSaturate: 200,
+  grafCount: 0, grafWidth: 1, grafOpacity: 1, grafSaturate: 115,
+  mistDensity: 100, mistSize: 1,
+  motionOn: true, motionSpeed: 1, motionAmp: 1, sheenOn: true,
+};
+let appearance = { ...APPEARANCE_DEFAULTS };
+let ambT = 0;         // the ambient clock, scaled by the speed setting
+let motionLevel = 1;  // eased 0..1 gate so toggling motion never snaps
+
+function applyAppearance() {
+  const a = appearance, root = document.documentElement.style;
+  root.setProperty("--frost-blur", a.frostBlur + "px");
+  root.setProperty("--frost-veil", a.frostVeil);
+  root.setProperty("--frost-sat", a.frostSaturate + "%");
+  /* the running pane: the haze slider interpolates the cleared
+     switchable glass back towards the idle frost -- at 0 it is
+     exactly v0.6.4's nearly transparent pane */
+  const t = a.workHaze / 100;
+  root.setProperty("--frost-blur-w", (0.5 + t * (a.frostBlur - 0.5)) + "px");
+  root.setProperty("--frost-veil-w", 0.05 + t * (a.frostVeil - 0.05));
+  root.setProperty("--frost-sat-w", (108 + t * (a.frostSaturate - 108)) + "%");
+  root.setProperty("--set-blur", a.setBlur + "px");
+  root.setProperty("--set-veil", a.setVeil);
+  root.setProperty("--set-sat", a.setSaturate + "%");
+  root.setProperty("--graf-opacity", a.grafOpacity);
+  root.setProperty("--graf-sat", a.grafSaturate + "%");
+  root.setProperty("--sheen-dur", (34 / Math.max(0.2, a.motionSpeed)) + "s");
+  document.body.classList.toggle("no-sheen", !a.sheenOn || !a.motionOn);
+}
+
+let appearanceSaveTimer = null;
+function saveAppearance() {
+  if (!bridge) return;
+  clearTimeout(appearanceSaveTimer);
+  appearanceSaveTimer = setTimeout(() => {
+    bridge.save_settings({ appearance: { ...appearance } });
+  }, 250);
+}
+
+/* ------------------------------------------------------------------ */
 /* random graffiti: 1-3 strokes, a fresh hand every launch            */
 /* ------------------------------------------------------------------ */
 const INK_BLUE = [0, 87, 217], INK_SOFT = [110, 134, 175],
@@ -114,7 +163,10 @@ function randomStrokes(w, h, rng) {
       return { pts };
     },
   };
-  const count = rng() < 0.4 ? 1 : rng() < 0.62 ? 2 : 3;
+  /* 笔数： 0 in the settings means the shipped behaviour --
+     a random one to three; a fixed number deals exactly that */
+  const count = appearance.grafCount > 0 ? appearance.grafCount
+              : rng() < 0.4 ? 1 : rng() < 0.62 ? 2 : 3;
   const strokes = [];
   for (let i = 0; i < count; i++) {
     const kind = i === 0 ? pick(["wave", "wave", "swoosh", "arc"])
@@ -124,7 +176,8 @@ function randomStrokes(w, h, rng) {
     const span = (i === 0 ? R(1.18, 1.50) : R(0.92, 1.30)) * w;
     const cx = w / 2 + R(-0.10, 0.10) * w, cy = R(0.08, 0.92) * h;
     const st = kinds[kind](cx, cy, span);
-    st.width = (i === 0 ? R(0.11, 0.18) : R(0.06, 0.115)) * w;
+    st.width = (i === 0 ? R(0.11, 0.18) : R(0.06, 0.115)) * w
+             * appearance.grafWidth;
     st.color = i === 0 ? INK_BLUE : pick([INK_SOFT, INK_PALE, INK_SOFT]);
     st.alpha = i === 0 ? 238 : Math.round(R(130, 165));
     strokes.push(st);
@@ -213,7 +266,11 @@ function buildField() {
         const cxp = x0 + (x1 - x0) * t, cyp = y0 + (y1 - y0) * t;
         for (let off = -st.width / 2; off <= st.width / 2; off += step) {
           const u = off / (st.width / 2);
-          if (Math.random() > 0.10 + 0.90 * Math.cos(u * Math.PI / 2)) continue;
+          /* 雾点密度： the acceptance probability scales with
+             the setting -- at 0 no dot is ever dealt and the
+             wall is blank, as the slider promises */
+          if (Math.random() > (0.10 + 0.90 * Math.cos(u * Math.PI / 2))
+                            * (appearance.mistDensity / 100)) continue;
           const hx = cxp + nx * off + (Math.random() * 2 - 1) * 1.15;
           const hy = cyp + ny * off + (Math.random() * 2 - 1) * 1.15;
           let hz = 0.45 * Math.cos(u * Math.PI / 2)
@@ -313,20 +370,29 @@ function tick(t) {
   /* ambient motion: the giant strokes themselves are alive --
      each wanders a few centimetres over minutes and breathes
      in and out over ~48 s, on top of the mist's own shimmer.
-     Everything stays slow enough to read as weather, not UI. */
+     Everything stays slow enough to read as weather, not UI.
+     The settings own its clock now （设置 → 显示 → 常态动效）:
+     ambT advances at the user's speed, motionLevel eases the
+     whole dance in and out so the switch never snaps, and the
+     amplitude scales wander + breath + shimmer together.
+     Reduced-motion users keep their still wall regardless. */
+  const motionTarget = (appearance.motionOn && !REDUCED_MOTION) ? 1 : 0;
+  motionLevel += (motionTarget - motionLevel) * Math.min(1, dt * 3);
+  ambT += dt * appearance.motionSpeed * motionLevel;
+  const ampL = appearance.motionAmp * motionLevel;
   const driftX = [], driftY = [], breathA = [];
   for (let s = 0; s < strokeAnim.length; s++) {
     const a = strokeAnim[s];
-    driftX[s] = REDUCED_MOTION ? 0 : Math.sin(time * 0.045 + a.phX) * 15;
-    driftY[s] = REDUCED_MOTION ? 0 : Math.cos(time * 0.037 + a.phY) * 10;
-    breathA[s] = REDUCED_MOTION ? 1 : 0.85 + 0.15 * Math.sin(time * 0.13 + a.phB);
+    driftX[s] = Math.sin(ambT * 0.045 + a.phX) * 15 * ampL;
+    driftY[s] = Math.cos(ambT * 0.037 + a.phY) * 10 * ampL;
+    breathA[s] = 1 - ampL * 0.15 + ampL * 0.15 * Math.sin(ambT * 0.13 + a.phB);
   }
   const order = beads.map((b, i) => [b.z, i]).sort((a, b) => a[0] - b[0]);
   for (const [, i] of order) {
     const b = beads[i];
-    const swayx = b.hx + (driftX[b.si] || 0) + Math.sin(time * 0.9 + b.phase) * 3.0;
-    const swayy = b.hy + (driftY[b.si] || 0) + Math.cos(time * 0.7 + b.phase * 1.3) * 2.1;
-    const swayz = b.hz + Math.sin(time * 0.5 + b.phase) * 0.12;
+    const swayx = b.hx + (driftX[b.si] || 0) + Math.sin(ambT * 0.9 + b.phase) * 3.0 * ampL;
+    const swayy = b.hy + (driftY[b.si] || 0) + Math.cos(ambT * 0.7 + b.phase * 1.3) * 2.1 * ampL;
+    const swayz = b.hz + Math.sin(ambT * 0.5 + b.phase) * 0.12 * ampL;
     let ax = 30 * (swayx - b.x) - 9.3 * b.vx;
     let ay = 30 * (swayy - b.y) - 9.3 * b.vy;
     b.vz += (14 * (swayz - b.z) - 6 * b.vz) * dt;
@@ -347,7 +413,7 @@ function tick(t) {
     b.x += b.vx * dt; b.y += b.vy * dt;
     b.z = Math.max(-1.3, Math.min(1.3, b.z + b.vz * dt));
     const zn = Math.max(0, Math.min(1, (b.z + 1.15) / 2.3));
-    const r = (1.7 + 1.15 * zn) * b.rj;
+    const r = (1.7 + 1.15 * zn) * b.rj * appearance.mistSize;
     ctx.globalAlpha = b.alpha * (breathA[b.si] || 1) * (0.6 + 0.4 * zn);
     ctx.drawImage(spriteFor(b.color, zn), b.x - r, b.y - r, r * 2, r * 2);
   }
@@ -718,6 +784,77 @@ $("set-tray").addEventListener("change", async e => {
   if (bridge) await bridge.save_settings({ closeToTray: e.target.checked });
 });
 
+/* settings page → 显示： every appearance slider and switch.
+   "input" applies the number live (the settings veil itself is
+   right there changing), "change" persists it -- and for the
+   structural numbers (stroke count / brush width / mist
+   density, which live inside the bead field) re-deals the wall
+   once the drag lets go. */
+const AP_RANGES = [
+  // [element id, appearance key, value format, structural?]
+  ["ap-frost-blur", "frostBlur", v => v.toFixed(1) + " px"],
+  ["ap-frost-veil", "frostVeil", v => v.toFixed(2)],
+  ["ap-frost-saturate", "frostSaturate", v => Math.round(v) + "%"],
+  ["ap-work-haze", "workHaze", v => String(Math.round(v))],
+  ["ap-set-blur", "setBlur", v => Math.round(v) + " px"],
+  ["ap-set-veil", "setVeil", v => v.toFixed(2)],
+  ["ap-set-saturate", "setSaturate", v => Math.round(v) + "%"],
+  ["ap-graf-count", "grafCount", v => v === 0 ? "随机" : v + " 笔", true],
+  ["ap-graf-width", "grafWidth", v => "×" + v.toFixed(2), true],
+  ["ap-graf-opacity", "grafOpacity", v => Math.round(v * 100) + "%"],
+  ["ap-graf-saturate", "grafSaturate", v => Math.round(v) + "%"],
+  ["ap-mist-density", "mistDensity", v => Math.round(v) + "%", true],
+  ["ap-mist-size", "mistSize", v => "×" + v.toFixed(2)],
+  ["ap-motion-speed", "motionSpeed", v => "×" + v.toFixed(1)],
+  ["ap-motion-amp", "motionAmp", v => "×" + v.toFixed(2)],
+];
+function syncAppearanceControls() {
+  for (const [id, key, fmt] of AP_RANGES) {
+    $(id).value = appearance[key];
+    $(id + "-val").textContent = fmt(appearance[key]);
+  }
+  $("ap-motion-on").checked = !!appearance.motionOn;
+  $("ap-sheen-on").checked = !!appearance.sheenOn;
+}
+function rebuildWall() {
+  buildField();
+  requestAnimationFrame(applyCalmZones);
+}
+for (const [id, key, fmt, structural] of AP_RANGES) {
+  const el = $(id);
+  el.addEventListener("input", () => {
+    appearance[key] = parseFloat(el.value);
+    $(id + "-val").textContent = fmt(appearance[key]);
+    document.body.classList.add("tuning");
+    applyAppearance();
+  });
+  el.addEventListener("change", () => {
+    document.body.classList.remove("tuning");
+    if (structural) rebuildWall();
+    saveAppearance();
+  });
+}
+for (const [id, key] of [["ap-motion-on", "motionOn"],
+                          ["ap-sheen-on", "sheenOn"]]) {
+  $(id).addEventListener("change", e => {
+    appearance[key] = e.target.checked;
+    applyAppearance();
+    saveAppearance();
+  });
+}
+$("ap-reroll").addEventListener("click", () => {
+  rebuildWall();
+  log("换了一手涂鸦。");
+});
+$("ap-reset").addEventListener("click", () => {
+  appearance = { ...APPEARANCE_DEFAULTS };
+  syncAppearanceControls();
+  applyAppearance();
+  rebuildWall();
+  saveAppearance();
+  log("显示参数已恢复默认。");
+});
+
 /* ------------------------------------------------------------------ */
 /* chrome frame: tabs, nav cluster, omnibox, overflow menu. Every    */
 /* control only re-aims an action the shell already has -- no new    */
@@ -867,6 +1004,17 @@ async function initBridge() {
   $("set-autostart").checked = !!snap.settings.autostart;
   $("set-tray").checked = !!snap.settings.closeToTray;
   $("set-proxy").value = snap.settings.updateProxy || "";
+  if (snap.settings.appearance) {
+    appearance = { ...APPEARANCE_DEFAULTS, ...snap.settings.appearance };
+    syncAppearanceControls();
+    applyAppearance();
+    /* a saved hand shapes the wall only when its structural
+       numbers differ from the shipped ones -- otherwise the
+       launch's own random hand stands, as it always has */
+    const structural = ["grafCount", "grafWidth", "mistDensity"];
+    if (structural.some(k => appearance[k] !== APPEARANCE_DEFAULTS[k]))
+      rebuildWall();
+  }
   (snap.log || []).forEach(l => log(l));
   renderHistory(snap.history || []);
   renderInbox(snap.inbox || []);
@@ -909,6 +1057,8 @@ async function initBridge() {
 
 /* boot */
 buildField();
+applyAppearance();
+syncAppearanceControls();
 requestAnimationFrame(tick);
 setTimeout(applyCalmZones, 350);  // re-measure calm zones once text layout settles
 refresh();

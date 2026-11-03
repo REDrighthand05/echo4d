@@ -49,6 +49,23 @@
      a filled block of its own */
   --hairline: rgba(20, 40, 90, 0.10);
   --hairline-soft: rgba(20, 40, 90, 0.06);
+  /* appearance （设置 → 显示）: the user's own hand on the glass,
+     the graffiti and the ambient motion. The values here are
+     v0.6.4's shipped numbers; app.js rewrites them live from
+     the saved settings, and the -w set is the running state's
+     pane, interpolated from the haze slider. */
+  --frost-blur: 2.5px;
+  --frost-veil: 0.26;
+  --frost-sat: 155%;
+  --frost-blur-w: 0.5px;
+  --frost-veil-w: 0.05;
+  --frost-sat-w: 108%;
+  --set-blur: 24px;
+  --set-veil: 0.72;
+  --set-sat: 200%;
+  --graf-opacity: 1;
+  --graf-sat: 115%;
+  --sheen-dur: 34s;
 }
 /* while a job runs, the switchable glass clears (v4): the
    frame keeps its own light surfaces and dark ink, but the
@@ -121,7 +138,8 @@ body {
 #beads {
   position: fixed; inset: 0;
   width: 100%; height: 100%;
-  filter: saturate(1.15);
+  filter: saturate(var(--graf-sat));
+  opacity: var(--graf-opacity);
   pointer-events: none;
   transition: opacity 1.4s ease;
 }
@@ -138,9 +156,9 @@ body {
   /* the light sheet itself: a milk-white wash over the living
      wall, just frosted enough that the giant strokes read as
      art behind glass, never as noise behind text */
-  background: rgba(250, 251, 253, 0.26);
-  -webkit-backdrop-filter: blur(2.5px) saturate(155%);
-  backdrop-filter: blur(2.5px) saturate(155%);
+  background: rgba(250, 251, 253, var(--frost-veil));
+  -webkit-backdrop-filter: blur(var(--frost-blur)) saturate(var(--frost-sat));
+  backdrop-filter: blur(var(--frost-blur)) saturate(var(--frost-sat));
   pointer-events: none;
   transition: background 1.2s ease, backdrop-filter 1.2s ease,
               -webkit-backdrop-filter 1.2s ease;
@@ -152,11 +170,14 @@ body {
    is the switch flipping. No black anywhere; the sheet does
    not darken, it clears */
 body.working #frost {
-  background: rgba(248, 250, 252, 0.05);
-  -webkit-backdrop-filter: blur(0.5px) saturate(108%);
-  backdrop-filter: blur(0.5px) saturate(108%);
+  background: rgba(248, 250, 252, var(--frost-veil-w));
+  -webkit-backdrop-filter: blur(var(--frost-blur-w)) saturate(var(--frost-sat-w));
+  backdrop-filter: blur(var(--frost-blur-w)) saturate(var(--frost-sat-w));
 }
-body.working #beads { opacity: 0.10; }
+body.working #beads { opacity: calc(var(--graf-opacity) * 0.1); }
+/* while a 显示 slider is mid-drag the state-change easing would
+   trail the user's hand -- freeze it until the drag lets go */
+body.tuning #frost, body.tuning #beads { transition: none; }
 /* the scene layer arrives untouched in the running state:
    no lifted blacks, no squeezed contrast, full presence */
 body.working #echo {
@@ -182,8 +203,11 @@ body.working #echo {
     rgba(255, 255, 255, 0.13) 58%,
     transparent);
   transform: translateX(-170%) skewX(-8deg);
-  animation: sheen-pass 34s ease-in-out infinite;
+  animation: sheen-pass var(--sheen-dur) ease-in-out infinite;
 }
+/* the sheen pass is a setting now （常态动效 → 光泽扫过）:
+   off -- or the whole ambient motion off -- and it never comes */
+body.no-sheen #sheen { display: none; }
 @keyframes sheen-pass {
   0% { transform: translateX(-170%) skewX(-8deg); }
   38% { transform: translateX(430%) skewX(-8deg); }
@@ -594,10 +618,12 @@ body.working #sheen { opacity: 0; }
      into a solid slab: the graffiti still ghosts through.
      v4: one notch deeper than v3's near-white wash, the blur
      exactly as it was, and the wall's colour comes through
-     more saturated instead of washed pale */
-  background: rgba(216, 224, 238, 0.72);
-  -webkit-backdrop-filter: blur(24px) saturate(200%);
-  backdrop-filter: blur(24px) saturate(200%);
+     more saturated instead of washed pale. All three numbers
+     are the user's now （设置 → 显示）, dragged live while this
+     very veil sits in front of them */
+  background: rgba(216, 224, 238, var(--set-veil));
+  -webkit-backdrop-filter: blur(var(--set-blur)) saturate(var(--set-sat));
+  backdrop-filter: blur(var(--set-blur)) saturate(var(--set-sat));
 }
 #settings-page[hidden] { display: none; }
 .btn:active:not(:disabled) { transform: scale(0.96); }
@@ -617,9 +643,15 @@ body.working #sheen { opacity: 0; }
 #settings-page.enter .set-nav-item:nth-child(2) { animation-delay: 0.14s; }
 #settings-page.enter .set-nav-item:nth-child(3) { animation-delay: 0.18s; }
 #settings-page.enter .set-nav-item:nth-child(4) { animation-delay: 0.22s; }
+#settings-page.enter .set-nav-item:nth-child(5) { animation-delay: 0.26s; }
 #settings-page.enter .set-group:nth-child(1) { animation-delay: 0.16s; }
 #settings-page.enter .set-group:nth-child(2) { animation-delay: 0.22s; }
 #settings-page.enter .set-group:nth-child(3) { animation-delay: 0.28s; }
+#settings-page.enter .set-group:nth-child(4) { animation-delay: 0.34s; }
+#settings-page.enter .set-group:nth-child(5) { animation-delay: 0.40s; }
+#settings-page.enter .set-group:nth-child(6) { animation-delay: 0.46s; }
+#settings-page.enter .set-group:nth-child(7) { animation-delay: 0.52s; }
+#settings-page.enter .set-group:nth-child(8) { animation-delay: 0.58s; }
 #settings-page.leave { animation: veil-in 0.23s ease reverse both; }
 #settings-page.leave .set-card { animation: card-out 0.23s ease-in both; }
 @keyframes veil-in { from { opacity: 0; } to { opacity: 1; } }
@@ -677,7 +709,22 @@ body.working #sheen { opacity: 0; }
   background: transparent; color: var(--ink); font-weight: 600;
   box-shadow: inset 3px 0 0 var(--accent);
 }
-#set-groups { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+/* the groups column scrolls in its own area （显示 alone has
+   six groups): same thin scrollbar as the main sheet's deck,
+   so every row stays reachable at any window size */
+#set-groups {
+  flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 10px;
+  max-height: calc(100vh - 185px);
+  overflow-y: auto; overflow-x: hidden;
+  padding-right: 6px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(20, 40, 90, 0.25) transparent;
+}
+#set-groups::-webkit-scrollbar { width: 8px; }
+#set-groups::-webkit-scrollbar-thumb {
+  background: rgba(20, 40, 90, 0.20); border-radius: 99px;
+}
+#set-groups::-webkit-scrollbar-track { background: transparent; }
 .set-group {
   background: transparent;
   border-radius: 0;
@@ -741,6 +788,40 @@ body.working #sheen { opacity: 0; }
   .set-body { flex-direction: column; }
   #set-nav { width: 100%; flex-direction: row; flex-wrap: wrap; }
   .set-card { padding: 14px 14px 16px; }
+}
+
+/* -- settings: appearance sliders （显示） --------------------------
+   One slider grammar for every tunable number on the page: a
+   hairline track, a white thumb, the live value at the right.
+   The rows stay borderless text on the veil, like every other
+   settings row -- no cards, no fills. */
+.set-range {
+  -webkit-appearance: none; appearance: none;
+  width: 190px; flex: none; height: 4px; border-radius: 99px;
+  background: rgba(20, 40, 90, 0.18);
+  outline: none; cursor: pointer;
+}
+.set-range::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none;
+  width: 16px; height: 16px; border-radius: 50%;
+  background: #fff;
+  border: 1px solid rgba(20, 40, 90, 0.20);
+  box-shadow: 0 1px 4px rgba(20, 30, 60, 0.28);
+  cursor: pointer;
+}
+.set-range::-moz-range-thumb {
+  width: 16px; height: 16px; border-radius: 50%;
+  background: #fff;
+  border: 1px solid rgba(20, 40, 90, 0.20);
+  box-shadow: 0 1px 4px rgba(20, 30, 60, 0.28);
+  cursor: pointer;
+}
+.set-range:active::-webkit-slider-thumb { background: var(--accent); }
+.set-range:active::-moz-range-thumb { background: var(--accent); }
+.set-val {
+  min-width: 58px; flex: none; text-align: right;
+  font-size: 12.5px; font-weight: 600; color: var(--subink);
+  font-variant-numeric: tabular-nums;
 }
 
 /* -- settings: proxy input ----------------------------------------- */

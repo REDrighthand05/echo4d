@@ -202,11 +202,140 @@
     <div class="set-body">
       <nav id="set-nav">
         <button class="set-nav-item active" data-cat="all">全部设置</button>
+        <button class="set-nav-item" data-cat="display">显示</button>
         <button class="set-nav-item" data-cat="jobs">任务文件</button>
         <button class="set-nav-item" data-cat="habits">使用习惯</button>
         <button class="set-nav-item" data-cat="update">版本更新</button>
       </nav>
       <div id="set-groups">
+        <section class="set-group" data-cat="display">
+          <h3 class="set-group-title">毛玻璃</h3>
+          <div class="set-row">
+            <img class="tic" src="assets/icons/spark.png" alt="">
+            <div class="set-text"><h3>主界面模糊度</h3><p>主界面那张毛玻璃糊多少</p></div>
+            <input type="range" class="set-range" id="ap-frost-blur" min="0" max="20" step="0.5">
+            <span class="set-val" id="ap-frost-blur-val"></span>
+          </div>
+          <div class="set-row">
+            <img class="tic" src="assets/icons/spark.png" alt="">
+            <div class="set-text"><h3>主界面乳白深度</h3><p>玻璃上乳白罩的浓淡</p></div>
+            <input type="range" class="set-range" id="ap-frost-veil" min="0" max="0.9" step="0.01">
+            <span class="set-val" id="ap-frost-veil-val"></span>
+          </div>
+          <div class="set-row">
+            <img class="tic" src="assets/icons/spark.png" alt="">
+            <div class="set-text"><h3>主界面鲜明度</h3><p>透过玻璃的背景颜色鲜明程度</p></div>
+            <input type="range" class="set-range" id="ap-frost-saturate" min="0" max="300" step="5">
+            <span class="set-val" id="ap-frost-saturate-val"></span>
+          </div>
+          <div class="set-row">
+            <img class="tic" src="assets/icons/spark.png" alt="">
+            <div class="set-text"><h3>运行态雾度</h3><p>任务运行时的玻璃：0 是几乎全透（现在这样），往右拉雾变重；下次运行生效</p></div>
+            <input type="range" class="set-range" id="ap-work-haze" min="0" max="100" step="1">
+            <span class="set-val" id="ap-work-haze-val"></span>
+          </div>
+        </section>
+        <section class="set-group" data-cat="display">
+          <h3 class="set-group-title">毛玻璃 · 设置页</h3>
+          <div class="set-row">
+            <img class="tic" src="assets/icons/gear.png" alt="">
+            <div class="set-text"><h3>设置页模糊度</h3><p>这一页的罩糊多少，拖动当场就变</p></div>
+            <input type="range" class="set-range" id="ap-set-blur" min="0" max="40" step="1">
+            <span class="set-val" id="ap-set-blur-val"></span>
+          </div>
+          <div class="set-row">
+            <img class="tic" src="assets/icons/gear.png" alt="">
+            <div class="set-text"><h3>设置页背景深度</h3><p>这一页罩的颜色深浅</p></div>
+            <input type="range" class="set-range" id="ap-set-veil" min="0" max="0.98" step="0.01">
+            <span class="set-val" id="ap-set-veil-val"></span>
+          </div>
+          <div class="set-row">
+            <img class="tic" src="assets/icons/gear.png" alt="">
+            <div class="set-text"><h3>设置页鲜明度</h3><p>透过这一页的涂鸦颜色鲜明程度</p></div>
+            <input type="range" class="set-range" id="ap-set-saturate" min="0" max="300" step="5">
+            <span class="set-val" id="ap-set-saturate-val"></span>
+          </div>
+        </section>
+        <section class="set-group" data-cat="display">
+          <h3 class="set-group-title">背景涂鸦</h3>
+          <div class="set-row">
+            <img class="tic" src="assets/icons/grid.png" alt="">
+            <div class="set-text"><h3>涂鸦笔数</h3><p>每手涂鸦几笔；「随机」是每次打开不一样（松手换一手生效）</p></div>
+            <input type="range" class="set-range" id="ap-graf-count" min="0" max="3" step="1">
+            <span class="set-val" id="ap-graf-count-val"></span>
+          </div>
+          <div class="set-row">
+            <img class="tic" src="assets/icons/grid.png" alt="">
+            <div class="set-text"><h3>笔触粗细</h3><p>巨笔的粗细倍率（松手换一手生效）</p></div>
+            <input type="range" class="set-range" id="ap-graf-width" min="0.4" max="2" step="0.05">
+            <span class="set-val" id="ap-graf-width-val"></span>
+          </div>
+          <div class="set-row">
+            <img class="tic" src="assets/icons/grid.png" alt="">
+            <div class="set-text"><h3>涂鸦浓度</h3><p>整面涂鸦墙的浓淡</p></div>
+            <input type="range" class="set-range" id="ap-graf-opacity" min="0" max="1" step="0.01">
+            <span class="set-val" id="ap-graf-opacity-val"></span>
+          </div>
+          <div class="set-row">
+            <img class="tic" src="assets/icons/grid.png" alt="">
+            <div class="set-text"><h3>涂鸦鲜明度</h3><p>涂鸦颜色的鲜明程度</p></div>
+            <input type="range" class="set-range" id="ap-graf-saturate" min="0" max="300" step="5">
+            <span class="set-val" id="ap-graf-saturate-val"></span>
+          </div>
+          <div class="set-row">
+            <img class="tic" src="assets/icons/grid.png" alt="">
+            <div class="set-text"><h3>换一手涂鸦</h3><p>立刻重新随机一手，跟每次打开软件换的那种一样</p></div>
+            <button class="btn glass-btn small" id="ap-reroll">换一手</button>
+          </div>
+        </section>
+        <section class="set-group" data-cat="display">
+          <h3 class="set-group-title">雾点</h3>
+          <div class="set-row">
+            <img class="tic" src="assets/icons/depth.png" alt="">
+            <div class="set-text"><h3>雾点密度</h3><p>组成涂鸦的小点多少；拉到 0 墙就空了（松手生效）</p></div>
+            <input type="range" class="set-range" id="ap-mist-density" min="0" max="150" step="5">
+            <span class="set-val" id="ap-mist-density-val"></span>
+          </div>
+          <div class="set-row">
+            <img class="tic" src="assets/icons/depth.png" alt="">
+            <div class="set-text"><h3>雾点大小</h3><p>每个小点的大小倍率</p></div>
+            <input type="range" class="set-range" id="ap-mist-size" min="0.5" max="2" step="0.05">
+            <span class="set-val" id="ap-mist-size-val"></span>
+          </div>
+        </section>
+        <section class="set-group" data-cat="display">
+          <h3 class="set-group-title">常态动效</h3>
+          <div class="set-row">
+            <img class="tic" src="assets/icons/refresh.png" alt="">
+            <div class="set-text"><h3>动效开关</h3><p>关掉后涂鸦和雾点都静下来</p></div>
+            <label class="switch"><input type="checkbox" id="ap-motion-on"><span></span></label>
+          </div>
+          <div class="set-row">
+            <img class="tic" src="assets/icons/refresh.png" alt="">
+            <div class="set-text"><h3>动效速度</h3><p>涂鸦呼吸、游走和光泽扫过的快慢</p></div>
+            <input type="range" class="set-range" id="ap-motion-speed" min="0.2" max="3" step="0.1">
+            <span class="set-val" id="ap-motion-speed-val"></span>
+          </div>
+          <div class="set-row">
+            <img class="tic" src="assets/icons/refresh.png" alt="">
+            <div class="set-text"><h3>动效幅度</h3><p>涂鸦游走和呼吸的劲儿大小</p></div>
+            <input type="range" class="set-range" id="ap-motion-amp" min="0" max="2" step="0.05">
+            <span class="set-val" id="ap-motion-amp-val"></span>
+          </div>
+          <div class="set-row">
+            <img class="tic" src="assets/icons/refresh.png" alt="">
+            <div class="set-text"><h3>光泽扫过</h3><p>每隔一阵，一道淡光斜扫过整张玻璃</p></div>
+            <label class="switch"><input type="checkbox" id="ap-sheen-on"><span></span></label>
+          </div>
+        </section>
+        <section class="set-group" data-cat="display">
+          <h3 class="set-group-title">恢复默认</h3>
+          <div class="set-row">
+            <img class="tic" src="assets/icons/refresh.png" alt="">
+            <div class="set-text"><h3>恢复默认外观</h3><p>把上面所有显示参数一键回到出厂的样子</p></div>
+            <button class="btn glass-btn small" id="ap-reset">恢复默认</button>
+          </div>
+        </section>
         <section class="set-group" data-cat="jobs">
           <h3 class="set-group-title">任务文件</h3>
           <div class="set-row">

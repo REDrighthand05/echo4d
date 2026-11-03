@@ -27,8 +27,34 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import app as backend  # the desktop shell's module-level backend
-from echo_app.settings import load_settings, save_settings
+from echo_app.settings import coerce_appearance, load_settings, save_settings
 from echo_app.version import APP_VERSION
+
+# 设置 → 显示： the page speaks camelCase, the settings file
+# snake_case -- the same translation jobsRoot/updateProxy get,
+# table-driven so the snapshot and the save path cannot drift.
+_APPEARANCE_KEYS = [
+    ("frostBlur", "frost_blur"), ("frostVeil", "frost_veil"),
+    ("frostSaturate", "frost_saturate"), ("workHaze", "work_haze"),
+    ("setBlur", "set_blur"), ("setVeil", "set_veil"),
+    ("setSaturate", "set_saturate"), ("grafCount", "graf_count"),
+    ("grafWidth", "graf_width"), ("grafOpacity", "graf_opacity"),
+    ("grafSaturate", "graf_saturate"), ("mistDensity", "mist_density"),
+    ("mistSize", "mist_size"), ("motionOn", "motion_on"),
+    ("motionSpeed", "motion_speed"), ("motionAmp", "motion_amp"),
+    ("sheenOn", "sheen_on"),
+]
+
+
+def _appearance_to_js(appearance):
+    return {camel: getattr(appearance, snake)
+            for camel, snake in _APPEARANCE_KEYS}
+
+
+def _appearance_from_js(appearance, data):
+    snake = {snake: data[camel] for camel, snake in _APPEARANCE_KEYS
+             if isinstance(data, dict) and camel in data}
+    return coerce_appearance(snake, base=appearance)
 
 PLAIN_STATUS = backend.PLAIN_STATUS
 STAGE_COUNT = backend.STAGE_COUNT
@@ -240,6 +266,7 @@ class Bridge:
                 "autostart": self.settings.autostart,
                 "closeToTray": self.settings.close_to_tray,
                 "updateProxy": self.settings.update_proxy,
+                "appearance": _appearance_to_js(self.settings.appearance),
             },
             "history": hist,
             "inbox": inbox,
@@ -592,6 +619,9 @@ class Bridge:
                     set_proxy(self.settings.update_proxy)
                 except Exception:
                     pass
+            if "appearance" in data:
+                self.settings.appearance = _appearance_from_js(
+                    self.settings.appearance, data["appearance"])
             save_settings(self.settings)
             return {"ok": True}
         except Exception as exc:
