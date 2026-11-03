@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """ECHO holder replay: the device holder walks the scene again.
 
-模块版本: v0.2
+模块版本: v0.3
 
 Reads a finished job directory (points.bin + poses.json) and renders a
 third-person MP4 of a procedural skeleton figure walking the recovered
@@ -9,12 +9,20 @@ camera route -- with real limb motion this time:
 
   * the route is the job's camera path (the registered build_replay_path
     kernel, same as the HTML route replay), laid on the floor;
-  * the walking surface is a local ground curve tracked along the
-    route (coarse floor track -> windowed column surface -> smoothed),
-    with ONE dominant plane (fitted to the floor band of the cloud
-    inside the route corridor, trimmed least squares) as the fallback
-    where the cloud has no floor; the figure's feet answer to that
-    curve everywhere;
+  * the walking surface is SET, not sampled from the cloud (user's
+    rule, 2026-11-04): a fused cloud holds every surface several
+    times over at several depths, so no single clean floor layer
+    exists in it to read -- v0.2's local cloud tracking kept
+    grabbing the wrong layer. Gravity fixes the floor's direction
+    (the exported frame's +Y, set by the fuse stage) and the route
+    fixes its height: the camera rode one ride height above the
+    floor for the whole walk, so the floor under each route sample
+    is the smoothed camera height there minus the ride height. ONE
+    dominant plane over the cloud's floor band survives only as
+    the calibration datum (it sets the ride height via the existing
+    camera-height calibration) and as a sanity bound the set floor
+    may not stray far from; the cloud is checked against the floor,
+    never read as the floor;
   * the figure is a segmented point-built humanoid (head / torso /
     upper+fore arms / thighs / shins / feet) driven by an analytic
     gait: hip swing, swing-phase knee flexion, ankle compensation with
@@ -56,7 +64,7 @@ from .depth_video import _run_ffmpeg
 from .preview import _read_points_bin
 from .replay import _camera_route, _route_floor
 
-MODULE_VERSION = "v0.2"
+MODULE_VERSION = "v0.3"
 FIG_SEED = 20261031
 FIG_RGB = (255, 166, 66)          # gold accent (the approved sample)
 SAMPLES_PER_SEGMENT = 8
@@ -140,8 +148,13 @@ def fit_floor_plane(pts: np.ndarray, path: np.ndarray | None = None,
         idx = np.argmin(d2, axis=1)
         near = np.sqrt(d2[np.arange(len(pts)), idx]) < 0.50 * fig_h
         loc = chk_floor[idx]
-        band = pts[near & (pts[:, 1] >= loc - 0.30 * fig_h)
-                   & (pts[:, 1] <= loc + 0.20 * fig_h)]
+        # The track is a LOW percentile of the sheet, so the sheet
+        # itself sits mostly above it: the window reaches further
+        # up than down, or the datum plane (and with it the ride
+        # calibration) reads the sheet's troughs instead of its
+        # level. The trimmed fit rejects the furniture above.
+        band = pts[near & (pts[:, 1] >= loc - 0.20 * fig_h)
+                   & (pts[:, 1] <= loc + 0.35 * fig_h)]
         source = "route corridor"
     else:
         band = pts[pts[:, 1] <= np.percentile(pts[:, 1], 25)]
@@ -168,7 +181,7 @@ def floor_height_at(plane: dict, x, z):
 
 
 # ---------------------------------------------------------------------------
-# local ground: the walking surface tracked along the route
+# route utilities
 # ---------------------------------------------------------------------------
 
 def _smooth_along(vals: np.ndarray, k: int) -> np.ndarray:
@@ -183,119 +196,32 @@ def _smooth_along(vals: np.ndarray, k: int) -> np.ndarray:
                        np.ones(k) / k, mode="valid")[:len(vals)]
 
 
-def local_ground_heights(pts: np.ndarray, xz: np.ndarray,
-                         arc: np.ndarray, plane: dict,
-                         fig_h: float):
-    """Walking-surface height for route samples at `xz` (M,2).
-
-    Layered, all deterministic:
-
-      * coarse -- robust low percentile (5th) of the cloud points
-        within 0.47H of the sample (the route-floor recipe),
-        smoothed over ~0.6H of arc;
-      * column -- the lowest well-populated height bin (0.05H bins,
-        >=6 points) within 0.30H, inside a +-0.30H window around the
-        coarse track: warped upper sheets and wall points sit above
-        the window or in higher bins and cannot win. The height is
-        read from a local plane fitted to that lowest band and
-        evaluated at the sample (a percentile of the band would read
-        the disc's downhill edge on slopes and sink the figure into
-        uphill ground); a bad fit falls back to the band percentile;
-      * plane -- the fitted dominant plane wherever the cloud offers
-        nothing usable, and wherever the local estimate strays more
-        than 0.45H from the plane (that is furniture, not floor).
-
-    Returns (heights (M,), src (M,)): src 2 = column surface,
-    1 = coarse track only, 0 = plane fallback."""
-    xz = np.asarray(xz, dtype=np.float64)
-    arc = np.asarray(arc, dtype=np.float64)
-    n = len(xz)
-    plane_h = np.asarray(floor_height_at(plane, xz[:, 0], xz[:, 1]),
-                         dtype=np.float64)
-    src = np.zeros(n, dtype=int)
-    if n == 0 or len(pts) == 0:
-        return plane_h.copy(), src
-    try:
-        from scipy.spatial import cKDTree
-    except ImportError:
-        return plane_h.copy(), src
-    pts = np.asarray(pts, dtype=np.float64)
-    tree = cKDTree(pts[:, [0, 2]])
-    ys_all = pts[:, 1]
-    ds = float(np.median(np.diff(arc))) if n > 1 else 1.0
-    win = max(ds, 1e-9)
-    coarse = plane_h.copy()
-    for i in range(n):
-        idx = tree.query_ball_point(xz[i], 0.47 * fig_h)
-        if len(idx) >= 50:
-            coarse[i] = float(np.percentile(ys_all[np.asarray(idx)], 5))
-            src[i] = 1
-    coarse = _smooth_along(coarse, int(round(0.60 * fig_h / win)))
-    heights = coarse.copy()
-    binw = 0.05 * fig_h
-    max_sheet_slope = float(np.tan(np.radians(40.0)))
-    for i in range(n):
-        idx = np.asarray(tree.query_ball_point(xz[i], 0.30 * fig_h))
-        if len(idx) < 6:
-            continue
-        disc = pts[idx]
-        ys = disc[:, 1]
-        lo = coarse[i] - 0.30 * fig_h
-        inw = (ys >= lo) & (ys <= coarse[i] + 0.30 * fig_h)
-        if int(inw.sum()) < 6:
-            continue
-        disc, ys = disc[inw], ys[inw]
-        bins = np.floor((ys - lo) / binw).astype(np.int64)
-        counts = np.bincount(bins)
-        good = np.nonzero(counts >= 6)[0]
-        if not len(good):
-            continue
-        b0 = int(good[0])
-        h_col = float(np.percentile(ys[bins == b0], 25))
-        band = disc[(bins >= b0) & (bins <= b0 + 2)]
-        if len(band) >= 10:
-            A = np.stack([band[:, 0] - xz[i, 0],
-                          band[:, 2] - xz[i, 1],
-                          np.ones(len(band))], axis=1)
-            sol, *_ = np.linalg.lstsq(A, band[:, 1], rcond=None)
-            resid = band[:, 1] - A @ sol
-            # engage the fit only where a real slope makes the
-            # percentile read wrong; on flat ground the percentile
-            # is the steadier estimate (a fit over a handful of
-            # stray points above the sheet jitters sample to sample)
-            if 0.10 <= float(np.hypot(sol[0], sol[1])) \
-                    <= max_sheet_slope \
-                    and abs(float(sol[2]) - h_col) >= 0.02 * fig_h \
-                    and float(np.percentile(np.abs(resid), 75)) \
-                    <= 0.05 * fig_h:
-                h_col = float(sol[2])
-        heights[i] = h_col
-        src[i] = 2
-    dev = heights - plane_h
-    bad = np.abs(dev) > 0.45 * fig_h
-    if bool(bad.any()):
-        heights[bad] = plane_h[bad]
-        src[bad] = 0
-    heights = _smooth_along(heights, int(round(0.35 * fig_h / win)))
-    return heights, src
-
 
 # ---------------------------------------------------------------------------
 # ground path: the camera route laid on the walking surface
 # ---------------------------------------------------------------------------
 
 def ground_path(path: np.ndarray, plane: dict, ds: float,
-                pts: np.ndarray | None = None,
-                fig_h: float | None = None):
-    """Uniform arc-length resampling of the route on the floor.
+                fig_h: float | None = None,
+                ride: float | None = None):
+    """Uniform arc-length resampling of the route on the SET floor.
 
-    When the scene cloud is given, each resampled point's height is
-    the local ground curve tracked along the route (see
-    local_ground_heights); without a cloud it is the fitted plane.
+    The walking surface is set from the shot, never sampled from the
+    cloud (user's rule, 2026-11-04): its direction is gravity (the
+    exported frame's +Y) and its height under each route sample is
+    the smoothed camera height there minus the ride height -- the
+    camera rode one ride height above the floor for the whole walk,
+    so where the route's own height genuinely rises or falls (a
+    ramp, steps), the set floor follows it segment by segment. The
+    datum plane is only a sanity bound: a set height straying more
+    than 0.30H from the datum is clamped back to the datum band.
+    Without fig_h/ride, the datum plane alone is the surface.
+
     Returns (points (M,3) with y on the walking surface, tangents
-    (M,3) unit, cumulative arc (M,), ground source (M,)). Tangents
-    are smoothed over a short window; near-stationary stretches
-    inherit the last real heading."""
+    (M,3) unit, cumulative arc (M,), ground source (M,)): src 1 =
+    set from the trajectory, 0 = datum plane / datum-clamped.
+    Tangents are smoothed over a short window; near-stationary
+    stretches inherit the last real heading."""
     xz = path[:, [0, 2]]
     seg = np.linalg.norm(np.diff(xz, axis=0), axis=1)
     arc = np.concatenate([[0.0], np.cumsum(seg)])
@@ -306,9 +232,19 @@ def ground_path(path: np.ndarray, plane: dict, ds: float,
     s_new = np.linspace(0.0, total, m)
     gx = np.interp(s_new, arc, xz[:, 0])
     gz = np.interp(s_new, arc, xz[:, 1])
-    if pts is not None and fig_h:
-        gy, gsrc = local_ground_heights(pts, np.stack([gx, gz], axis=1),
-                                        s_new, plane, fig_h)
+    if fig_h and ride:
+        cam_y = np.interp(s_new, arc, path[:, 1])
+        ds_new = float(np.median(np.diff(s_new))) if m > 1 else ds
+        k = max(1, int(round(0.9 * fig_h / max(ds_new, 1e-9))))
+        gy = _smooth_along(cam_y, k) - ride
+        datum = np.asarray(floor_height_at(plane, gx, gz),
+                           dtype=np.float64)
+        lim = 0.30 * fig_h
+        dev = gy - datum
+        clamped = np.abs(dev) > lim
+        gy = np.where(clamped, datum + np.clip(dev, -lim, lim), gy)
+        gy = _smooth_along(gy, 3)
+        gsrc = np.where(clamped, 0, 1).astype(int)
     else:
         gy = floor_height_at(plane, gx, gz)
         gsrc = np.zeros(m, dtype=int)
@@ -408,9 +344,10 @@ class Walker:
     All sizes scale with the figure height H.
 
     Height discipline: the ground path's own y IS the walking
-    surface (local ground curve, plane fallback). The pelvis rides
-    exactly that height plus the hip offset -- never the surface
-    plus a second copy of it.
+    surface (the set floor: smoothed route height minus the ride
+    height, datum-bounded). The pelvis rides exactly that height
+    plus the hip offset -- never the surface plus a second copy
+    of it.
     """
 
     def __init__(self, height: float, plane: dict, gpath: np.ndarray,
@@ -727,27 +664,35 @@ def load_walk(job_dir: Path):
         raise ValueError("need at least 2 posed frames for a route")
     path, _look = build_replay_path(centres, targets,
                                      SAMPLES_PER_SEGMENT)
-    # figure height from the camera's own height above the local
-    # floor track, same calibration as the HTML route replay
-    track = _route_floor(pts, path)
-    cam_h = float(np.median(path[:, 1] - track))
-    fig_h = cam_h / 0.93 if cam_h > 0 else 0.0
-    if not np.isfinite(fig_h) or fig_h <= 0:
-        fig_h = max(float(np.percentile(pts[:, 1], 95)
-                          - np.percentile(pts[:, 1], 5)) * 0.6, 1e-6)
-    plane = fit_floor_plane(pts, path, fig_h)
+    # Datum: ONE dominant plane over the cloud's floor band. It is
+    # the calibration datum and the set floor's sanity bound -- the
+    # walking surface itself is set from the route below, never
+    # read off the cloud's layers.
+    rough_h = max(float(np.percentile(pts[:, 1], 95)
+                        - np.percentile(pts[:, 1], 5)) * 0.6, 1e-6)
+    plane = fit_floor_plane(pts, path, rough_h)
+    # Figure height by the existing calibration (the HTML route
+    # replay's recipe): the camera rode at 0.93 of the holder's
+    # height, so the ride height is the median camera height above
+    # the datum plane and the figure height is ride / 0.93.
+    cam_h = float(np.median(path[:, 1] - floor_height_at(
+        plane, path[:, 0], path[:, 2])))
+    if np.isfinite(cam_h) and cam_h > 0:
+        fig_h, ride = cam_h / 0.93, cam_h
+    else:
+        fig_h, ride = rough_h, 0.93 * rough_h
     gpath, tangents, arc, gsrc = ground_path(path, plane,
                                              ds=0.03 * fig_h,
-                                             pts=pts, fig_h=fig_h)
+                                             fig_h=fig_h, ride=ride)
     walker = Walker(fig_h, plane, gpath, tangents, arc)
     info = {"route_length": float(arc[-1]), "fig_height": fig_h,
+            "ride_height": ride,
             "floor": plane, "knots": int(len(centres)),
             "scene_points": int(len(pts)),
             "module_version": MODULE_VERSION,
             "ground": {"samples": int(len(arc)),
-                       "local": int((gsrc == 2).sum()),
-                       "coarse": int((gsrc == 1).sum()),
-                       "plane_fallback": int((gsrc == 0).sum())}}
+                       "trajectory_set": int((gsrc == 1).sum()),
+                       "datum_clamped": int((gsrc == 0).sum())}}
     return pts, rgb, walker, info
 
 

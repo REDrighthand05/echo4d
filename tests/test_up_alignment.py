@@ -24,6 +24,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from echo_scene.fuse import (  # noqa: E402
+    _estimate_up_great_circle,
     _estimate_world_up,
     _rotation_mapping,
 )
@@ -126,9 +127,123 @@ def test_mesh_centers_follow_alignment_json():
         assert np.allclose(aligned, plain @ R.T, atol=1e-9)
 
 
+def _walk_pose(up, heading_deg, pitch_down_deg, centre):
+    """cam_from_world pose for a walking shot: view direction at
+    heading `heading_deg` around `up`, depressed by pitch_down_deg."""
+    e1 = np.cross(up, np.array([0.0, 0.0, 1.0]))
+    if np.linalg.norm(e1) < 1e-6:
+        e1 = np.cross(up, np.array([1.0, 0.0, 0.0]))
+    e1 /= np.linalg.norm(e1)
+    e2 = np.cross(up, e1)
+    psi = np.radians(heading_deg)
+    p = np.radians(pitch_down_deg)
+    h = np.cos(psi) * e1 + np.sin(psi) * e2
+    fwd = np.cos(p) * h - np.sin(p) * up
+    down = -up + (up @ fwd) * fwd
+    down /= np.linalg.norm(down)
+    right = np.cross(down, fwd)
+    rot = np.stack([right, down, fwd])  # rows: cam x, y(down), z in world
+    return {"cam_from_world_quat_xyzw": _matrix_to_quat_xyzw(rot).tolist(),
+            "cam_from_world_t": [float(-v) for v in centre]}
+
+
+def _walk_poses(up, headings, pitch_down_deg):
+    poses = {}
+    for i, hd in enumerate(headings):
+        c = np.array([np.cos(np.radians(hd)), 0.0,
+                      np.sin(np.radians(hd))]) * 2.0 + up * 1.6
+        poses[f"f{i:03d}.jpg"] = _walk_pose(up, hd, pitch_down_deg, c)
+    return poses
+
+
+def _angle(a, b):
+    return float(np.degrees(np.arccos(np.clip(a @ b, -1, 1))))
+
+
+def test_great_circle_recovers_up_and_picks_floor_pole():
+    up_true = np.array([0.35, -0.9, 0.26])
+    up_true /= np.linalg.norm(up_true)
+    poses = _walk_poses(up_true, np.arange(0, 360, 5), 6.0)
+    res = _estimate_up_great_circle(poses)
+    assert res is not None
+    up, info = res
+    assert info["method"] == "great_circle", info
+    assert not info["degenerate"], info
+    assert info["pitch_scatter_deg"] < 3.0, info
+    assert _angle(up, up_true) < 2.0, f"up off by {_angle(up, up_true):.2f}"
+    assert info["mean_pitch_deg"] < -3.0, info
+    assert info["down_frac"] > 0.9, info
+
+
+def test_great_circle_follows_a_flipped_world():
+    up_true = np.array([0.35, -0.9, 0.26])
+    up_true /= np.linalg.norm(up_true)
+    e1 = np.cross(up_true, np.array([0.0, 0.0, 1.0]))
+    e1 /= np.linalg.norm(e1)
+    q_flip = _axis_angle(e1, np.pi)  # 180 deg: the scene upside down
+    poses = _walk_poses(up_true, np.arange(0, 360, 5), 6.0)
+    flipped = {}
+    for k, pose in poses.items():
+        from echo_scene.fuse import _quat_xyzw_to_matrix
+        rot = _quat_xyzw_to_matrix(pose["cam_from_world_quat_xyzw"])
+        rot2 = rot @ q_flip.T
+        flipped[k] = {
+            "cam_from_world_quat_xyzw": _matrix_to_quat_xyzw(rot2).tolist(),
+            "cam_from_world_t": pose["cam_from_world_t"],
+        }
+    res = _estimate_up_great_circle(flipped)
+    assert res is not None
+    up, info = res
+    assert _angle(up, q_flip @ up_true) < 2.0
+
+
+def test_great_circle_degenerate_straight_walk_falls_back():
+    up_true = np.array([0.1, -0.98, 0.17])
+    up_true /= np.linalg.norm(up_true)
+    rng = np.random.default_rng(5)
+    poses = _walk_poses(up_true, rng.uniform(-3, 3, 40), 5.0)
+    res = _estimate_up_great_circle(poses)
+    assert res is not None
+    up, info = res
+    assert info["degenerate"], info
+    assert info["method"] == "up_cluster_fallback_degenerate", info
+    assert _angle(up, up_true) < 5.0
+
+
+def test_great_circle_degenerate_room_scan_not_dressed_up():
+    # headings everywhere AND pitch swinging wildly: the views fill
+    # a patch of the sphere, no great circle exists -- the fit must
+    # say so instead of returning its meaningless normal.
+    up_true = np.array([0.2, -0.95, 0.24])
+    up_true /= np.linalg.norm(up_true)
+    rng = np.random.default_rng(11)
+    poses = {}
+    for i in range(150):
+        hd = rng.uniform(0, 360)
+        pitch = rng.uniform(-55, 40)
+        c = np.array([np.cos(np.radians(hd)), 0.0,
+                      np.sin(np.radians(hd))]) * 2.0 + up_true * 1.6
+        poses[f"f{i:03d}.jpg"] = _walk_pose(up_true, hd, pitch, c)
+    res = _estimate_up_great_circle(poses)
+    assert res is not None
+    up, info = res
+    assert info["degenerate"], info
+    assert info["pitch_scatter_deg"] > 10.0, info
+
+
+def test_great_circle_no_poses():
+    assert _estimate_up_great_circle({}) is None
+    assert _estimate_up_great_circle({"a.jpg": {}}) is None
+
+
 if __name__ == "__main__":
     test_up_recovered_despite_outliers()
     test_rotation_mapping_is_rigid_and_lands_on_y()
     test_no_poses_no_estimate()
     test_mesh_centers_follow_alignment_json()
+    test_great_circle_recovers_up_and_picks_floor_pole()
+    test_great_circle_follows_a_flipped_world()
+    test_great_circle_degenerate_straight_walk_falls_back()
+    test_great_circle_degenerate_room_scan_not_dressed_up()
+    test_great_circle_no_poses()
     print("up-alignment contract: ALL PASS")

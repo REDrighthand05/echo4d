@@ -103,6 +103,166 @@ def _estimate_world_up(poses: dict) -> np.ndarray | None:
     return -down
 
 
+def _view_directions(poses: dict) -> np.ndarray:
+    """Camera view (forward) axes in world coordinates, one per pose.
+
+    COLMAP cameras use the OpenCV convention (x right, y down, z
+    forward), so a camera's forward axis in world coordinates is the
+    third row of its cam_from_world rotation. Pose data only -- the
+    point cloud is never consulted for orientation.
+    """
+    views = []
+    for pose in poses.values():
+        q = pose.get("cam_from_world_quat_xyzw")
+        if q is None:
+            continue
+        views.append(_quat_xyzw_to_matrix(q)[2])
+    if not views:
+        return np.empty((0, 3))
+    v = np.array(views, dtype=np.float64)
+    return v / np.linalg.norm(v, axis=1, keepdims=True)
+
+
+def _estimate_up_great_circle(poses: dict):
+    """World up from the view directions' great circle (user's method,
+    2026-11-04).
+
+    A walking shot can only turn one way: around the vertical. The
+    view directions therefore sweep a great circle on the direction
+    sphere -- they lie (near) a plane through the origin whose poles
+    are the vertical axis. Steps:
+
+      1. Robust great-circle fit: least-squares plane through the
+         origin; the normal is the smallest singular vector of the
+         view set (explicit objective: minimise sum of squared
+         signed distances to the plane), refit after trimming the
+         views far off the plane. The two poles are the up/down
+         candidates.
+      2. A binary choice, not a continuous estimate: a handheld
+         walking shot looks slightly DOWN on average, so the correct
+         pole is the one against which the per-view pitch (each
+         view's signed elevation against the pole, averaged) comes
+         out negative; the wrong pole would make the same footage
+         an up-tilted shot. A near-exact tie is broken by the
+         image-up cluster (and says so).
+      3. Degenerate input is flagged, never dressed up as a fit:
+         a near-straight walk (views cluster instead of circling),
+         or a room scan whose pitch swings so widely that no single
+         turning axis explains the views (per-view pitch scatter
+         against the fitted pole is the judge). The pole then comes
+         from the image-up cluster, still pitch-checked.
+
+    A note on the geometry: at a steady non-zero pitch the views
+    sweep a small circle, not a great one -- but its axis is the
+    same vertical, and with headings covering the circle the
+    least-squares plane's normal still lands on that axis. What
+    actually convicts a bad fit is the pitch scatter, which is why
+    it (not the raw plane residual, which just re-measures the
+    mean pitch) gates the degenerate flag.
+
+    Returns (up, info) or None when there are too few posed views.
+    info carries every number a reviewer needs: singular values,
+    plane residual, the signed mean pitch and down-frame fraction
+    the binary choice rested on, and the angle to the image-up
+    cluster estimate.
+    """
+    views = _view_directions(poses)
+    if len(views) < 8:
+        return None
+    keep = np.ones(len(views), dtype=bool)
+    normal = None
+    sing = None
+    for _ in range(4):
+        _, sing, vt = np.linalg.svd(views[keep], full_matrices=False)
+        normal = vt[2]
+        resid = np.abs(views @ normal)
+        thr = max(float(np.percentile(resid[keep], 75)) * 3.0,
+                  math.sin(math.radians(12.0)))
+        new_keep = resid <= thr
+        if int(new_keep.sum()) < 8 or bool((new_keep == keep).all()):
+            keep = new_keep if int(new_keep.sum()) >= 8 else keep
+            break
+        keep = new_keep
+    _, sing, vt = np.linalg.svd(views[keep], full_matrices=False)
+    normal = vt[2]
+    # In-plane heading coverage of the kept views: a tight cluster
+    # (resultant near 1) means the walk barely turned and the circle
+    # is not determined by the data.
+    proj = views[keep] @ vt[:2].T
+    ang = np.arctan2(proj[:, 1], proj[:, 0])
+    resultant = float(np.abs(np.mean(np.exp(1j * ang))))
+    resid_kept = np.abs(views[keep] @ normal)
+    residual_rms = float(np.degrees(np.sqrt(np.mean(
+        np.arcsin(np.clip(resid_kept, -1, 1)) ** 2))))
+    residual_p90 = float(np.degrees(np.arcsin(np.clip(
+        np.percentile(resid_kept, 90), -1, 1))))
+    # Per-view pitch against the fitted pole: steady pitch sweeps
+    # a clean circle; wild pitch scatter means no single turning
+    # axis explains the footage (a room scan looking everywhere).
+    pitch_i = np.degrees(np.arcsin(np.clip(
+        views[keep] @ normal, -1, 1)))
+    pitch_scatter = float(np.std(pitch_i))
+    degenerate = bool(sing[1] / sing[0] < 0.30 or resultant > 0.85
+                      or pitch_scatter > 12.0)
+
+    cluster_up = _estimate_world_up(poses)
+
+    def pitch_stats(up_vec):
+        p = np.degrees(np.arcsin(np.clip(views @ up_vec, -1, 1)))
+        return float(np.mean(p)), float(np.mean(views @ up_vec < 0.0))
+
+    info = {
+        "n_views": int(len(views)),
+        "n_kept": int(keep.sum()),
+        "singular_values": [round(float(s), 3) for s in sing],
+        "heading_resultant": round(resultant, 3),
+        "residual_rms_deg": round(residual_rms, 2),
+        "residual_p90_deg": round(residual_p90, 2),
+        "pitch_scatter_deg": round(pitch_scatter, 2),
+        "degenerate": degenerate,
+        "tie_break": None,
+    }
+    if cluster_up is not None:
+        info["cluster_agreement_deg"] = round(float(np.degrees(
+            np.arccos(np.clip(abs(float(normal @ cluster_up)),
+                              -1, 1)))), 2)
+    if degenerate:
+        # No circle to speak of: fall back to the image-up cluster
+        # for the axis, but keep the binary pitch check -- footage
+        # pitched clearly UP against the cluster's up means the
+        # cluster picked the wrong pole.
+        if cluster_up is None:
+            return None
+        up = cluster_up
+        info["method"] = "up_cluster_fallback_degenerate"
+        mean_pitch, down_frac = pitch_stats(up)
+        if mean_pitch > 3.0:
+            up = -up
+            info["tie_break"] = "pitch_flip"
+            mean_pitch, down_frac = pitch_stats(up)
+        info["mean_pitch_deg"] = round(mean_pitch, 2)
+        info["down_frac"] = round(down_frac, 3)
+    else:
+        pole = normal
+        mean_pitch, down_frac = pitch_stats(pole)
+        if mean_pitch > 0.0:
+            pole = -pole
+            mean_pitch, down_frac = pitch_stats(pole)
+        if abs(mean_pitch) < 0.5 and cluster_up is not None:
+            # Dead-level footage: the pitch sign carries no
+            # signal, so the image-up cluster breaks the tie.
+            if float(pole @ cluster_up) < 0.0:
+                pole = -pole
+                mean_pitch, down_frac = pitch_stats(pole)
+            info["tie_break"] = "image_up"
+        info["mean_pitch_deg"] = round(mean_pitch, 2)
+        info["down_frac"] = round(down_frac, 3)
+        up = pole
+        info["method"] = "great_circle"
+    up = up / np.linalg.norm(up)
+    return up, info
+
+
 def _collect_anchor_pairs(job_dir: Path, depth_dir: Path):
     """Return (rel_values, inv_z_values, per_frame) sampled at COLMAP points.
 
@@ -507,23 +667,32 @@ def stage_fuse(job_dir: Path, stride: int = 4) -> dict:
     # arbitrary, so without this step the exported scene can sit upside
     # down in the viewer (whose up is +Y) and in every other tool. When
     # the marker stage did not already level the cloud from a measured
-    # floor, estimate world up from the camera poses (a roughly level
-    # walk makes the cameras' image-down axes cluster around gravity)
-    # and rotate the whole cloud rigidly so that up lands on +Y. One
-    # rotation applied to every point -- nothing is moved relative to
-    # anything else, and the trim / voxel_pick results above are
-    # untouched. Runs after voxel_pick, so the mesh and voxel stages
-    # (which consume points.bin) inherit the upright frame.
+    # floor, world up comes from the poses alone (never the cloud):
+    # the great-circle fit over the view directions (user's method,
+    # 2026-11-04 -- see _estimate_up_great_circle), with the image-up
+    # cluster as its degenerate-input fallback. The whole cloud is
+    # then rotated rigidly so that up lands on +Y. One rotation
+    # applied to every point -- nothing is moved relative to anything
+    # else, and the trim / voxel_pick results above are untouched.
+    # Runs after voxel_pick, so the mesh and voxel stages (which
+    # consume points.bin) inherit the upright frame.
     align_info = {}
     if export_rot is None:
-        up_est = _estimate_world_up(poses)
+        up_est = None
+        gc = _estimate_up_great_circle(poses)
+        if gc is not None:
+            up_est, gc_info = gc
+            align_info["up_method"] = gc_info.pop("method")
+            align_info["great_circle"] = gc_info
+        if up_est is None:
+            up_est = _estimate_world_up(poses)
+            if up_est is not None:
+                align_info["up_method"] = "up_cluster"
         if up_est is not None:
             export_rot = _rotation_mapping(up_est, np.array([0.0, 1.0, 0.0]))
             points = points @ export_rot.T
-            align_info = {
-                "up_alignment": "camera_poses",
-                "estimated_up_world": [float(v) for v in up_est],
-            }
+            align_info["up_alignment"] = "camera_poses"
+            align_info["estimated_up_world"] = [float(v) for v in up_est]
     alignment_file = job_dir / "alignment.json"
     if export_rot is not None:
         alignment_file.write_text(
