@@ -1,16 +1,21 @@
 "use strict";
 /* ECHO web shell.
-   Layers, back to front: the baked ambient picture (seamless
-   loops on two stacked video layers, crossfaded) -- the GPU
-   particle layer (the one live layer, hard-capped, see below)
-   -- the scene echo while a job runs -- one static translucent
-   veil -- borderless transparent components.
+   Layers, back to front: the baked ambience (two stacked
+   layers, crossfaded: the rings theme plays its baked loop,
+   the graffiti theme is a baked still whose strokes are drawn
+   by the particle layer) -- the GPU particle layer (the one
+   live layer, hard-capped, see below) -- the scene echo while
+   a job runs -- one static translucent veil -- borderless
+   transparent components.
 
    Since v0.6.12 the ambience is a finished file, not a live
    render: the old bead wall and its full-window backdrop blur
    kept a renderer at a full CPU core while the app idled, so
    the whole light field was baked offline (tools/
-   bake_ambient.py) and the page now only plays it back.
+   bake_ambient.py) and the page now only plays it back. Since
+   v0.6.16 the graffiti strokes are particles again -- but on
+   baked rails: their paths and attributes are files, and all
+   per-frame motion runs in one vertex shader.
 
    If a pywebview bridge is present it drives everything for real;
    in a plain browser a demo state machine mirrors the app's own
@@ -28,18 +33,18 @@ let bridgeMode = "waiting";   // "waiting" -> "real" | "demo"
 
 /* ------------------------------------------------------------------ */
 /* appearance （设置 → 显示）: playback of the baked picture.       */
-/* The ambience is a finished seamless loop (tools/bake_ambient.py) */
-/* that the page only plays; what the settings tune is which loop,  */
-/* whether it moves, how bright it is, and the static veils above   */
-/* it. The veil defaults ARE v0.6.4's shipped numbers, so an         */
+/* The ambience is finished assets (tools/bake_ambient.py) that     */
+/* the page only plays back; what the settings tune is which theme, */
+/* whether it moves, how bright it is, the particle strokes'        */
+/* density, and the static veils above it. The veil defaults ARE    */
+/* v0.6.4's shipped numbers, so an                                  */
 /* untouched install looks untouched; the bridge overwrites them    */
 /* from the saved settings at boot, the settings page rewrites      */
 /* them live, and each change is saved back through the bridge.     */
 /* ------------------------------------------------------------------ */
 const AMBIENT_THEMES = {
-  graffiti: { mp4: "assets/ambient/graffiti.mp4",
-              poster: "assets/ambient/graffiti.jpg" },
-  rings: { mp4: "assets/ambient/rings.mp4",
+  graffiti: { kind: "still", base: "assets/ambient/graffiti_base.jpg" },
+  rings: { kind: "video", mp4: "assets/ambient/rings.mp4",
            poster: "assets/ambient/rings.jpg" },
 };
 const APPEARANCE_DEFAULTS = {
@@ -48,12 +53,42 @@ const APPEARANCE_DEFAULTS = {
 };
 let appearance = { ...APPEARANCE_DEFAULTS };
 
-/* two stacked video layers; a theme switch loads the incoming
-   loop on the idle layer and crossfades opacity (~0.65 s, the
-   .amb-layer transition), then parks the old layer paused. The
-   switch runs only when the theme NAME changes, so dragging
-   any slider never reloads a video. */
+/* two stacked ambience layers; a theme switch points the idle
+   layer at the incoming theme and crossfades opacity (~0.65 s,
+   the .amb-layer transition), then parks the old layer. A video
+   theme plays its baked loop on the layer's <video>; the
+   graffiti theme shows its baked still on the layer's <img> and
+   lets the #pts particle strokes draw the moving ink over it.
+   The switch runs only when the theme NAME changes, so dragging
+   any slider never reloads a picture. */
 const ambStack = { active: null, idle: null, theme: null };
+
+function ambLayerShow(layer, name, motionOn) {
+  const f = AMBIENT_THEMES[name];
+  const img = layer.querySelector(".amb-still");
+  const vid = layer.querySelector(".amb-vid");
+  layer.dataset.theme = name;
+  if (f.kind === "video") {
+    img.style.display = "none";
+    vid.style.display = "";
+    if (vid.dataset.theme !== name) {
+      vid.poster = f.poster;
+      vid.src = f.mp4;
+      vid.dataset.theme = name;
+      vid.load();
+    }
+    if (motionOn) { const p = vid.play(); if (p) p.catch(() => {}); }
+    else vid.pause();          // hold the current frame: a still
+    return;
+  }
+  vid.pause();
+  vid.style.display = "none";
+  img.style.display = "";
+  if (img.dataset.theme !== name) {
+    img.src = f.base;
+    img.dataset.theme = name;
+  }
+}
 
 function applyAppearance() {
   const a = appearance, root = document.documentElement.style;
@@ -65,31 +100,27 @@ function applyAppearance() {
     ambStack.active = document.getElementById("amb-a");
     ambStack.idle = document.getElementById("amb-b");
     ambStack.theme = ambStack.active ? ambStack.active.dataset.theme : null;
+    if (ambStack.active && ambStack.theme) {
+      ambLayerShow(ambStack.active, ambStack.theme, a.motionOn);
+    }
   }
   if (ambStack.active) {
     const want = AMBIENT_THEMES[a.theme] ? a.theme : "graffiti";
     if (ambStack.theme !== want) {
       const from = ambStack.active, to = ambStack.idle;
-      const f = AMBIENT_THEMES[want];
-      if (to.dataset.theme !== want) {
-        to.poster = f.poster;
-        to.src = f.mp4;
-        to.dataset.theme = want;
-        to.load();
-      }
-      if (a.motionOn) { const p = to.play(); if (p) p.catch(() => {}); }
+      ambLayerShow(to, want, a.motionOn);
       to.classList.add("on");
       from.classList.remove("on");
       ambStack.active = to;
       ambStack.idle = from;
       ambStack.theme = want;
-      setTimeout(() => { if (ambStack.idle === from) from.pause(); }, 750);
-    }
-    if (a.motionOn) {
-      const p = ambStack.active.play();
-      if (p) p.catch(() => {});
-    } else {
-      ambStack.active.pause();   // hold the current frame: a still
+      setTimeout(() => {
+        if (ambStack.idle === from) {
+          from.querySelector(".amb-vid").pause();
+        }
+      }, 750);
+    } else if (AMBIENT_THEMES[want].kind === "video") {
+      ambLayerShow(ambStack.active, want, a.motionOn);
     }
   }
   ptsApply();
@@ -115,32 +146,100 @@ function mulberry32(seed) {
 }
 
 /* ------------------------------------------------------------------ */
-/* the particle layer: the 3D mist dots + pointer dodge the user    */
-/* ordered kept -- but NOT on the old DOM/2D road. One WebGL canvas, */
-/* one draw call per frame, positions in a single dynamic buffer.   */
-/* Hard caps: PTS_MAX particles whatever the setting says, DPR      */
-/* capped at 1.5. The loop runs only while the window is visible    */
-/* AND focused AND motion is on; otherwise it draws one frozen      */
-/* frame and stops -- an idle or hidden app pays nothing for it.    */
-/* The dodge is one distance check per particle per frame; nothing  */
-/* here reads layout, moves DOM, or rebuilds on resize (positions   */
-/* live in a virtual stage and map to NDC arithmetically, so a      */
-/* window drag costs this layer exactly nothing extra).             */
+/* the particle layer: the graffiti theme's strokes, made of       */
+/* particles. (The v0.6.13 layer dodged the pointer with a free-   */
+/* floating mist -- the user's correction: the dodge belongs to    */
+/* the strokes themselves. The particles ARE the graffiti: they    */
+/* flow along the stroke paths and part around the pointer like    */
+/* water around a finger, then close again.) Everything heavy was  */
+/* decided offline (tools/bake_ambient.py): the stroke paths live  */
+/* in a texture (256 arc-length samples per path, stage coords     */
+/* packed 16-bit per axis), the particles in one static attribute  */
+/* table uploaded to the GPU exactly once. Per frame the CPU sets  */
+/* four uniforms and issues ONE draw call; position, flow, the     */
+/* travelling light pulse and the pointer repulsion all run in     */
+/* the vertex shader. Hard caps: PTS_MAX particles whatever the    */
+/* setting says, DPR capped at 1.5. The loop runs only while the   */
+/* graffiti theme is up, the window is visible AND focused AND     */
+/* motion is on; otherwise it draws at most one frozen frame and   */
+/* stops. If WebGL or the baked assets are unavailable the layer   */
+/* silently stays away -- the baked still underneath is already a  */
+/* complete picture.                                               */
 /* ------------------------------------------------------------------ */
 const PTS_MAX = 3600;
 const PTS_DPR_CAP = 1.5;
 const PTS_VW = 1600, PTS_VH = 900;
+const PTS_LOOP_S = 16.0;                 // the bake's loop length, s
+const PTS_ROWS = 6;                      // stroke paths in the texture
 const pts = {
-  gl: null, failed: false, posBuf: null, uPx: null,
-  posArr: new Float32Array(PTS_MAX * 2),
-  home: new Float32Array(PTS_MAX * 2),
-  off: new Float32Array(PTS_MAX * 2),
-  vel: new Float32Array(PTS_MAX * 2),
-  z: new Float32Array(PTS_MAX),
-  phase: new Float32Array(PTS_MAX),
-  count: 0, raf: 0, focused: true,
-  mx: -9999, my: -9999,
+  gl: null, failed: false, n: 0, texReady: false,
+  raf: 0, focused: true, count: 0,
+  mx: -9999, my: -9999, inside: false, amt: 0, last: 0,
+  scale: 1, ox: 0, oy: 0,
+  uTau: null, uMouse: null, uMap: null, uPx: null, uPathTex: null,
 };
+
+const PTS_VS = [
+  "attribute float aPath;",
+  "attribute float aPhase;",
+  "attribute float aSpeed;",
+  "attribute float aLat;",
+  "attribute float aSize;",
+  "attribute float aAlpha;",
+  "attribute vec3 aCol;",
+  "attribute float aSign;",
+  "uniform float uTau;",          // loops elapsed (seconds / 16)
+  "uniform vec3 uMouse;",         // stage x, stage y, eased presence
+  "uniform vec4 uMap;",           // stage -> NDC: xy scale, zw offset
+  "uniform float uPx;",           // device px per stage px
+  "uniform sampler2D uPathTex;",
+  "varying vec3 vCol;",
+  "varying float vA;",
+  "vec2 pathPos(float s, float row) {",
+  "  vec4 t = texture2D(uPathTex, vec2(s, row));",
+  "  float x = (floor(t.r * 255.0 + 0.5) * 256.0",
+  "             + floor(t.g * 255.0 + 0.5)) / 65535.0 * 2000.0 - 200.0;",
+  "  float y = (floor(t.b * 255.0 + 0.5) * 256.0",
+  "             + floor(t.a * 255.0 + 0.5)) / 65535.0 * 1200.0 - 150.0;",
+  "  return vec2(x, y);",
+  "}",
+  "void main() {",
+  "  float row = (aPath + 0.5) / " + PTS_ROWS + ".0;",
+  "  float s = fract(aPhase + uTau * aSpeed);",
+  "  vec2 pos = pathPos(s, row);",
+  "  vec2 nxt = pathPos(min(s + 0.0039, 0.999), row);",
+  "  vec2 tanv = nxt - pos;",
+  "  float tl = length(tanv);",
+  "  vec2 perp = tl > 0.001 ? vec2(-tanv.y, tanv.x) / tl : vec2(0.0, 1.0);",
+  "  pos += perp * aLat;",
+  "  float pulse = pow(0.5 + 0.5 * sin(6.28318 * (3.0 * s - 2.0 * uTau)), 1.7);",
+  "  float alpha = aAlpha * (0.42 + 0.85 * pulse);",
+  "  vec2 dm = pos - uMouse.xy;",
+  "  float dist = length(dm);",
+  "  float infl = clamp(1.0 - dist / 165.0, 0.0, 1.0);",
+  "  infl = pow(infl, 1.5) * uMouse.z;",
+  "  if (infl > 0.001 && dist > 0.01) {",
+  "    vec2 dir = dm / dist;",
+  "    pos += dir * infl * 88.0 + vec2(-dir.y, dir.x) * infl * 26.0 * aSign;",
+  "    alpha *= 1.0 - 0.25 * infl;",
+  "  }",
+  "  vCol = aCol;",
+  "  vA = alpha;",
+  "  gl_Position = vec4(pos * uMap.xy + uMap.zw, 0.0, 1.0);",
+  "  gl_PointSize = aSize * (0.9 + 0.2 * pulse) * uPx;",
+  "}",
+].join("\n");
+
+const PTS_FS = [
+  "precision mediump float;",
+  "varying vec3 vCol;",
+  "varying float vA;",
+  "void main() {",
+  "  vec2 q = gl_PointCoord - 0.5;",
+  "  float fall = exp(-dot(q, q) * 12.8);",   // soft glow puff
+  "  gl_FragColor = vec4(vCol, vA * fall);",
+  "}",
+].join("\n");
 
 function ptsInit() {
   const cv = document.getElementById("pts");
@@ -160,50 +259,61 @@ function ptsInit() {
   };
   try {
     const prog = gl.createProgram();
-    gl.attachShader(prog, sh(gl.VERTEX_SHADER,
-      "attribute vec2 aPos; attribute float aZ; attribute float aSize;" +
-      "varying float vZ; uniform float uPx;" +
-      "void main(){ vZ = aZ; gl_Position = vec4(aPos, 0.0, 1.0);" +
-      " gl_PointSize = aSize * (0.45 + 0.95 * aZ) * uPx; }"));
-    gl.attachShader(prog, sh(gl.FRAGMENT_SHADER,
-      "precision mediump float; varying float vZ;" +
-      "void main(){ float d = length(gl_PointCoord - 0.5);" +
-      " float a = smoothstep(0.5, 0.08, d) * (0.05 + 0.15 * vZ);" +
-      " gl_FragColor = vec4(0.34, 0.44, 0.62, a); }"));
+    gl.attachShader(prog, sh(gl.VERTEX_SHADER, PTS_VS));
+    gl.attachShader(prog, sh(gl.FRAGMENT_SHADER, PTS_FS));
     gl.linkProgram(prog);
     if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error("link");
     gl.useProgram(prog);
+    pts.uTau = gl.getUniformLocation(prog, "uTau");
+    pts.uMouse = gl.getUniformLocation(prog, "uMouse");
+    pts.uMap = gl.getUniformLocation(prog, "uMap");
     pts.uPx = gl.getUniformLocation(prog, "uPx");
-
-    const rnd = mulberry32(20261104);
-    const misc = new Float32Array(PTS_MAX * 2);   // aZ, aSize pairs
-    for (let i = 0; i < PTS_MAX; i++) {
-      pts.home[i * 2] = rnd() * PTS_VW;
-      pts.home[i * 2 + 1] = rnd() * PTS_VH;
-      pts.z[i] = Math.pow(rnd(), 1.6);
-      pts.phase[i] = rnd() * Math.PI * 2;
-      misc[i * 2] = pts.z[i];
-      misc[i * 2 + 1] = 2.0 + pts.z[i] * 3.4 + rnd() * 1.2;
-    }
-    const miscBuf = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, miscBuf);
-    gl.bufferData(gl.ARRAY_BUFFER, misc, gl.STATIC_DRAW);
-    const aZ = gl.getAttribLocation(prog, "aZ");
-    const aSize = gl.getAttribLocation(prog, "aSize");
-    gl.enableVertexAttribArray(aZ);
-    gl.vertexAttribPointer(aZ, 1, gl.FLOAT, false, 8, 0);
-    gl.enableVertexAttribArray(aSize);
-    gl.vertexAttribPointer(aSize, 1, gl.FLOAT, false, 8, 4);
-    pts.posBuf = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, pts.posBuf);
-    gl.bufferData(gl.ARRAY_BUFFER, pts.posArr, gl.DYNAMIC_DRAW);
-    const aPos = gl.getAttribLocation(prog, "aPos");
-    gl.enableVertexAttribArray(aPos);
-    gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
+    pts.uPathTex = gl.getUniformLocation(prog, "uPathTex");
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
     pts.gl = gl;
     ptsResize();
+    // the baked particle table: one static buffer, uploaded once
+    fetch("assets/ambient/graffiti_pts.bin")
+      .then(r => { if (!r.ok) throw new Error("pts bin"); return r.arrayBuffer(); })
+      .then(buf => {
+        const data = new Float32Array(buf);
+        const vbo = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
+        gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
+        const stride = 10 * 4;
+        const binds = [["aPath", 1, 0], ["aPhase", 1, 4], ["aSpeed", 1, 8],
+                       ["aLat", 1, 12], ["aSize", 1, 16], ["aAlpha", 1, 20],
+                       ["aCol", 3, 24], ["aSign", 1, 36]];
+        for (const [name, n, off] of binds) {
+          const loc = gl.getAttribLocation(prog, name);
+          if (loc < 0) throw new Error("attrib " + name);
+          gl.enableVertexAttribArray(loc);
+          gl.vertexAttribPointer(loc, n, gl.FLOAT, false, stride, off);
+        }
+        pts.n = data.length / 10;
+        ptsApply();
+      })
+      .catch(() => { pts.failed = true; cv.style.display = "none"; });
+    // the baked path texture: exact bytes or the strokes drift,
+    // so NEAREST and no premultiply games
+    const img = new Image();
+    img.onload = () => {
+      const tex = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D, tex);
+      gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA,
+                    gl.UNSIGNED_BYTE, img);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      gl.uniform1i(pts.uPathTex, 0);
+      pts.texReady = true;
+      ptsApply();
+    };
+    img.onerror = () => { pts.failed = true; cv.style.display = "none"; };
+    img.src = "assets/ambient/graffiti_path.png";
   } catch (e) {
     pts.failed = true;
     cv.style.display = "none";
@@ -216,55 +326,44 @@ function ptsResize() {
   const dpr = Math.min(window.devicePixelRatio || 1, PTS_DPR_CAP);
   cv.width = Math.max(1, Math.round(window.innerWidth * dpr));
   cv.height = Math.max(1, Math.round(window.innerHeight * dpr));
-  pts.gl.viewport(0, 0, cv.width, cv.height);
-  pts.gl.uniform1f(pts.uPx, cv.height / Math.max(1, window.innerHeight));
+  const gl = pts.gl;
+  gl.viewport(0, 0, cv.width, cv.height);
+  const w = window.innerWidth, h = window.innerHeight;
+  const s = Math.max(w / PTS_VW, h / PTS_VH);
+  const ox = (w - PTS_VW * s) / 2, oy = (h - PTS_VH * s) / 2;
+  pts.scale = s; pts.ox = ox; pts.oy = oy;
+  gl.uniform4f(pts.uMap, 2 * s / w, -2 * s / h, 2 * ox / w - 1, 1 - 2 * oy / h);
+  gl.uniform1f(pts.uPx, s * cv.height / Math.max(1, h));
 }
 
 function ptsWanted() {
-  return !!pts.gl && appearance.motionOn && !document.hidden
-    && pts.focused && pts.count > 0;
+  return !!pts.gl && pts.n > 0 && pts.texReady
+    && appearance.motionOn && !document.hidden
+    && pts.focused && pts.count > 0
+    && ambStack.theme === "graffiti";
 }
 
 function ptsDraw(now) {
   const gl = pts.gl;
-  if (!gl) return;
-  const w = window.innerWidth, h = window.innerHeight;
-  const s = Math.max(w / PTS_VW, h / PTS_VH);
-  const ox = (w - PTS_VW * s) / 2, oy = (h - PTS_VH * s) / 2;
-  const mx = (pts.mx - ox) / s, my = (pts.my - oy) / s;
-  const tt = now / 1000, R = 130;
-  const pos = pts.posArr, home = pts.home, off = pts.off, vel = pts.vel;
-  for (let i = 0; i < pts.count; i++) {
-    const j = i * 2, zz = pts.z[i], ph = pts.phase[i];
-    const sway = 0.4 + zz;
-    let px = home[j] + off[j] + Math.sin(tt * 0.13 * sway + ph) * 11 * sway;
-    let py = home[j + 1] + off[j + 1]
-      + Math.cos(tt * 0.10 * sway + ph * 1.3) * 7 * sway;
-    const dx = px - mx, dy = py - my, d2 = dx * dx + dy * dy;
-    if (d2 < R * R && d2 > 0.01) {
-      const d = Math.sqrt(d2), f = (1 - d / R) * 3.0;
-      vel[j] += (dx / d) * f;
-      vel[j + 1] += (dy / d) * f;
-    }
-    vel[j] += -off[j] * 0.016;
-    vel[j + 1] += -off[j + 1] * 0.016;
-    vel[j] *= 0.90;
-    vel[j + 1] *= 0.90;
-    off[j] += vel[j];
-    off[j + 1] += vel[j + 1];
-    px = home[j] + off[j] + Math.sin(tt * 0.13 * sway + ph) * 11 * sway;
-    py = home[j + 1] + off[j + 1]
-      + Math.cos(tt * 0.10 * sway + ph * 1.3) * 7 * sway;
-    pos[j] = ((px * s + ox) / w) * 2 - 1;
-    pos[j + 1] = 1 - ((py * s + oy) / h) * 2;
-  }
+  if (!gl || !pts.n || !pts.texReady) return;
+  // the pointer's presence is ONE eased scalar: fast attack while
+  // the pointer is over the graffiti, slow release when it leaves,
+  // so the strokes part quickly and close gently. It is the only
+  // per-frame CPU work besides setting the uniforms below.
+  const dt = pts.last ? Math.min(0.1, (now - pts.last) / 1000) : 0.016;
+  pts.last = now;
+  const target = pts.inside ? 1 : 0;
+  const rate = target > pts.amt ? 9 : 2.2;
+  pts.amt += (target - pts.amt) * Math.min(1, dt * rate);
+  if (Math.abs(target - pts.amt) < 0.002) pts.amt = target;
+  gl.uniform1f(pts.uTau, now / 1000 / PTS_LOOP_S);
+  gl.uniform3f(pts.uMouse,
+               (pts.mx - pts.ox) / pts.scale,
+               (pts.my - pts.oy) / pts.scale,
+               pts.amt);
   gl.clearColor(0, 0, 0, 0);
   gl.clear(gl.COLOR_BUFFER_BIT);
-  if (pts.count > 0) {
-    gl.bindBuffer(gl.ARRAY_BUFFER, pts.posBuf);
-    gl.bufferSubData(gl.ARRAY_BUFFER, 0, pos.subarray(0, pts.count * 2));
-    gl.drawArrays(gl.POINTS, 0, pts.count);
-  }
+  if (pts.count > 0) gl.drawArrays(gl.POINTS, 0, Math.min(pts.count, pts.n));
 }
 
 function ptsTick(now) {
@@ -279,6 +378,9 @@ function ptsTick(now) {
 
 function ptsApply() {
   if (!pts.gl && !pts.failed) ptsInit();
+  const cv = document.getElementById("pts");
+  if (cv) cv.style.opacity =
+    (ambStack.theme === "graffiti" && !pts.failed) ? "1" : "0";
   if (!pts.gl) return;
   const d = Math.max(0, Math.min(100, appearance.particleDensity || 0));
   pts.count = Math.round(PTS_MAX * d / 100);
@@ -292,7 +394,9 @@ function ptsApply() {
 window.addEventListener("pointermove", e => {
   pts.mx = e.clientX;
   pts.my = e.clientY;
+  pts.inside = true;
 }, { passive: true });
+document.addEventListener("pointerleave", () => { pts.inside = false; });
 window.addEventListener("blur", () => { pts.focused = false; ptsApply(); });
 window.addEventListener("focus", () => { pts.focused = true; ptsApply(); });
 document.addEventListener("visibilitychange", () => ptsApply());
