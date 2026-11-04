@@ -27,6 +27,10 @@
         <img class="tab-ic" src="assets/icons/gear.png" alt="">
         <span class="tab-title">设置</span>
       </button>
+      <button class="tab" id="tab-toolbox" title="工具箱">
+        <img class="tab-ic" src="assets/icons/grid.png" alt="">
+        <span class="tab-title">工具箱</span>
+      </button>
     </nav>
     <div class="tb-btns">
       <button id="win-min" title="最小化">─</button>
@@ -61,6 +65,7 @@
       </button>
       <div id="menu" hidden>
         <button class="menu-item" id="menu-settings">设置</button>
+        <button class="menu-item" id="menu-toolbox">工具箱</button>
         <button class="menu-item" id="menu-update">检查更新</button>
         <button class="menu-item" id="menu-log">日志面板</button>
         <div class="menu-sep"></div>
@@ -150,6 +155,18 @@
           <p class="desc calm">以前做好的场景，选一个点「打开」。</p>
         </div>
         <div id="histlist"></div>
+      </section>
+
+      <section class="glass tile" id="toolbox-tile">
+        <div class="tile-head">
+          <img class="tic" src="assets/icons/grid.png" alt="">
+          <h2 class="calm">工具箱</h2>
+          <p class="desc calm">软件里装着的全部算法，一件件列出来：干什么、吃啥产啥、列装了没。</p>
+        </div>
+        <div class="btnrow">
+          <button class="btn glass-btn" id="btn-toolbox">打开工具箱</button>
+          <span class="when" id="toolbox-count"></span>
+        </div>
       </section>
 
       <section class="glass tile" id="depth">
@@ -362,6 +379,23 @@
         <p id="set-noresult" hidden>没有匹配的设置项。</p>
       </div>
     </div>
+  </div>
+</div>
+
+<!-- Toolbox page: the super-integration registry, on stage at last.
+     One column of cards per line of kernels; click a column's head
+     and the whole column fans open. The data is built live from the
+     registry by the bridge (echo_app/toolbox.py) -- nothing about
+     the kernels is written into this page by hand. -->
+<div id="toolbox-page" hidden>
+  <div class="tbx-wrap">
+    <div class="set-head">
+      <h2>工具箱</h2>
+      <p class="tbx-sub" id="tbx-sub">超级集成的全部算法 · 点一列的头，整列卡片开扇</p>
+      <button class="btn glass-btn small" id="btn-tbx-back">返回</button>
+    </div>
+    <div id="tbx-cols"></div>
+    <p id="tbx-note" hidden></p>
   </div>
 </div>
 

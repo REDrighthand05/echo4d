@@ -101,6 +101,7 @@ class Bridge:
         self._depth_stop = threading.Event()
         self._depth_stop.set()
         self._view = None
+        self._toolbox = None         # cached toolbox payload (lazy)
         self.update = None           # {"version": str} when available
         self._window = None
         self._log("ECHO 已就绪。")
@@ -351,6 +352,22 @@ class Bridge:
     def get_preview_frame(self):
         """The latest preview frame (data URL) + its sequence."""
         return {"seq": self._preview_seq, "data": self._preview_data}
+
+    def get_toolbox(self):
+        """The toolbox page's payload: every registered echo_super
+        kernel, built live from the registry + VERSIONS.md by
+        echo_app.toolbox (never a hand-kept list, so it cannot
+        drift). Built once and cached -- assembling the registry
+        imports the kernel packages."""
+        if self._toolbox is None:
+            try:
+                from echo_app.toolbox import build_toolbox
+                self._toolbox = build_toolbox()
+            except Exception as exc:  # the page says so, shell lives
+                self._log(f"工具箱清单读取失败：{exc}")
+                return {"count": 0, "deployedCount": 0,
+                        "groups": [], "error": str(exc)}
+        return self._toolbox
 
     # -- selection ----------------------------------------------------
     def pick_video(self):

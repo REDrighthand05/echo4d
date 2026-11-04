@@ -1103,6 +1103,7 @@ $("logtab").addEventListener("click", () => {
   $("logtab").innerHTML = p.classList.contains("open") ? "日<br>志<br>‹" : "日<br>志<br>›";
 });
 function openSettings() {
+  if (toolboxOpen) closeToolbox(true);
   const page = $("settings-page");
   page.classList.remove("leave");
   page.hidden = false;
@@ -1248,24 +1249,30 @@ $("ap-reset").addEventListener("click", () => {
 /* behaviour, just Chrome's skeleton over the same logic.            */
 /* ------------------------------------------------------------------ */
 let settingsOpen = false;
+let toolboxOpen = false;
 function setOmnibox(text) {
   if (text) $("omnibox-text").textContent = text;
 }
 function syncNav() {
-  $("nav-back").classList.toggle("is-disabled", !settingsOpen);
+  $("nav-back").classList.toggle("is-disabled",
+    !(settingsOpen || toolboxOpen));
 }
 function syncTabs() {
-  $("tab-main").classList.toggle("active", !settingsOpen);
+  $("tab-main").classList.toggle("active",
+    !settingsOpen && !toolboxOpen);
   $("tab-settings").classList.toggle("active", settingsOpen);
+  $("tab-toolbox").classList.toggle("active", toolboxOpen);
 }
 $("tab-main").addEventListener("click", () => {
   if (settingsOpen) $("btn-set-back").click();
+  else if (toolboxOpen) closeToolbox();
 });
 $("tab-settings").addEventListener("click", () => {
   if (!settingsOpen) openSettings();
 });
 $("nav-back").addEventListener("click", () => {
   if (settingsOpen) $("btn-set-back").click();
+  else if (toolboxOpen) closeToolbox();
 });
 $("nav-fwd").addEventListener("click", () => { /* nowhere forward to go */ });
 $("nav-reload").addEventListener("click", () => {
@@ -1529,3 +1536,157 @@ const bridgeTimer = setInterval(() => {
   if (bridgeTries === 24) declareDemo();          // ~6 s in
   if (bridgeTries % 8 === 0) bindBridge();        // keep retrying
 }, 250);
+
+/* ------------------------------------------------------------------ */
+/* toolbox page: the super-integration registry, on stage. The      */
+/* bridge builds the payload live from the registry + VERSIONS.md   */
+/* (echo_app/toolbox.py); this side only deals the cards. One       */
+/* column per line of kernels; click the column's head and the      */
+/* whole column fans open -- transform/opacity only, one-shot       */
+/* transitions, no loop, nothing for the wall to pay for.           */
+/* ------------------------------------------------------------------ */
+let toolboxData = null;
+let toolboxLoading = false;
+
+function tbEl(tag, cls, text) {
+  const el = document.createElement(tag);
+  if (cls) el.className = cls;
+  if (text !== undefined) el.textContent = text;
+  return el;
+}
+
+function renderToolbox(data) {
+  const host = $("tbx-cols");
+  host.innerHTML = "";
+  const note = $("tbx-note");
+  if (!data || data.error || !data.groups || !data.groups.length) {
+    note.hidden = false;
+    note.textContent = data && data.error
+      ? "算法清单这次没读出来，关掉重开试试。"
+      : "算法清单是空的。";
+    return;
+  }
+  note.hidden = true;
+  $("tbx-sub").textContent =
+    `超级集成的全部算法 · 共 ${data.count} 件 · 已列装 ${data.deployedCount} 件 · 点一列的头，整列卡片开扇`;
+  const countEl = $("toolbox-count");
+  if (countEl) countEl.textContent =
+    `共 ${data.count} 件 · 已列装 ${data.deployedCount} 件`;
+  for (const group of data.groups) {
+    const col = tbEl("div", "tbx-col");
+    const head = tbEl("button", "tbx-head");
+    head.append(tbEl("span", "tbx-title", group.title),
+                tbEl("span", "tbx-n", group.kernels.length + " 件"),
+                tbEl("span", "tbx-chev", "▾"));
+    head.addEventListener("click", () => toggleTbCol(col));
+    col.appendChild(head);
+    const stack = tbEl("div", "tbx-stack");
+    const n = group.kernels.length;
+    const mid = (n - 1) / 2;
+    group.kernels.forEach((k, i) => {
+      const card = tbEl("article", "tbx-card");
+      card.style.setProperty("--i", i);
+      card.style.zIndex = String(i + 1);
+      card.style.setProperty("--tyc", (i * 19) + "px");
+      card.style.setProperty("--rotc", ((i - mid) * 1.1) + "deg");
+      card.style.setProperty("--txc", "0px");
+      card.style.setProperty("--tyo", (i * 112) + "px");
+      card.style.setProperty("--roto", ((i - mid) * 3.4) + "deg");
+      card.style.setProperty("--txo", ((i - mid) * 8) + "px");
+      const top = tbEl("div", "tbx-card-top");
+      top.append(tbEl("h4", "", k.name),
+                 tbEl("span", "tbx-ver", "v" + k.version));
+      card.appendChild(top);
+      card.appendChild(tbEl("p", "tbx-blurb", k.blurb));
+      card.appendChild(tbEl("p", "tbx-io", k.io));
+      /* the chips row sits right under the I/O line, not at the
+         card's foot: in the fan each card's foot is covered by
+         the next card, and the status must stay readable fanned */
+      const chips = tbEl("div", "tbx-chips");
+      const evCls = { "实测": "ev-a", "估计": "ev-b", "生成": "ev-c" }[k.evidence];
+      if (k.evidence)
+        chips.appendChild(tbEl("span", "tbx-chip " + (evCls || ""), k.evidence));
+      if (k.review)
+        chips.appendChild(tbEl("span", "tbx-chip", k.review));
+      chips.appendChild(tbEl("span",
+        "tbx-chip " + (k.deployed ? "dep-on" : "dep-off"),
+        k.deployed ? "已列装" : "待列装"));
+      chips.appendChild(tbEl("span", "tbx-id", k.id));
+      card.appendChild(chips);
+      stack.appendChild(card);
+    });
+    col.appendChild(stack);
+    host.appendChild(col);
+  }
+}
+
+function toggleTbCol(col) {
+  const willOpen = !col.classList.contains("open");
+  document.querySelectorAll(".tbx-col.open")
+    .forEach(c => c.classList.remove("open"));
+  if (!willOpen) return;
+  /* the fan step fits the column's real height: at the shipped
+     window size a six-card fan must land whole, without scrolling */
+  const stack = col.querySelector(".tbx-stack");
+  const cards = stack ? stack.querySelectorAll(".tbx-card") : [];
+  if (cards.length > 1) {
+    const avail = stack.clientHeight - 140;
+    const step = Math.max(64, Math.min(118, avail / (cards.length - 1)));
+    cards.forEach((card, i) =>
+      card.style.setProperty("--tyo", (i * step) + "px"));
+  }
+  col.classList.add("open");
+}
+
+async function loadToolbox() {
+  if (toolboxData || toolboxLoading) return;
+  if (!bridge) {
+    const note = $("tbx-note");
+    note.hidden = false;
+    note.textContent = bridgeMode === "demo"
+      ? "演示模式：连上软件后台后，这里会列出全部算法。"
+      : "正在连上软件后台，稍等几秒再打开。";
+    return;
+  }
+  toolboxLoading = true;
+  const note = $("tbx-note");
+  note.hidden = false;
+  note.textContent = "正在读取算法清单…";
+  try {
+    toolboxData = await bridge.get_toolbox();
+    renderToolbox(toolboxData);
+  } catch (e) {
+    note.textContent = "算法清单这次没读出来，关掉重开试试。";
+  }
+  toolboxLoading = false;
+}
+
+function openToolbox() {
+  if (settingsOpen) $("btn-set-back").click();
+  const page = $("toolbox-page");
+  page.classList.remove("leave");
+  page.hidden = false;
+  page.classList.add("enter");
+  toolboxOpen = true;
+  syncTabs();
+  syncNav();
+  loadToolbox();
+}
+function closeToolbox(instant) {
+  toolboxOpen = false;
+  syncTabs();
+  syncNav();
+  const page = $("toolbox-page");
+  page.classList.remove("enter");
+  if (instant) { page.hidden = true; return; }
+  page.classList.add("leave");
+  setTimeout(() => { page.hidden = true; page.classList.remove("leave"); }, 230);
+}
+$("btn-toolbox").addEventListener("click", openToolbox);
+$("tab-toolbox").addEventListener("click", () => {
+  if (!toolboxOpen) openToolbox();
+});
+$("menu-toolbox").addEventListener("click", () => {
+  closeMenu(); openToolbox();
+});
+$("btn-tbx-back").addEventListener("click", () => closeToolbox());

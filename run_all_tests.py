@@ -33,6 +33,7 @@ SUITES = [
     ("scale", [sys.executable, "tests/test_scale.py"]),
     ("desktop", [sys.executable, "tests/test_desktop.py"]),
     ("webshell", [sys.executable, "tests/test_web_bridge.py"]),
+    ("webshell", [sys.executable, "tests/test_toolbox.py"]),
     ("webshell", [sys.executable, "tests/test_appearance_settings.py"]),
     ("parts", [sys.executable, "echo_super/test_ds_batch5.py"]),
     ("hotupdate", [sys.executable, "tests/test_hot_update.py"]),
