@@ -13,12 +13,9 @@ What is stored:
   close_to_tray -- closing the window minimises to the system tray
                    (WeChat behaviour) instead of quitting.
   appearance    -- the web shell's look, tuned by the user in
-                   设置 → 显示. Since v0.6.12 the ambient look is
-                   a baked looping picture (tools/bake_ambient.py),
-                   so what is left to tune is playback: which theme,
-                   motion on/off, the picture's brightness, and the
-                   static veil alphas above it. The veil defaults
-                   carry the shipped v0.6.4 numbers over unchanged,
+                   设置 → 显示: frosted-glass numbers, the giant
+                   graffiti, the mist dots and the ambient motion.
+                   Defaults are exactly the shipped v0.6.4 values,
                    so an untouched install looks untouched.
 
 Load is forgiving by construction: a missing or corrupt file yields
@@ -58,58 +55,57 @@ def settings_path(platform=None, environ=None) -> Path:
     return settings_dir(platform, environ) / SETTINGS_NAME
 
 
-# Ambient themes baked into web_ui/assets/ambient/<id>.mp4:
-# "graffiti" 涂鸦流光 (flowing blue strokes) and "rings" 发光蓝环
-# (rotating glowing rings), both baked by tools/bake_ambient.py.
-# 存量默认 graffiti: the v0.6.12 "lightfield" id is retired, so an
-# old settings.json naming it coerces onto the new default below.
-AMBIENT_THEMES = ("graffiti", "rings")
-
-
 @dataclass
 class Appearance:
-    """The web shell's tunable look (设置 → 显示).
-
-    v0.6.12 replaced the live-rendered ambient wall (bead sprites
-    under a full-window backdrop blur -- a whole CPU core at idle)
-    with a baked seamless loop the page merely plays back. What
-    remains tunable is playback and the static veils above the
-    picture; there is no blur radius, stroke or mist knob left
-    because there is nothing left that renders live. The veil
-    defaults are the v0.6.4 shipped numbers carried over, so an
-    untouched install looks untouched."""
-    # the baked ambient picture (web_ui/assets/ambient/)
-    motion_on: bool = True          # False = hold one still frame
-    theme: str = "graffiti"         # which baked loop plays
-    brightness: float = 100.0       # picture brightness, %
-    # the one live layer kept by the user's ruling: GPU mist
-    # particles over the picture (density only -- the layer has
-    # hard caps and pauses with the window, see web_ui/app.js)
-    particle_density: float = 85.0  # % of the particle cap shown
-    # the main sheet's static milk-white veil over the picture
-    veil: float = 0.26              # wash alpha (was frost_veil)
-    # the running state: switchable glass. The veil drops to this
-    # alpha so the scene behind it shows through untouched.
-    work_veil: float = 0.05         # v0.6.4's cleared pane
+    """The web shell's tunable look (设置 → 显示). Every default is
+    the value v0.6.4 shipped hard-coded, so carrying these settings
+    changes nothing until the user drags a slider."""
+    # the main sheet of light glass (#frost)
+    frost_blur: float = 2.5        # backdrop blur, px
+    frost_veil: float = 0.26       # milk-white wash alpha
+    frost_saturate: float = 155.0  # backdrop saturate, %
+    # the running state: switchable glass. 0 = v0.6.4's nearly
+    # clear pane; higher adds haze back towards the idle frost.
+    work_haze: float = 0.0         # 0..100
     # the settings page's own veil
-    set_veil: float = 0.72          # veil alpha (colour depth)
+    set_blur: float = 24.0         # backdrop blur, px
+    set_veil: float = 0.72         # veil alpha (colour depth)
+    set_saturate: float = 200.0    # backdrop saturate, %
+    # the giant graffiti wall
+    graf_count: int = 0            # strokes per hand; 0 = random 1-3
+    graf_width: float = 1.0        # brush width multiplier
+    graf_opacity: float = 1.0      # wall layer opacity
+    graf_saturate: float = 115.0   # wall layer saturate, %
+    # the mist dots the strokes are made of
+    mist_density: float = 100.0    # %, 0 = the wall is blank
+    mist_size: float = 1.0         # dot radius multiplier
+    # ambient motion （常态动效）
+    motion_on: bool = True
+    motion_speed: float = 1.0      # ambient clock multiplier
+    motion_amp: float = 1.0        # wander + breath strength
+    sheen_on: bool = True          # the pale sheen pass
 
 
-# (field, kind, lo, hi) -- kind "f" float / "i" int / "b" bool /
-# "t" theme id (a string from AMBIENT_THEMES). The one table both
-# the JSON load and the web bridge clamp by. Keys from the retired
-# live-rendered look (frost_blur, graf_*, mist_* ...) are simply
-# absent here, which is what retires them: coerce ignores unknown
-# keys, so an old settings.json loads onto the new defaults and
-# the dead numbers are never written back.
+# (field, kind, lo, hi) -- kind "f" float / "i" int / "b" bool.
+# The one table both the JSON load and the web bridge clamp by.
 APPEARANCE_SPEC = [
-    ("motion_on", "b", None, None),
-    ("theme", "t", None, None),
-    ("brightness", "f", 50.0, 130.0),
-    ("particle_density", "f", 0.0, 100.0),
-    ("veil", "f", 0.0, 0.9),
-    ("work_veil", "f", 0.0, 0.85),
+    ("frost_blur", "f", 0.0, 20.0),
+    ("frost_veil", "f", 0.0, 0.9),
+    ("frost_saturate", "f", 0.0, 300.0),
+    ("work_haze", "f", 0.0, 100.0),
+    ("set_blur", "f", 0.0, 40.0),
     ("set_veil", "f", 0.0, 0.98),
+    ("set_saturate", "f", 0.0, 300.0),
+    ("graf_count", "i", 0, 3),
+    ("graf_width", "f", 0.4, 2.0),
+    ("graf_opacity", "f", 0.0, 1.0),
+    ("graf_saturate", "f", 0.0, 300.0),
+    ("mist_density", "f", 0.0, 150.0),
+    ("mist_size", "f", 0.5, 2.0),
+    ("motion_on", "b", None, None),
+    ("motion_speed", "f", 0.2, 3.0),
+    ("motion_amp", "f", 0.0, 2.0),
+    ("sheen_on", "b", None, None),
 ]
 
 
@@ -127,9 +123,6 @@ def coerce_appearance(data, base=None) -> Appearance:
         value = data[name]
         if kind == "b":
             if isinstance(value, bool):
-                setattr(out, name, value)
-        elif kind == "t":
-            if isinstance(value, str) and value in AMBIENT_THEMES:
                 setattr(out, name, value)
         elif isinstance(value, (int, float)) and not isinstance(value, bool):
             value = max(lo, min(hi, float(value)))

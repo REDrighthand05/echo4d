@@ -1,21 +1,19 @@
 "use strict";
 /* ECHO web shell.
-   Layers, back to front: the baked ambience (two stacked
-   layers, crossfaded: the rings theme plays its baked loop,
-   the graffiti theme is a baked still whose strokes are drawn
-   by the particle layer) -- the GPU particle layer (the one
-   live layer, hard-capped, see below) -- the scene echo while
-   a job runs -- one static translucent veil -- borderless
-   transparent components.
+   Layers, back to front: the wall (a static picture of random
+   graffiti, bead-constituted and painted once, plus a sparse
+   drift of free mist dots and the scene echo while a job runs)
+   -- one whole sheet of frosted glass -- borderless transparent
+   components.
 
-   Since v0.6.12 the ambience is a finished file, not a live
-   render: the old bead wall and its full-window backdrop blur
-   kept a renderer at a full CPU core while the app idled, so
-   the whole light field was baked offline (tools/
-   bake_ambient.py) and the page now only plays it back. Since
-   v0.6.16 the graffiti strokes are particles again -- but on
-   baked rails: their paths and attributes are files, and all
-   per-frame motion runs in one vertex shader.
+   The graffiti is redrawn at random on every launch: one to
+   three strokes, never more. Since v3 the hand is GIANT -- each
+   stroke is a thick sweep wider than the window, cropped by its
+   edges. Rolled back in v0.6.17: the picture itself no longer
+   moves (the v0.6.12-16 baked loops and live particle layers
+   were retired by the user's ruling); only the mist drifts and
+   a pale sheen passes, under hard performance limits -- see
+   the wall section below.
 
    If a pywebview bridge is present it drives everything for real;
    in a plain browser a demo state machine mirrors the app's own
@@ -32,99 +30,55 @@ let bridge = null;
 let bridgeMode = "waiting";   // "waiting" -> "real" | "demo"
 
 /* ------------------------------------------------------------------ */
-/* appearance （设置 → 显示）: playback of the baked picture.       */
-/* The ambience is finished assets (tools/bake_ambient.py) that     */
-/* the page only plays back; what the settings tune is which theme, */
-/* whether it moves, how bright it is, the particle strokes'        */
-/* density, and the static veils above it. The veil defaults ARE    */
-/* v0.6.4's shipped numbers, so an                                  */
-/* untouched install looks untouched; the bridge overwrites them    */
-/* from the saved settings at boot, the settings page rewrites      */
-/* them live, and each change is saved back through the bridge.     */
+/* appearance （设置 → 显示）: every tunable number of the look.     */
+/* The defaults ARE v0.6.4's shipped values, so an untouched       */
+/* install looks untouched; the bridge overwrites them from the    */
+/* saved settings at boot, the settings page rewrites them live,   */
+/* and each change is saved back through the bridge.               */
 /* ------------------------------------------------------------------ */
-const AMBIENT_THEMES = {
-  graffiti: { kind: "still", base: "assets/ambient/graffiti_base.jpg" },
-  rings: { kind: "video", mp4: "assets/ambient/rings.mp4",
-           poster: "assets/ambient/rings.jpg" },
-};
 const APPEARANCE_DEFAULTS = {
-  motionOn: true, theme: "graffiti", brightness: 100, particleDensity: 85,
-  veil: 0.26, workVeil: 0.05, setVeil: 0.72,
+  frostBlur: 2.5, frostVeil: 0.26, frostSaturate: 155,
+  workHaze: 0,
+  setBlur: 24, setVeil: 0.72, setSaturate: 200,
+  grafCount: 0, grafWidth: 1, grafOpacity: 1, grafSaturate: 115,
+  mistDensity: 100, mistSize: 1,
+  motionOn: true, motionSpeed: 1, motionAmp: 1, sheenOn: true,
 };
 let appearance = { ...APPEARANCE_DEFAULTS };
-
-/* two stacked ambience layers; a theme switch points the idle
-   layer at the incoming theme and crossfades opacity (~0.65 s,
-   the .amb-layer transition), then parks the old layer. A video
-   theme plays its baked loop on the layer's <video>; the
-   graffiti theme shows its baked still on the layer's <img> and
-   lets the #pts particle strokes draw the moving ink over it.
-   The switch runs only when the theme NAME changes, so dragging
-   any slider never reloads a picture. */
-const ambStack = { active: null, idle: null, theme: null };
-
-function ambLayerShow(layer, name, motionOn) {
-  const f = AMBIENT_THEMES[name];
-  const img = layer.querySelector(".amb-still");
-  const vid = layer.querySelector(".amb-vid");
-  layer.dataset.theme = name;
-  if (f.kind === "video") {
-    img.style.display = "none";
-    vid.style.display = "";
-    if (vid.dataset.theme !== name) {
-      vid.poster = f.poster;
-      vid.src = f.mp4;
-      vid.dataset.theme = name;
-      vid.load();
-    }
-    if (motionOn) { const p = vid.play(); if (p) p.catch(() => {}); }
-    else vid.pause();          // hold the current frame: a still
-    return;
-  }
-  vid.pause();
-  vid.style.display = "none";
-  img.style.display = "";
-  if (img.dataset.theme !== name) {
-    img.src = f.base;
-    img.dataset.theme = name;
-  }
-}
+let ambT = 0;         // the ambient clock, scaled by the speed setting
+let motionLevel = 1;  // eased 0..1 gate so toggling motion never snaps
 
 function applyAppearance() {
   const a = appearance, root = document.documentElement.style;
-  root.setProperty("--veil", a.veil);
-  root.setProperty("--veil-w", a.workVeil);
+  root.setProperty("--frost-blur", a.frostBlur + "px");
+  root.setProperty("--frost-veil", a.frostVeil);
+  root.setProperty("--frost-sat", a.frostSaturate + "%");
+  /* the running pane: the haze slider interpolates the cleared
+     switchable glass back towards the idle frost -- at 0 it is
+     exactly v0.6.4's nearly transparent pane */
+  const t = a.workHaze / 100;
+  root.setProperty("--frost-blur-w", (0.5 + t * (a.frostBlur - 0.5)) + "px");
+  root.setProperty("--frost-veil-w", 0.05 + t * (a.frostVeil - 0.05));
+  root.setProperty("--frost-sat-w", (108 + t * (a.frostSaturate - 108)) + "%");
+  root.setProperty("--set-blur", a.setBlur + "px");
   root.setProperty("--set-veil", a.setVeil);
-  root.setProperty("--amb-bright", a.brightness + "%");
-  if (!ambStack.active) {
-    ambStack.active = document.getElementById("amb-a");
-    ambStack.idle = document.getElementById("amb-b");
-    ambStack.theme = ambStack.active ? ambStack.active.dataset.theme : null;
-    if (ambStack.active && ambStack.theme) {
-      ambLayerShow(ambStack.active, ambStack.theme, a.motionOn);
-    }
+  root.setProperty("--set-sat", a.setSaturate + "%");
+  root.setProperty("--graf-opacity", a.grafOpacity);
+  root.setProperty("--graf-sat", a.grafSaturate + "%");
+  root.setProperty("--sheen-dur", (34 / Math.max(0.2, a.motionSpeed)) + "s");
+  /* the wall's combined saturation: the graffiti slider and the
+     sheet's own鲜明度 both land on the one static layer now */
+  root.setProperty("--wall-sat", (a.grafSaturate * a.frostSaturate / 100) + "%");
+  document.body.classList.toggle("no-sheen", !a.sheenOn || !a.motionOn);
+  /* the dot size lives inside the static picture: a change
+     repaints it once, debounced -- never per frame */
+  if (paintedMistSize !== null && a.mistSize !== paintedMistSize) {
+    clearTimeout(grafRepaintTimer);
+    grafRepaintTimer = setTimeout(paintGraffiti, 120);
   }
-  if (ambStack.active) {
-    const want = AMBIENT_THEMES[a.theme] ? a.theme : "graffiti";
-    if (ambStack.theme !== want) {
-      const from = ambStack.active, to = ambStack.idle;
-      ambLayerShow(to, want, a.motionOn);
-      to.classList.add("on");
-      from.classList.remove("on");
-      ambStack.active = to;
-      ambStack.idle = from;
-      ambStack.theme = want;
-      setTimeout(() => {
-        if (ambStack.idle === from) {
-          from.querySelector(".amb-vid").pause();
-        }
-      }, 750);
-    } else if (AMBIENT_THEMES[want].kind === "video") {
-      ambLayerShow(ambStack.active, want, a.motionOn);
-    }
-  }
-  ptsApply();
+  wakeWall();
 }
+let grafRepaintTimer = null;
 
 let appearanceSaveTimer = null;
 function saveAppearance() {
@@ -135,6 +89,12 @@ function saveAppearance() {
   }, 250);
 }
 
+/* ------------------------------------------------------------------ */
+/* random graffiti: 1-3 strokes, a fresh hand every launch            */
+/* ------------------------------------------------------------------ */
+const INK_BLUE = [0, 87, 217], INK_SOFT = [110, 134, 175],
+      INK_PALE = [150, 168, 198], PALE_FAR = [198, 214, 238];
+
 function mulberry32(seed) {
   let a = seed >>> 0;
   return function () {
@@ -144,321 +104,428 @@ function mulberry32(seed) {
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
 }
+const launchRng = mulberry32((Date.now() ^ (Math.random() * 1e9)) >>> 0);
 
-/* ------------------------------------------------------------------ */
-/* the particle layer: the graffiti theme's strokes, made of       */
-/* particles. (The v0.6.13 layer dodged the pointer with a free-   */
-/* floating mist -- the user's correction: the dodge belongs to    */
-/* the strokes themselves. The particles ARE the graffiti: they    */
-/* flow along the stroke paths and part around the pointer like    */
-/* water around a finger, then close again.) Everything heavy was  */
-/* decided offline (tools/bake_ambient.py): the stroke paths live  */
-/* in a texture (256 arc-length samples per path, stage coords     */
-/* packed 16-bit per axis), the particles in one static attribute  */
-/* table uploaded to the GPU exactly once. Per frame the CPU sets  */
-/* four uniforms and issues ONE draw call; position, flow, the     */
-/* travelling light pulse and the pointer repulsion all run in     */
-/* the vertex shader. Hard caps: PTS_MAX particles whatever the    */
-/* setting says, DPR capped at 1.5. The loop runs only while the   */
-/* graffiti theme is up, the window is visible AND focused AND     */
-/* motion is on; otherwise it draws at most one frozen frame and   */
-/* stops. If WebGL or the baked assets are unavailable the layer   */
-/* silently stays away -- the baked still underneath is already a  */
-/* complete picture.                                               */
-/* ------------------------------------------------------------------ */
-const PTS_MAX = 3600;
-const PTS_DPR_CAP = 1.5;
-const PTS_VW = 1600, PTS_VH = 900;
-const PTS_LOOP_S = 16.0;                 // the bake's loop length, s
-const PTS_ROWS = 6;                      // stroke paths in the texture
-const pts = {
-  gl: null, failed: false, n: 0, texReady: false,
-  raf: 0, focused: true, count: 0,
-  mx: -9999, my: -9999, inside: false, amt: 0, last: 0,
-  scale: 1, ox: 0, oy: 0,
-  uTau: null, uMouse: null, uMap: null, uPx: null, uPathTex: null,
-};
+function smoothLine(pts, sub = 7) {
+  // Catmull-Rom through the control points -> a hand-drawn polyline
+  if (pts.length < 3) return pts;
+  const out = [pts[0]];
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p0 = pts[Math.max(0, i - 1)], p1 = pts[i],
+          p2 = pts[i + 1], p3 = pts[Math.min(pts.length - 1, i + 2)];
+    for (let j = 1; j <= sub; j++) {
+      const t = j / sub, t2 = t * t, t3 = t2 * t;
+      out.push([
+        0.5 * ((2 * p1[0]) + (-p0[0] + p2[0]) * t +
+               (2 * p0[0] - 5 * p1[0] + 4 * p2[0] - p3[0]) * t2 +
+               (-p0[0] + 3 * p1[0] - 3 * p2[0] + p3[0]) * t3),
+        0.5 * ((2 * p1[1]) + (-p0[1] + p2[1]) * t +
+               (2 * p0[1] - 5 * p1[1] + 4 * p2[1] - p3[1]) * t2 +
+               (-p0[1] + 3 * p1[1] - 3 * p2[1] + p3[1]) * t3),
+      ]);
+    }
+  }
+  return out;
+}
 
-const PTS_VS = [
-  "attribute float aPath;",
-  "attribute float aPhase;",
-  "attribute float aSpeed;",
-  "attribute float aLat;",
-  "attribute float aSize;",
-  "attribute float aAlpha;",
-  "attribute vec3 aCol;",
-  "attribute float aSign;",
-  "uniform float uTau;",          // loops elapsed (seconds / 16)
-  "uniform vec3 uMouse;",         // stage x, stage y, eased presence
-  "uniform vec4 uMap;",           // stage -> NDC: xy scale, zw offset
-  "uniform float uPx;",           // device px per stage px
-  "uniform sampler2D uPathTex;",
-  "varying vec3 vCol;",
-  "varying float vA;",
-  "vec2 pathPos(float s, float row) {",
-  "  vec4 t = texture2D(uPathTex, vec2(s, row));",
-  "  float x = (floor(t.r * 255.0 + 0.5) * 256.0",
-  "             + floor(t.g * 255.0 + 0.5)) / 65535.0 * 2000.0 - 200.0;",
-  "  float y = (floor(t.b * 255.0 + 0.5) * 256.0",
-  "             + floor(t.a * 255.0 + 0.5)) / 65535.0 * 1200.0 - 150.0;",
-  "  return vec2(x, y);",
-  "}",
-  "void main() {",
-  "  float row = (aPath + 0.5) / " + PTS_ROWS + ".0;",
-  "  float s = fract(aPhase + uTau * aSpeed);",
-  "  vec2 pos = pathPos(s, row);",
-  "  vec2 nxt = pathPos(min(s + 0.0039, 0.999), row);",
-  "  vec2 tanv = nxt - pos;",
-  "  float tl = length(tanv);",
-  "  vec2 perp = tl > 0.001 ? vec2(-tanv.y, tanv.x) / tl : vec2(0.0, 1.0);",
-  "  pos += perp * aLat;",
-  "  float pulse = pow(0.5 + 0.5 * sin(6.28318 * (3.0 * s - 2.0 * uTau)), 1.7);",
-  "  float alpha = aAlpha * (0.42 + 0.85 * pulse);",
-  "  vec2 dm = pos - uMouse.xy;",
-  "  float dist = length(dm);",
-  "  float infl = clamp(1.0 - dist / 165.0, 0.0, 1.0);",
-  "  infl = pow(infl, 1.5) * uMouse.z;",
-  "  if (infl > 0.001 && dist > 0.01) {",
-  "    vec2 dir = dm / dist;",
-  "    pos += dir * infl * 88.0 + vec2(-dir.y, dir.x) * infl * 26.0 * aSign;",
-  "    alpha *= 1.0 - 0.25 * infl;",
-  "  }",
-  "  vCol = aCol;",
-  "  vA = alpha;",
-  "  gl_Position = vec4(pos * uMap.xy + uMap.zw, 0.0, 1.0);",
-  "  gl_PointSize = aSize * (0.9 + 0.2 * pulse) * uPx;",
-  "}",
-].join("\n");
-
-const PTS_FS = [
-  "precision mediump float;",
-  "varying vec3 vCol;",
-  "varying float vA;",
-  "void main() {",
-  "  vec2 q = gl_PointCoord - 0.5;",
-  "  float fall = exp(-dot(q, q) * 12.8);",   // soft glow puff
-  "  gl_FragColor = vec4(vCol, vA * fall);",
-  "}",
-].join("\n");
-
-function ptsInit() {
-  const cv = document.getElementById("pts");
-  if (!cv) { pts.failed = true; return; }
-  let gl = null;
-  try {
-    gl = cv.getContext("webgl", { alpha: true, antialias: false,
-                                  depthWrite: false, depthTest: false });
-  } catch (e) { gl = null; }
-  if (!gl) { pts.failed = true; cv.style.display = "none"; return; }
-  const sh = (type, src) => {
-    const s = gl.createShader(type);
-    gl.shaderSource(s, src);
-    gl.compileShader(s);
-    if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error("shader");
-    return s;
+function randomStrokes(w, h, rng) {
+  const R = (a, b) => a + rng() * (b - a);
+  const pick = arr => arr[Math.floor(rng() * arr.length)];
+  /* GIANT hand (v3, user 2026-11-04): every stroke is a window-
+     filling sweep with a thick brush, cropped by the window's
+     edges -- only part of each gesture is ever on stage. Still
+     one to three strokes per launch, never more. The small
+     doodle kinds (spiral, loop) retire: at giant scale only the
+     sweep family reads as a hand passing over the whole wall. */
+  const kinds = {
+    // a freehand zigzag wave clear across the window
+    wave(cx, cy, span) {
+      const n = 5 + Math.floor(rng() * 3), pts = [];
+      let up = rng() < 0.5;
+      for (let i = 0; i < n; i++) {
+        pts.push([cx - span / 2 + (span * i) / (n - 1),
+                  cy + (up ? -1 : 1) * span * R(0.07, 0.13)]);
+        up = !up;
+      }
+      return { pts: smoothLine(pts, 6) };
+    },
+    // one huge swoosh / underline curve, edge to edge and beyond
+    swoosh(cx, cy, span) {
+      const pts = [[cx - span / 2, cy + R(-0.04, 0.04) * h],
+                   [cx - span * 0.15, cy + R(0.10, 0.20) * h],
+                   [cx + span * 0.25, cy + R(-0.16, -0.05) * h],
+                   [cx + span / 2, cy + R(-0.05, 0.06) * h]];
+      return { pts: smoothLine(pts, 9) };
+    },
+    // a sharp pulse / mountain polyline across the whole width
+    pulse(cx, cy, span) {
+      const n = 5 + Math.floor(rng() * 3), pts = [];
+      for (let i = 0; i < n; i++)
+        pts.push([cx - span / 2 + (span * i) / (n - 1),
+                  cy + (i % 2 ? -1 : 1) * span * R(0.05, 0.11)]);
+      return { pts: smoothLine(pts, 6) };
+    },
+    // a vast gentle arc -- part of a circle far bigger than
+    // the window, its centre thrown well off-stage
+    arc(cx, cy) {
+      const pts = [], rad = R(0.55, 1.05) * w, dir = rng() < 0.5 ? 1 : -1;
+      const ccx = cx + R(-0.15, 0.15) * w,
+            ccy = cy + R(0.30, 0.80) * h * (rng() < 0.5 ? 1 : -1);
+      const a0 = Math.atan2(cy - ccy, cx - ccx), sweep = R(0.5, 0.95);
+      for (let i = 0; i <= 36; i++) {
+        const th = a0 + dir * (i / 36) * sweep;
+        pts.push([ccx + rad * Math.cos(th), ccy + rad * Math.sin(th)]);
+      }
+      return { pts };
+    },
   };
-  try {
-    const prog = gl.createProgram();
-    gl.attachShader(prog, sh(gl.VERTEX_SHADER, PTS_VS));
-    gl.attachShader(prog, sh(gl.FRAGMENT_SHADER, PTS_FS));
-    gl.linkProgram(prog);
-    if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error("link");
-    gl.useProgram(prog);
-    pts.uTau = gl.getUniformLocation(prog, "uTau");
-    pts.uMouse = gl.getUniformLocation(prog, "uMouse");
-    pts.uMap = gl.getUniformLocation(prog, "uMap");
-    pts.uPx = gl.getUniformLocation(prog, "uPx");
-    pts.uPathTex = gl.getUniformLocation(prog, "uPathTex");
-    gl.enable(gl.BLEND);
-    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-    pts.gl = gl;
-    ptsResize();
-    // the baked particle table: one static buffer, uploaded once
-    fetch("assets/ambient/graffiti_pts.bin")
-      .then(r => { if (!r.ok) throw new Error("pts bin"); return r.arrayBuffer(); })
-      .then(buf => {
-        const data = new Float32Array(buf);
-        const vbo = gl.createBuffer();
-        gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
-        gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
-        const stride = 10 * 4;
-        const binds = [["aPath", 1, 0], ["aPhase", 1, 4], ["aSpeed", 1, 8],
-                       ["aLat", 1, 12], ["aSize", 1, 16], ["aAlpha", 1, 20],
-                       ["aCol", 3, 24], ["aSign", 1, 36]];
-        for (const [name, n, off] of binds) {
-          const loc = gl.getAttribLocation(prog, name);
-          if (loc < 0) throw new Error("attrib " + name);
-          gl.enableVertexAttribArray(loc);
-          gl.vertexAttribPointer(loc, n, gl.FLOAT, false, stride, off);
-        }
-        pts.n = data.length / 10;
-        ptsApply();
-      })
-      .catch(() => { pts.failed = true; cv.style.display = "none"; });
-    // the baked path texture: exact bytes or the strokes drift,
-    // so NEAREST and no premultiply games
-    const img = new Image();
-    img.onload = () => {
-      const tex = gl.createTexture();
-      gl.bindTexture(gl.TEXTURE_2D, tex);
-      gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA,
-                    gl.UNSIGNED_BYTE, img);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-      gl.uniform1i(pts.uPathTex, 0);
-      pts.texReady = true;
-      ptsApply();
-    };
-    img.onerror = () => { pts.failed = true; cv.style.display = "none"; };
-    img.src = "assets/ambient/graffiti_path.png";
-  } catch (e) {
-    pts.failed = true;
-    cv.style.display = "none";
+  /* 笔数： 0 in the settings means the shipped behaviour --
+     a random one to three; a fixed number deals exactly that */
+  const count = appearance.grafCount > 0 ? appearance.grafCount
+              : rng() < 0.4 ? 1 : rng() < 0.62 ? 2 : 3;
+  const strokes = [];
+  for (let i = 0; i < count; i++) {
+    const kind = i === 0 ? pick(["wave", "wave", "swoosh", "arc"])
+                         : pick(["wave", "swoosh", "pulse", "arc"]);
+    // every span overflows the window: the brush enters one
+    // edge and leaves by another (or the same one, for the arc)
+    const span = (i === 0 ? R(1.18, 1.50) : R(0.92, 1.30)) * w;
+    const cx = w / 2 + R(-0.10, 0.10) * w, cy = R(0.08, 0.92) * h;
+    const st = kinds[kind](cx, cy, span);
+    st.width = (i === 0 ? R(0.11, 0.18) : R(0.06, 0.115)) * w
+             * appearance.grafWidth;
+    st.color = i === 0 ? INK_BLUE : pick([INK_SOFT, INK_PALE, INK_SOFT]);
+    st.alpha = i === 0 ? 238 : Math.round(R(130, 165));
+    strokes.push(st);
   }
+  return strokes;
 }
-
-function ptsResize() {
-  const cv = document.getElementById("pts");
-  if (!cv || !pts.gl) return;
-  const dpr = Math.min(window.devicePixelRatio || 1, PTS_DPR_CAP);
-  cv.width = Math.max(1, Math.round(window.innerWidth * dpr));
-  cv.height = Math.max(1, Math.round(window.innerHeight * dpr));
-  const gl = pts.gl;
-  gl.viewport(0, 0, cv.width, cv.height);
-  const w = window.innerWidth, h = window.innerHeight;
-  const s = Math.max(w / PTS_VW, h / PTS_VH);
-  const ox = (w - PTS_VW * s) / 2, oy = (h - PTS_VH * s) / 2;
-  pts.scale = s; pts.ox = ox; pts.oy = oy;
-  gl.uniform4f(pts.uMap, 2 * s / w, -2 * s / h, 2 * ox / w - 1, 1 - 2 * oy / h);
-  gl.uniform1f(pts.uPx, s * cv.height / Math.max(1, h));
-}
-
-function ptsWanted() {
-  return !!pts.gl && pts.n > 0 && pts.texReady
-    && appearance.motionOn && !document.hidden
-    && pts.focused && pts.count > 0
-    && ambStack.theme === "graffiti";
-}
-
-function ptsDraw(now) {
-  const gl = pts.gl;
-  if (!gl || !pts.n || !pts.texReady) return;
-  // the pointer's presence is ONE eased scalar: fast attack while
-  // the pointer is over the graffiti, slow release when it leaves,
-  // so the strokes part quickly and close gently. It is the only
-  // per-frame CPU work besides setting the uniforms below.
-  const dt = pts.last ? Math.min(0.1, (now - pts.last) / 1000) : 0.016;
-  pts.last = now;
-  const target = pts.inside ? 1 : 0;
-  const rate = target > pts.amt ? 9 : 2.2;
-  pts.amt += (target - pts.amt) * Math.min(1, dt * rate);
-  if (Math.abs(target - pts.amt) < 0.002) pts.amt = target;
-  gl.uniform1f(pts.uTau, now / 1000 / PTS_LOOP_S);
-  gl.uniform3f(pts.uMouse,
-               (pts.mx - pts.ox) / pts.scale,
-               (pts.my - pts.oy) / pts.scale,
-               pts.amt);
-  gl.clearColor(0, 0, 0, 0);
-  gl.clear(gl.COLOR_BUFFER_BIT);
-  if (pts.count > 0) gl.drawArrays(gl.POINTS, 0, Math.min(pts.count, pts.n));
-}
-
-function ptsTick(now) {
-  if (!ptsWanted()) {
-    pts.raf = 0;
-    ptsDraw(now);          // one frozen frame, then fully stopped
-    return;
-  }
-  ptsDraw(now);
-  pts.raf = requestAnimationFrame(ptsTick);
-}
-
-function ptsApply() {
-  if (!pts.gl && !pts.failed) ptsInit();
-  const cv = document.getElementById("pts");
-  if (cv) cv.style.opacity =
-    (ambStack.theme === "graffiti" && !pts.failed) ? "1" : "0";
-  if (!pts.gl) return;
-  const d = Math.max(0, Math.min(100, appearance.particleDensity || 0));
-  pts.count = Math.round(PTS_MAX * d / 100);
-  if (ptsWanted()) {
-    if (!pts.raf) pts.raf = requestAnimationFrame(ptsTick);
-  } else if (!pts.raf) {
-    ptsDraw(performance.now());
-  }
-}
-
-window.addEventListener("pointermove", e => {
-  pts.mx = e.clientX;
-  pts.my = e.clientY;
-  pts.inside = true;
-}, { passive: true });
-document.addEventListener("pointerleave", () => { pts.inside = false; });
-window.addEventListener("blur", () => { pts.focused = false; ptsApply(); });
-window.addEventListener("focus", () => { pts.focused = true; ptsApply(); });
-document.addEventListener("visibilitychange", () => ptsApply());
-window.addEventListener("resize", () => {
-  ptsResize();
-  if (!pts.raf) ptsDraw(performance.now());
-});
 
 /* ------------------------------------------------------------------ */
-/* the scene echo: while a job runs, its frames ghost through the   */
-/* thinned veil on this canvas. It is content, not decoration --    */
-/* the painter below runs only in the working state (plus one       */
-/* still paint per fresh frame) and never at idle. The ambient      */
-/* picture needs no painter at all: the video element plays it.     */
+/* the wall (v0.6.17 rollback): tiny matte dots, no gloss, no         */
+/* balloons. The graffiti is a STATIC picture: its beads are dealt    */
+/* once and painted exactly once onto #graf, and the sheet's frost    */
+/* blur is a cached filter on that single layer -- not a              */
+/* full-window backdrop-filter re-blurring an animated wall every     */
+/* frame (the old whole-core idle burn; the look comes back, that     */
+/* cost does not). Above the picture, a sparse drift of free mist     */
+/* dots on #beads is the only thing that ever moves.                  */
+/*                                                                    */
+/* The performance limits are HARD, not aspirational:                 */
+/*   - the ambient loop is capped at WALL_FPS;                        */
+/*   - hidden / blurred / minimised window: the loop stops dead,      */
+/*     zero frames, woken only by focus / visibility / job events;    */
+/*   - the mist is hard-capped at MIST_MAX dots;                      */
+/*   - graffiti and glass never repaint per frame.                    */
+/* Reduced-motion users get a still wall.                             */
 /* ------------------------------------------------------------------ */
+const grafCanvas = document.getElementById("graf");
+const gtx = grafCanvas.getContext("2d");
+const canvas = document.getElementById("beads");
+const ctx = canvas.getContext("2d");
 const echoCanvas = document.getElementById("echo");
 const echoCtx = echoCanvas.getContext("2d");
-let echoSrc = null;  // image/canvas/video shown behind the veil
-let echoRaf = 0;
+const WALL_FPS = 30;          // hard cap: ambient frame rate
+const MIST_MAX = 240;         // hard cap: free mist dots
+let W = 0, H = 0, mouse = null;
+let grafBeads = [];           // the static picture's beads
+let mist = [];                // the only beads that still move
+let paintedMistSize = null;   // mistSize the picture was painted at
+let echoSrc = null;  // image/canvas/video shown behind the glass
+let echoDrawn = false;
+const REDUCED_MOTION = !!(window.matchMedia &&
+  matchMedia("(prefers-reduced-motion: reduce)").matches);
 
-function sizeEchoCanvas() {
-  echoCanvas.width = window.innerWidth;
-  echoCanvas.height = window.innerHeight;
-  paintEcho();
+function gauss() {
+  return Math.max(-1.15, Math.min(1.15, (Math.random() + Math.random() + Math.random()) / 1.5 - 1));
 }
 
-function paintEcho() {
-  const W = echoCanvas.width, H = echoCanvas.height;
-  if (!W || !H) return;
+function pushOutOfZones(x, y, zones) {
+  for (const [zx0, zy0, zx1, zy1] of zones) {
+    if (x > zx0 && x < zx1 && y > zy0 && y < zy1) {
+      const pens = [x - zx0, zx1 - x, y - zy0, zy1 - y];
+      const side = pens.indexOf(Math.min(...pens));
+      if (side === 0) x = zx0 - 5; else if (side === 1) x = zx1 + 5;
+      else if (side === 2) y = zy0 - 5; else y = zy1 + 5;
+    }
+  }
+  return [x, y];
+}
+
+function buildField() {
+  W = window.innerWidth; H = window.innerHeight;
+  grafCanvas.width = W; grafCanvas.height = H;
+  canvas.width = W; canvas.height = H;
+  echoCanvas.width = W; echoCanvas.height = H;
+  const zones = calmZones();
+  grafBeads = [];
+  const wallStrokes = randomStrokes(W, H, launchRng);
+  wallStrokes.forEach((st, si) => {
+    // The stroke is not painted -- it is CONSTITUTED by micro
+    // particles: a dense jittered lattice fills the whole band,
+    // each dot a tiny fraction of the whole, overlapping into
+    // one rich solid ribbon whose rim feathers out particle by
+    // particle. The lattice step grows with the brush: a giant
+    // ribbon keeps the same ~30 rows of mist across its band
+    // instead of exploding the bead count. Dealt once, painted
+    // once -- the picture does not move any more.
+    const step = Math.max(2.4, Math.min(6.5, st.width / 30));
+    let sAcc = 0, carry = 0;
+    const pushBead = (hx, hy, hz) => {
+      const [px, py] = pushOutOfZones(hx, hy, zones);
+      grafBeads.push({
+        rx: hx, ry: hy, hx: px, hy: py, hz,
+        rj: 0.85 + Math.random() * 0.3,
+        color: st.color, alpha: st.alpha / 255,
+      });
+    };
+    for (let i = 0; i < st.pts.length - 1; i++) {
+      const [x0, y0] = st.pts[i], [x1, y1] = st.pts[i + 1];
+      const segLen = Math.hypot(x1 - x0, y1 - y0);
+      if (!segLen) continue;
+      const nx = -(y1 - y0) / segLen, ny = (x1 - x0) / segLen;
+      let d = carry;
+      while (d < segLen) {
+        const t = d / segLen, sHere = sAcc + d;
+        const cxp = x0 + (x1 - x0) * t, cyp = y0 + (y1 - y0) * t;
+        for (let off = -st.width / 2; off <= st.width / 2; off += step) {
+          const u = off / (st.width / 2);
+          /* 雾点密度： the acceptance probability scales with
+             the setting -- at 0 no dot is ever dealt and the
+             wall is blank, as the slider promises */
+          if (Math.random() > (0.10 + 0.90 * Math.cos(u * Math.PI / 2))
+                            * (appearance.mistDensity / 100)) continue;
+          const hx = cxp + nx * off + (Math.random() * 2 - 1) * 1.15;
+          const hy = cyp + ny * off + (Math.random() * 2 - 1) * 1.15;
+          let hz = 0.45 * Math.cos(u * Math.PI / 2)
+                 + 0.24 * Math.sin(sHere * 0.010 + si * 1.7)
+                 + (Math.random() * 2 - 1) * 0.30;
+          pushBead(hx, hy, Math.max(-1, Math.min(1, hz)));
+        }
+        d += step;
+      }
+      carry = d - segLen;
+      sAcc += segLen;
+    }
+  });
+  grafBeads.sort((a, b) => a.hz - b.hz);
+  paintGraffiti();
+  buildMist(zones);
+}
+
+/* the static picture: every bead at home, painted exactly once.
+   It repaints only when the picture itself changes -- a re-roll,
+   a structural setting, a resize, the calm zones settling, or
+   the dot-size slider (debounced in applyAppearance). */
+function paintGraffiti() {
+  gtx.clearRect(0, 0, W, H);
+  for (const b of grafBeads) {
+    const zn = Math.max(0, Math.min(1, (b.hz + 1.15) / 2.3));
+    const r = (1.7 + 1.15 * zn) * b.rj * appearance.mistSize;
+    gtx.globalAlpha = b.alpha * (0.6 + 0.4 * zn);
+    gtx.drawImage(spriteFor(b.color, zn), b.hx - r, b.hy - r, r * 2, r * 2);
+  }
+  gtx.globalAlpha = 1;
+  paintedMistSize = appearance.mistSize;
+}
+
+/* the free mist: the calm remnant of the ambient motion -- a
+   sparse field of the same matte dots, drifting slowly, still
+   stepping aside for the pointer. Hard-capped at MIST_MAX. */
+function buildMist(zones) {
+  mist = [];
+  const colors = [INK_PALE, PALE_FAR, INK_SOFT, PALE_FAR];
+  for (let i = 0; i < MIST_MAX; i++) {
+    const [hx, hy] = pushOutOfZones(Math.random() * W,
+                                    Math.random() * H, zones);
+    const ang = Math.random() * Math.PI * 2;
+    mist.push({
+      hx, hy, x: hx, y: hy, z: Math.random() * 2 - 1,
+      vx: 0, vy: 0,
+      rj: 0.85 + Math.random() * 0.3,
+      color: colors[i % colors.length],
+      alpha: 0.10 + Math.random() * 0.20,
+      sdirx: Math.cos(ang), sdiry: Math.sin(ang),
+      phase: Math.random() * Math.PI * 2,
+    });
+  }
+}
+
+/* Window geometry changes NEVER re-roll the graffiti: the launch
+   strokes and their beads are the launch's hand, for the whole
+   session. A resize only scales homes and positions along, and
+   the canvases follow immediately so nothing stretches, jumps or
+   re-deals while the window is dragged. */
+function applyCalmZones() {
+  const zones = calmZones();
+  for (const b of grafBeads) {
+    const [px, py] = pushOutOfZones(b.rx, b.ry, zones);
+    b.hx = px; b.hy = py;
+  }
+  for (const m of mist) {
+    const [px, py] = pushOutOfZones(m.hx, m.hy, zones);
+    m.hx = px; m.hy = py;
+  }
+  paintGraffiti();
+}
+
+let grafResizeTimer = null;
+function rescaleField() {
+  const nW = window.innerWidth, nH = window.innerHeight;
+  if (!nW || !nH) return;
+  if (nW === W && nH === H) { applyCalmZones(); return; }
+  const sx = W ? nW / W : 1, sy = H ? nH / H : 1;
+  W = nW; H = nH;
+  grafCanvas.width = W; grafCanvas.height = H;
+  canvas.width = W; canvas.height = H;
+  echoCanvas.width = W; echoCanvas.height = H;
+  for (const b of grafBeads) {
+    b.rx *= sx; b.ry *= sy; b.hx *= sx; b.hy *= sy;
+  }
+  for (const m of mist) {
+    m.hx *= sx; m.hy *= sy; m.x *= sx; m.y *= sy;
+  }
+  /* the canvases follow immediately so nothing stretches; the
+     one static repaint is debounced off the drag's hot path */
+  clearTimeout(grafResizeTimer);
+  grafResizeTimer = setTimeout(applyCalmZones, 90);
+}
+
+function calmZones() {
+  const zones = [];
+  const range = document.createRange();
+  document.querySelectorAll(".calm, .btn, .tile h2, #header h1").forEach(el => {
+    range.selectNodeContents(el);
+    const r = range.getBoundingClientRect();
+    if (r.width >= 4 && r.height >= 4)
+      zones.push([r.left - 12, r.top - 10, r.right + 12, r.bottom + 10]);
+  });
+  return zones;
+}
+
+/* matte dot sprites: flat colour, only the alpha falls off at the
+   rim so a dot never shines -- no highlight, no belly, no balloon */
+const sprites = new Map();
+function spriteFor(color, zn) {
+  const step = Math.round(zn * 7);
+  const key = color.join(",") + "|" + step;
+  if (sprites.has(key)) return sprites.get(key);
+  const S = 32, c = document.createElement("canvas");
+  c.width = c.height = S;
+  const g = c.getContext("2d"), R = S / 2;
+  const mix = [150, 185, 255].map((f, i) => Math.round(color[i] + (f - color[i]) * 0.55 * (1 - step / 7)));
+  const grad = g.createRadialGradient(R, R, 0, R, R, R);
+  grad.addColorStop(0, `rgba(${mix.join(",")},1)`);
+  grad.addColorStop(0.8, `rgba(${mix.join(",")},1)`);
+  grad.addColorStop(1, `rgba(${mix.join(",")},0)`);
+  g.fillStyle = grad;
+  g.fillRect(0, 0, S, S);
+  sprites.set(key, c);
+  return c;
+}
+
+function drawEcho(time) {
   echoCtx.clearRect(0, 0, W, H);
   if (!echoSrc) return;
   const iw = echoSrc.videoWidth || echoSrc.width;
   const ih = echoSrc.videoHeight || echoSrc.height;
   if (!iw || !ih) return;
-  const scale = Math.max(W / iw, H / ih);
+  const drift = 1.07 + 0.03 * Math.sin(time / 14000);
+  const scale = Math.max(W / iw, H / ih) * drift;
   const w = iw * scale, h = ih * scale;
-  echoCtx.drawImage(echoSrc, (W - w) / 2, (H - h) / 2, w, h);
+  const px = (W - w) / 2 + Math.sin(time / 19000) * 14;
+  const py = (H - h) / 2 + Math.cos(time / 23000) * 10;
+  echoCtx.drawImage(echoSrc, px, py, w, h);
 }
 
-function startEchoPainter() {
-  if (echoRaf) return;
-  const step = () => {
-    if (!document.body.classList.contains("working")) {
-      echoRaf = 0;
-      return;
+/* the ambient loop: the mist drift plus the running state's
+   scene echo -- nothing else ever moves. Hard limits: capped
+   at WALL_FPS, and the moment the window hides, blurs or
+   minimises, wallActive() goes false and the loop stops dead
+   (zero frames, no throttled tail); focus / visibility /
+   appearance / job events wake it again. */
+let wallRunning = false, wallLast = 0, pageFocused = true;
+function motionWanted() { return appearance.motionOn && !REDUCED_MOTION; }
+function wallActive() {
+  if (document.hidden || !pageFocused) return false;
+  if (echoSrc && document.body.classList.contains("working")) return true;
+  return motionWanted() || motionLevel > 0.02;
+}
+function wakeWall() {
+  if (!wallRunning && wallActive()) {
+    wallRunning = true;
+    wallLast = 0;
+    requestAnimationFrame(wallLoop);
+  }
+}
+function wallLoop(t) {
+  if (!wallActive()) { wallRunning = false; return; }
+  requestAnimationFrame(wallLoop);
+  if (wallLast && t - wallLast < 1000 / WALL_FPS) return;
+  const dt = Math.min(0.05, wallLast ? (t - wallLast) / 1000 : 0.016);
+  wallLast = t;
+  stepWall(dt, t);
+}
+function stepWall(dt, t) {
+  /* the scene echo is drawn only while its state is on show */
+  if (echoSrc && document.body.classList.contains("working")) {
+    drawEcho(t);
+    echoDrawn = true;
+  } else if (echoDrawn) {
+    echoCtx.clearRect(0, 0, W, H);
+    echoDrawn = false;
+  }
+  /* the settings own the clock （设置 → 显示 → 常态动效）:
+     ambT advances at the user's speed, motionLevel eases the
+     drift in and out so the switch never snaps */
+  const motionTarget = motionWanted() ? 1 : 0;
+  motionLevel += (motionTarget - motionLevel) * Math.min(1, dt * 3);
+  ambT += dt * appearance.motionSpeed * motionLevel;
+  const ampL = appearance.motionAmp * motionLevel;
+  ctx.clearRect(0, 0, W, H);
+  for (const b of mist) {
+    const swayx = b.hx + Math.sin(ambT * 0.9 + b.phase) * 3.0 * ampL;
+    const swayy = b.hy + Math.cos(ambT * 0.7 + b.phase * 1.3) * 2.1 * ampL;
+    const zt = Math.max(-1, Math.min(1,
+      b.z + Math.sin(ambT * 0.5 + b.phase) * 0.12 * ampL));
+    let ax = 30 * (swayx - b.x) - 9.3 * b.vx;
+    let ay = 30 * (swayy - b.y) - 9.3 * b.vy;
+    if (mouse) {
+      const dx = b.x - mouse.x, dy = b.y - mouse.y;
+      const d = Math.hypot(dx, dy);
+      if (d < 140 && d > 0.01) {
+        const zn0 = (zt + 1.15) / 2.3;
+        const f = 1 - d / 140;
+        ax += (dx / d) * 4200 * (0.5 + 0.8 * zn0) * f + b.sdirx * 950 * f;
+        ay += (dy / d) * 4200 * (0.5 + 0.8 * zn0) * f + b.sdiry * 950 * f;
+      }
     }
-    paintEcho();
-    echoRaf = requestAnimationFrame(step);
-  };
-  echoRaf = requestAnimationFrame(step);
+    b.vx += ax * dt; b.vy += ay * dt;
+    const sp = Math.hypot(b.vx, b.vy);
+    if (sp > 950) { b.vx *= 950 / sp; b.vy *= 950 / sp; }
+    b.x += b.vx * dt; b.y += b.vy * dt;
+    const zn = Math.max(0, Math.min(1, (zt + 1.15) / 2.3));
+    const r = (1.7 + 1.15 * zn) * b.rj * appearance.mistSize;
+    ctx.globalAlpha = b.alpha * (0.6 + 0.4 * zn);
+    ctx.drawImage(spriteFor(b.color, zn), b.x - r, b.y - r, r * 2, r * 2);
+  }
+  ctx.globalAlpha = 1;
 }
-window.addEventListener("resize", sizeEchoCanvas);
+document.addEventListener("visibilitychange", wakeWall);
+window.addEventListener("focus", () => { pageFocused = true; wakeWall(); });
+window.addEventListener("blur", () => { pageFocused = false; });
 
-/* working state: the veil thins, the scene takes the wall */
+window.addEventListener("mousemove", e => { mouse = { x: e.clientX, y: e.clientY }; });
+window.addEventListener("mouseout", () => { mouse = null; });
+window.addEventListener("resize", rescaleField);
+
+/* working state: the graffiti recedes, the scene takes the wall */
 let holdTimer = null;
 function setWorking(on) {
   clearTimeout(holdTimer);
-  if (on) {
-    document.body.classList.add("working");
-    startEchoPainter();
-  }
+  if (on) document.body.classList.add("working");
   else holdTimer = setTimeout(() => document.body.classList.remove("working"), 2600);
+  wakeWall();
 }
 
 /* ------------------------------------------------------------------ */
@@ -820,18 +887,29 @@ $("set-tray").addEventListener("change", async e => {
   if (bridge) await bridge.save_settings({ closeToTray: e.target.checked });
 });
 
-/* settings page → 显示： the baked picture's playback controls.
-   Sliders apply live ("input") and persist on release ("change");
-   the switch and the theme select apply + persist at once. There
-   is nothing structural to rebuild any more -- the picture is a
-   file and the veils are CSS variables. */
+/* settings page → 显示： every appearance slider and switch.
+   "input" applies the number live (the settings veil itself is
+   right there changing), "change" persists it -- and for the
+   structural numbers (stroke count / brush width / mist
+   density, which live inside the bead field) re-deals the wall
+   once the drag lets go. */
 const AP_RANGES = [
-  // [element id, appearance key, value format]
-  ["ap-brightness", "brightness", v => Math.round(v) + "%"],
-  ["ap-particle-density", "particleDensity", v => Math.round(v) + "%"],
-  ["ap-veil", "veil", v => v.toFixed(2)],
-  ["ap-work-veil", "workVeil", v => v.toFixed(2)],
+  // [element id, appearance key, value format, structural?]
+  ["ap-frost-blur", "frostBlur", v => v.toFixed(1) + " px"],
+  ["ap-frost-veil", "frostVeil", v => v.toFixed(2)],
+  ["ap-frost-saturate", "frostSaturate", v => Math.round(v) + "%"],
+  ["ap-work-haze", "workHaze", v => String(Math.round(v))],
+  ["ap-set-blur", "setBlur", v => Math.round(v) + " px"],
   ["ap-set-veil", "setVeil", v => v.toFixed(2)],
+  ["ap-set-saturate", "setSaturate", v => Math.round(v) + "%"],
+  ["ap-graf-count", "grafCount", v => v === 0 ? "随机" : v + " 笔", true],
+  ["ap-graf-width", "grafWidth", v => "×" + v.toFixed(2), true],
+  ["ap-graf-opacity", "grafOpacity", v => Math.round(v * 100) + "%"],
+  ["ap-graf-saturate", "grafSaturate", v => Math.round(v) + "%"],
+  ["ap-mist-density", "mistDensity", v => Math.round(v) + "%", true],
+  ["ap-mist-size", "mistSize", v => "×" + v.toFixed(2)],
+  ["ap-motion-speed", "motionSpeed", v => "×" + v.toFixed(1)],
+  ["ap-motion-amp", "motionAmp", v => "×" + v.toFixed(2)],
 ];
 function syncAppearanceControls() {
   for (const [id, key, fmt] of AP_RANGES) {
@@ -839,31 +917,43 @@ function syncAppearanceControls() {
     $(id + "-val").textContent = fmt(appearance[key]);
   }
   $("ap-motion-on").checked = !!appearance.motionOn;
-  $("ap-theme").value = appearance.theme;
+  $("ap-sheen-on").checked = !!appearance.sheenOn;
 }
-for (const [id, key, fmt] of AP_RANGES) {
+function rebuildWall() {
+  buildField();
+  requestAnimationFrame(applyCalmZones);
+}
+for (const [id, key, fmt, structural] of AP_RANGES) {
   const el = $(id);
   el.addEventListener("input", () => {
     appearance[key] = parseFloat(el.value);
     $(id + "-val").textContent = fmt(appearance[key]);
+    document.body.classList.add("tuning");
     applyAppearance();
   });
-  el.addEventListener("change", saveAppearance);
+  el.addEventListener("change", () => {
+    document.body.classList.remove("tuning");
+    if (structural) rebuildWall();
+    saveAppearance();
+  });
 }
-$("ap-motion-on").addEventListener("change", e => {
-  appearance.motionOn = e.target.checked;
-  applyAppearance();
-  saveAppearance();
-});
-$("ap-theme").addEventListener("change", e => {
-  appearance.theme = e.target.value;
-  applyAppearance();
-  saveAppearance();
+for (const [id, key] of [["ap-motion-on", "motionOn"],
+                          ["ap-sheen-on", "sheenOn"]]) {
+  $(id).addEventListener("change", e => {
+    appearance[key] = e.target.checked;
+    applyAppearance();
+    saveAppearance();
+  });
+}
+$("ap-reroll").addEventListener("click", () => {
+  rebuildWall();
+  log("换了一手涂鸦。");
 });
 $("ap-reset").addEventListener("click", () => {
   appearance = { ...APPEARANCE_DEFAULTS };
   syncAppearanceControls();
   applyAppearance();
+  rebuildWall();
   saveAppearance();
   log("显示参数已恢复默认。");
 });
@@ -982,12 +1072,11 @@ function showDepthVideo(url) {
   v.hidden = false;
   v.play().catch(() => {});
   echoSrc = v;
-  paintEcho();
   document.querySelector(".pv-hint").style.display = "none";
 }
 function drawPreview(dataUrl) {
   const img = new Image();
-  img.onload = () => { drawPreviewSource(img); echoSrc = img; paintEcho(); };
+  img.onload = () => { drawPreviewSource(img); echoSrc = img; };
   img.src = dataUrl;
 }
 let pvDrag = null;
@@ -1062,14 +1151,15 @@ async function initBridge() {
   $("set-tray").checked = !!snap.settings.closeToTray;
   $("set-proxy").value = snap.settings.updateProxy || "";
   if (snap.settings.appearance) {
-    /* whitelist merge: a settings file from the live-rendered
-       era carries dead keys (frostBlur, grafCount, ...) -- they
-       are dropped here and never written back */
-    for (const k of Object.keys(APPEARANCE_DEFAULTS))
-      if (k in snap.settings.appearance)
-        appearance[k] = snap.settings.appearance[k];
+    appearance = { ...APPEARANCE_DEFAULTS, ...snap.settings.appearance };
     syncAppearanceControls();
     applyAppearance();
+    /* a saved hand shapes the wall only when its structural
+       numbers differ from the shipped ones -- otherwise the
+       launch's own random hand stands, as it always has */
+    const structural = ["grafCount", "grafWidth", "mistDensity"];
+    if (structural.some(k => appearance[k] !== APPEARANCE_DEFAULTS[k]))
+      rebuildWall();
   }
   (snap.log || []).forEach(l => log(l));
   queueCliToasts(snap.cliEvents);
@@ -1114,9 +1204,11 @@ async function initBridge() {
 }
 
 /* boot */
-sizeEchoCanvas();
+buildField();
 applyAppearance();
 syncAppearanceControls();
+wakeWall();
+setTimeout(applyCalmZones, 350);  // re-measure calm zones once text layout settles
 refresh();
 log("ECHO 已就绪。");
 
