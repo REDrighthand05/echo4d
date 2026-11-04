@@ -58,9 +58,12 @@ def settings_path(platform=None, environ=None) -> Path:
     return settings_dir(platform, environ) / SETTINGS_NAME
 
 
-# Ambient themes baked into web_ui/assets/ambient/<id>.mp4.
-# One ships today; the settings surface is built to carry more.
-AMBIENT_THEMES = ("lightfield",)
+# Ambient themes baked into web_ui/assets/ambient/<id>.mp4:
+# "graffiti" 涂鸦流光 (flowing blue strokes) and "rings" 发光蓝环
+# (rotating glowing rings), both baked by tools/bake_ambient.py.
+# 存量默认 graffiti: the v0.6.12 "lightfield" id is retired, so an
+# old settings.json naming it coerces onto the new default below.
+AMBIENT_THEMES = ("graffiti", "rings")
 
 
 @dataclass
@@ -77,8 +80,12 @@ class Appearance:
     untouched install looks untouched."""
     # the baked ambient picture (web_ui/assets/ambient/)
     motion_on: bool = True          # False = hold one still frame
-    theme: str = "lightfield"       # which baked loop plays
+    theme: str = "graffiti"         # which baked loop plays
     brightness: float = 100.0       # picture brightness, %
+    # the one live layer kept by the user's ruling: GPU mist
+    # particles over the picture (density only -- the layer has
+    # hard caps and pauses with the window, see web_ui/app.js)
+    particle_density: float = 85.0  # % of the particle cap shown
     # the main sheet's static milk-white veil over the picture
     veil: float = 0.26              # wash alpha (was frost_veil)
     # the running state: switchable glass. The veil drops to this
@@ -99,6 +106,7 @@ APPEARANCE_SPEC = [
     ("motion_on", "b", None, None),
     ("theme", "t", None, None),
     ("brightness", "f", 50.0, 130.0),
+    ("particle_density", "f", 0.0, 100.0),
     ("veil", "f", 0.0, 0.9),
     ("work_veil", "f", 0.0, 0.85),
     ("set_veil", "f", 0.0, 0.98),

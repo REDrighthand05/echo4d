@@ -140,14 +140,30 @@ body {
   user-select: none;
 }
 
-/* the baked ambience: one looping picture fills the window.
-   Playback is the video element's own hardware path -- this
-   rule only places it and sets a static brightness. */
+/* the baked ambience: two stacked looping pictures fill the
+   window (theme crossfade = opacity on these layers, nothing
+   else). Playback is the video elements' own hardware path --
+   this rule only places the stack and sets a static brightness. */
 #amb {
   position: fixed; inset: 0;
+  filter: brightness(var(--amb-bright));
+  pointer-events: none;
+}
+.amb-layer {
+  position: absolute; inset: 0;
   width: 100%; height: 100%;
   object-fit: cover;
-  filter: brightness(var(--amb-bright));
+  opacity: 0;
+  transition: opacity 0.65s ease;
+}
+.amb-layer.on { opacity: 1; }
+/* the one live layer: GPU mist particles over the picture,
+   under the veil. A single canvas, a single draw call per frame
+   (see app.js) -- it never touches layout. */
+#pts {
+  position: fixed; inset: 0;
+  z-index: 1;
+  width: 100%; height: 100%;
   pointer-events: none;
 }
 #echo {
@@ -163,7 +179,7 @@ body {
    changes except when the state or a slider says so. */
 #veil {
   position: fixed; inset: 0;
-  z-index: 1;
+  z-index: 2;
   background: rgba(250, 251, 253, var(--veil));
   pointer-events: none;
   transition: background 1.2s ease;
@@ -182,7 +198,7 @@ body.working #echo {
   opacity: 1;
 }
 
-#app { position: relative; z-index: 2; height: 100%; }
+#app { position: relative; z-index: 3; height: 100%; }
 
 #center {
   height: 100%;

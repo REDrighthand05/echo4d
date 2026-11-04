@@ -712,61 +712,18 @@ def stage_fuse(job_dir: Path, stride: int = 4) -> dict:
     points, colors = points[pick], colors[pick]
     frame_ids = frame_ids[pick]
 
-    # Printed-marker calibration (optional): when the markers stage found
-    # the printed sheet, level the cloud so the floor normal becomes +Y
-    # (the viewer's up axis, see markers.py) and scale it into meters.
-    # Without markers.json this block never runs and output is unchanged.
-    marker_info = {}
-    # Total rigid rotation applied to the points on export (marker
-    # leveling below, or the camera-pose up alignment after it). Written
-    # to alignment.json so downstream stages that also read poses.json
-    # (the mesh stage's camera centres) can express them in the same
-    # exported frame as the points.
+    # Total rigid rotation applied to the points on export by the
+    # camera-pose up alignment below. Written to alignment.json so
+    # downstream stages that also read poses.json (the mesh stage's
+    # camera centres) can express them in the same exported frame as
+    # the points. (The printed-marker leveling/scale branch that used
+    # to sit here was retired with the marker-sheet feature,
+    # 2026-11-04; it never ran for jobs without markers.json.)
     export_rot = None
-    markers_file = job_dir / "markers.json"
-    if markers_file.exists():
-        try:
-            markers = json.loads(markers_file.read_text())
-        except (OSError, ValueError):
-            markers = {}
-        floor_normal = markers.get("floor_normal_world")
-        if floor_normal:
-            n = np.asarray(floor_normal, dtype=np.float64)
-            n = n / np.linalg.norm(n)
-            up = np.array([0.0, 1.0, 0.0])
-            axis = np.cross(n, up)
-            axis_len = float(np.linalg.norm(axis))
-            if axis_len > 1e-9:
-                axis = axis / axis_len
-                angle = math.acos(float(np.clip(n @ up, -1.0, 1.0)))
-                kx = np.array(
-                    [
-                        [0.0, -axis[2], axis[1]],
-                        [axis[2], 0.0, -axis[0]],
-                        [-axis[1], axis[0], 0.0],
-                    ]
-                )
-                rot_align = (
-                    np.eye(3)
-                    + math.sin(angle) * kx
-                    + (1.0 - math.cos(angle)) * (kx @ kx)
-                )
-                points = points @ rot_align.T
-                export_rot = rot_align
-            elif float(n @ up) < 0:
-                flip = np.diag([1.0, -1.0, -1.0])
-                points = points @ flip.T
-                export_rot = flip
-            marker_info["marker_leveled"] = True
-        marker_scale = markers.get("scale_to_meters")
-        if marker_scale:
-            points = points * float(marker_scale)
-            marker_info["marker_scale_to_meters"] = float(marker_scale)
 
     # Up alignment: the COLMAP world frame is arbitrary, so without
     # this step the exported scene can sit upside down in the viewer
-    # (whose up is +Y) and in every other tool. When the marker stage
-    # did not already level the cloud from a measured floor, world up
+    # (whose up is +Y) and in every other tool. World up
     # comes first from the job's IMU record when import landed one
     # (measured gravity -- see _estimate_up_from_imu); only capture
     # jobs without a usable record fall back to the poses alone
@@ -860,7 +817,6 @@ def stage_fuse(job_dir: Path, stride: int = 4) -> dict:
         **trim_info,
         "scene_points_ply": str(job_dir / "scene_points.ply"),
         "points_bin": str(job_dir / "points.bin"),
-        **marker_info,
         **align_info,
     }
     (job_dir / "job.json").write_text(json.dumps(info, ensure_ascii=False, indent=2))

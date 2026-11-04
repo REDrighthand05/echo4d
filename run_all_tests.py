@@ -8,8 +8,7 @@ Layers (any red layer fails the run):
                                           echo_super/test_ds_batch5.py)
   hotupdate  hot-update chain e2e      (tests/test_hot_update.py)
   routes  routing / skip / reroute     (tests/test_echo_super.py)
-  frozen  locked features must not drift (tests/test_voxel_frozen.py,
-                                          tests/test_markers_synth.py)
+  frozen  locked features must not drift (tests/test_voxel_frozen.py)
   smoke   whole-machine video runs     (only with --smoke; slow, TODO hook)
 
 Exit code 0 = all green.
@@ -24,7 +23,6 @@ SUITES = [
     ("parts", [sys.executable, "-m", "unittest", "echo_super.test_real_kernels", "-v"]),
     ("routes", [sys.executable, "-m", "unittest", "tests.test_echo_super", "-v"]),
     ("frozen", [sys.executable, "tests/test_voxel_frozen.py"]),
-    ("frozen", [sys.executable, "tests/test_markers_synth.py"]),
     ("align", [sys.executable, "tests/test_up_alignment.py"]),
     ("fuse", [sys.executable, "tests/test_voxel_pick_rule.py"]),
     ("poses", [sys.executable, "tests/test_pose_chain.py"]),

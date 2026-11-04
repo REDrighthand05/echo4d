@@ -42,9 +42,8 @@ sparse_points.ply, and the camera translations in poses.json), so
 every downstream stage (mesh, voxel, present, preview, replay) and
 every export inherits metres with no code of its own. Application is
 idempotent: scale.json records that it happened, and a re-run will
-not scale twice. If the markers stage already put the scene into
-metres (markers.json scale_to_meters -- a MEASURED scale, stronger
-evidence), this stage records that and changes nothing.
+not scale twice. Scale comes only from the reference-object route
+below (the printed-marker-sheet route was retired 2026-11-04).
 """
 import json
 from pathlib import Path
@@ -681,22 +680,6 @@ def stage_scale(job_dir) -> dict:
         if existing.get("status") == "set" and existing.get("applied"):
             record.update({k: existing.get(k) for k in record if k in existing})
             record["reason"] = "scale already applied by an earlier run"
-            return _write_record(job_dir, record)
-
-    markers_path = job_dir / "markers.json"
-    if markers_path.exists():
-        try:
-            markers = json.loads(markers_path.read_text())
-        except (OSError, ValueError):
-            markers = {}
-        if markers.get("scale_to_meters"):
-            record.update({
-                "status": "set",
-                "scale_to_meters": float(markers["scale_to_meters"]),
-                "evidence": "实测",
-                "anchor": {"id": "markers", "label": "标记纸"},
-                "reason": "scene already in metres via the markers stage",
-            })
             return _write_record(job_dir, record)
 
     poses_path = job_dir / "poses.json"

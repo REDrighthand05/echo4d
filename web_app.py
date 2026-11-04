@@ -36,8 +36,8 @@ from echo_app.version import APP_VERSION
 # table-driven so the snapshot and the save path cannot drift.
 _APPEARANCE_KEYS = [
     ("motionOn", "motion_on"), ("theme", "theme"),
-    ("brightness", "brightness"), ("veil", "veil"),
-    ("workVeil", "work_veil"), ("setVeil", "set_veil"),
+    ("brightness", "brightness"), ("particleDensity", "particle_density"),
+    ("veil", "veil"), ("workVeil", "work_veil"), ("setVeil", "set_veil"),
 ]
 
 
@@ -544,14 +544,6 @@ class Bridge:
         if self.depth_out is None:
             return self._open_target(None, "深度视频")
         return self._open_target(Path(self.depth_out), "深度视频")
-
-    def print_markers(self):
-        try:
-            backend.open_marker_sheet()
-            return {"ok": True}
-        except Exception as exc:
-            self._log(f"标记纸打开失败：{exc}")
-            return {"ok": False}
 
     # -- live preview -----------------------------------------------------
     def _on_job_started(self, job):

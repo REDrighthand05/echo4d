@@ -1,9 +1,10 @@
 "use strict";
 /* ECHO web shell.
-   Layers, back to front: the baked ambient picture (one seamless
-   loop, played by a plain video element) -- the scene echo while
-   a job runs -- one static translucent veil -- borderless
-   transparent components.
+   Layers, back to front: the baked ambient picture (seamless
+   loops on two stacked video layers, crossfaded) -- the GPU
+   particle layer (the one live layer, hard-capped, see below)
+   -- the scene echo while a job runs -- one static translucent
+   veil -- borderless transparent components.
 
    Since v0.6.12 the ambience is a finished file, not a live
    render: the old bead wall and its full-window backdrop blur
@@ -36,14 +37,23 @@ let bridgeMode = "waiting";   // "waiting" -> "real" | "demo"
 /* them live, and each change is saved back through the bridge.     */
 /* ------------------------------------------------------------------ */
 const AMBIENT_THEMES = {
-  lightfield: { mp4: "assets/ambient/lightfield.mp4",
-                poster: "assets/ambient/lightfield.jpg" },
+  graffiti: { mp4: "assets/ambient/graffiti.mp4",
+              poster: "assets/ambient/graffiti.jpg" },
+  rings: { mp4: "assets/ambient/rings.mp4",
+           poster: "assets/ambient/rings.jpg" },
 };
 const APPEARANCE_DEFAULTS = {
-  motionOn: true, theme: "lightfield", brightness: 100,
+  motionOn: true, theme: "graffiti", brightness: 100, particleDensity: 85,
   veil: 0.26, workVeil: 0.05, setVeil: 0.72,
 };
 let appearance = { ...APPEARANCE_DEFAULTS };
+
+/* two stacked video layers; a theme switch loads the incoming
+   loop on the idle layer and crossfades opacity (~0.65 s, the
+   .amb-layer transition), then parks the old layer paused. The
+   switch runs only when the theme NAME changes, so dragging
+   any slider never reloads a video. */
+const ambStack = { active: null, idle: null, theme: null };
 
 function applyAppearance() {
   const a = appearance, root = document.documentElement.style;
@@ -51,21 +61,38 @@ function applyAppearance() {
   root.setProperty("--veil-w", a.workVeil);
   root.setProperty("--set-veil", a.setVeil);
   root.setProperty("--amb-bright", a.brightness + "%");
-  const vid = document.getElementById("amb");
-  if (vid) {
-    const theme = AMBIENT_THEMES[a.theme] || AMBIENT_THEMES.lightfield;
-    if (vid.dataset.theme !== a.theme) {
-      vid.dataset.theme = a.theme;
-      vid.poster = theme.poster;
-      vid.src = theme.mp4;
+  if (!ambStack.active) {
+    ambStack.active = document.getElementById("amb-a");
+    ambStack.idle = document.getElementById("amb-b");
+    ambStack.theme = ambStack.active ? ambStack.active.dataset.theme : null;
+  }
+  if (ambStack.active) {
+    const want = AMBIENT_THEMES[a.theme] ? a.theme : "graffiti";
+    if (ambStack.theme !== want) {
+      const from = ambStack.active, to = ambStack.idle;
+      const f = AMBIENT_THEMES[want];
+      if (to.dataset.theme !== want) {
+        to.poster = f.poster;
+        to.src = f.mp4;
+        to.dataset.theme = want;
+        to.load();
+      }
+      if (a.motionOn) { const p = to.play(); if (p) p.catch(() => {}); }
+      to.classList.add("on");
+      from.classList.remove("on");
+      ambStack.active = to;
+      ambStack.idle = from;
+      ambStack.theme = want;
+      setTimeout(() => { if (ambStack.idle === from) from.pause(); }, 750);
     }
     if (a.motionOn) {
-      const p = vid.play();
+      const p = ambStack.active.play();
       if (p) p.catch(() => {});
     } else {
-      vid.pause();   // hold the current frame: a still picture
+      ambStack.active.pause();   // hold the current frame: a still
     }
   }
+  ptsApply();
 }
 
 let appearanceSaveTimer = null;
@@ -86,6 +113,193 @@ function mulberry32(seed) {
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
 }
+
+/* ------------------------------------------------------------------ */
+/* the particle layer: the 3D mist dots + pointer dodge the user    */
+/* ordered kept -- but NOT on the old DOM/2D road. One WebGL canvas, */
+/* one draw call per frame, positions in a single dynamic buffer.   */
+/* Hard caps: PTS_MAX particles whatever the setting says, DPR      */
+/* capped at 1.5. The loop runs only while the window is visible    */
+/* AND focused AND motion is on; otherwise it draws one frozen      */
+/* frame and stops -- an idle or hidden app pays nothing for it.    */
+/* The dodge is one distance check per particle per frame; nothing  */
+/* here reads layout, moves DOM, or rebuilds on resize (positions   */
+/* live in a virtual stage and map to NDC arithmetically, so a      */
+/* window drag costs this layer exactly nothing extra).             */
+/* ------------------------------------------------------------------ */
+const PTS_MAX = 3600;
+const PTS_DPR_CAP = 1.5;
+const PTS_VW = 1600, PTS_VH = 900;
+const pts = {
+  gl: null, failed: false, posBuf: null, uPx: null,
+  posArr: new Float32Array(PTS_MAX * 2),
+  home: new Float32Array(PTS_MAX * 2),
+  off: new Float32Array(PTS_MAX * 2),
+  vel: new Float32Array(PTS_MAX * 2),
+  z: new Float32Array(PTS_MAX),
+  phase: new Float32Array(PTS_MAX),
+  count: 0, raf: 0, focused: true,
+  mx: -9999, my: -9999,
+};
+
+function ptsInit() {
+  const cv = document.getElementById("pts");
+  if (!cv) { pts.failed = true; return; }
+  let gl = null;
+  try {
+    gl = cv.getContext("webgl", { alpha: true, antialias: false,
+                                  depthWrite: false, depthTest: false });
+  } catch (e) { gl = null; }
+  if (!gl) { pts.failed = true; cv.style.display = "none"; return; }
+  const sh = (type, src) => {
+    const s = gl.createShader(type);
+    gl.shaderSource(s, src);
+    gl.compileShader(s);
+    if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error("shader");
+    return s;
+  };
+  try {
+    const prog = gl.createProgram();
+    gl.attachShader(prog, sh(gl.VERTEX_SHADER,
+      "attribute vec2 aPos; attribute float aZ; attribute float aSize;" +
+      "varying float vZ; uniform float uPx;" +
+      "void main(){ vZ = aZ; gl_Position = vec4(aPos, 0.0, 1.0);" +
+      " gl_PointSize = aSize * (0.45 + 0.95 * aZ) * uPx; }"));
+    gl.attachShader(prog, sh(gl.FRAGMENT_SHADER,
+      "precision mediump float; varying float vZ;" +
+      "void main(){ float d = length(gl_PointCoord - 0.5);" +
+      " float a = smoothstep(0.5, 0.08, d) * (0.05 + 0.15 * vZ);" +
+      " gl_FragColor = vec4(0.34, 0.44, 0.62, a); }"));
+    gl.linkProgram(prog);
+    if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error("link");
+    gl.useProgram(prog);
+    pts.uPx = gl.getUniformLocation(prog, "uPx");
+
+    const rnd = mulberry32(20261104);
+    const misc = new Float32Array(PTS_MAX * 2);   // aZ, aSize pairs
+    for (let i = 0; i < PTS_MAX; i++) {
+      pts.home[i * 2] = rnd() * PTS_VW;
+      pts.home[i * 2 + 1] = rnd() * PTS_VH;
+      pts.z[i] = Math.pow(rnd(), 1.6);
+      pts.phase[i] = rnd() * Math.PI * 2;
+      misc[i * 2] = pts.z[i];
+      misc[i * 2 + 1] = 2.0 + pts.z[i] * 3.4 + rnd() * 1.2;
+    }
+    const miscBuf = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, miscBuf);
+    gl.bufferData(gl.ARRAY_BUFFER, misc, gl.STATIC_DRAW);
+    const aZ = gl.getAttribLocation(prog, "aZ");
+    const aSize = gl.getAttribLocation(prog, "aSize");
+    gl.enableVertexAttribArray(aZ);
+    gl.vertexAttribPointer(aZ, 1, gl.FLOAT, false, 8, 0);
+    gl.enableVertexAttribArray(aSize);
+    gl.vertexAttribPointer(aSize, 1, gl.FLOAT, false, 8, 4);
+    pts.posBuf = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, pts.posBuf);
+    gl.bufferData(gl.ARRAY_BUFFER, pts.posArr, gl.DYNAMIC_DRAW);
+    const aPos = gl.getAttribLocation(prog, "aPos");
+    gl.enableVertexAttribArray(aPos);
+    gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+    pts.gl = gl;
+    ptsResize();
+  } catch (e) {
+    pts.failed = true;
+    cv.style.display = "none";
+  }
+}
+
+function ptsResize() {
+  const cv = document.getElementById("pts");
+  if (!cv || !pts.gl) return;
+  const dpr = Math.min(window.devicePixelRatio || 1, PTS_DPR_CAP);
+  cv.width = Math.max(1, Math.round(window.innerWidth * dpr));
+  cv.height = Math.max(1, Math.round(window.innerHeight * dpr));
+  pts.gl.viewport(0, 0, cv.width, cv.height);
+  pts.gl.uniform1f(pts.uPx, cv.height / Math.max(1, window.innerHeight));
+}
+
+function ptsWanted() {
+  return !!pts.gl && appearance.motionOn && !document.hidden
+    && pts.focused && pts.count > 0;
+}
+
+function ptsDraw(now) {
+  const gl = pts.gl;
+  if (!gl) return;
+  const w = window.innerWidth, h = window.innerHeight;
+  const s = Math.max(w / PTS_VW, h / PTS_VH);
+  const ox = (w - PTS_VW * s) / 2, oy = (h - PTS_VH * s) / 2;
+  const mx = (pts.mx - ox) / s, my = (pts.my - oy) / s;
+  const tt = now / 1000, R = 130;
+  const pos = pts.posArr, home = pts.home, off = pts.off, vel = pts.vel;
+  for (let i = 0; i < pts.count; i++) {
+    const j = i * 2, zz = pts.z[i], ph = pts.phase[i];
+    const sway = 0.4 + zz;
+    let px = home[j] + off[j] + Math.sin(tt * 0.13 * sway + ph) * 11 * sway;
+    let py = home[j + 1] + off[j + 1]
+      + Math.cos(tt * 0.10 * sway + ph * 1.3) * 7 * sway;
+    const dx = px - mx, dy = py - my, d2 = dx * dx + dy * dy;
+    if (d2 < R * R && d2 > 0.01) {
+      const d = Math.sqrt(d2), f = (1 - d / R) * 3.0;
+      vel[j] += (dx / d) * f;
+      vel[j + 1] += (dy / d) * f;
+    }
+    vel[j] += -off[j] * 0.016;
+    vel[j + 1] += -off[j + 1] * 0.016;
+    vel[j] *= 0.90;
+    vel[j + 1] *= 0.90;
+    off[j] += vel[j];
+    off[j + 1] += vel[j + 1];
+    px = home[j] + off[j] + Math.sin(tt * 0.13 * sway + ph) * 11 * sway;
+    py = home[j + 1] + off[j + 1]
+      + Math.cos(tt * 0.10 * sway + ph * 1.3) * 7 * sway;
+    pos[j] = ((px * s + ox) / w) * 2 - 1;
+    pos[j + 1] = 1 - ((py * s + oy) / h) * 2;
+  }
+  gl.clearColor(0, 0, 0, 0);
+  gl.clear(gl.COLOR_BUFFER_BIT);
+  if (pts.count > 0) {
+    gl.bindBuffer(gl.ARRAY_BUFFER, pts.posBuf);
+    gl.bufferSubData(gl.ARRAY_BUFFER, 0, pos.subarray(0, pts.count * 2));
+    gl.drawArrays(gl.POINTS, 0, pts.count);
+  }
+}
+
+function ptsTick(now) {
+  if (!ptsWanted()) {
+    pts.raf = 0;
+    ptsDraw(now);          // one frozen frame, then fully stopped
+    return;
+  }
+  ptsDraw(now);
+  pts.raf = requestAnimationFrame(ptsTick);
+}
+
+function ptsApply() {
+  if (!pts.gl && !pts.failed) ptsInit();
+  if (!pts.gl) return;
+  const d = Math.max(0, Math.min(100, appearance.particleDensity || 0));
+  pts.count = Math.round(PTS_MAX * d / 100);
+  if (ptsWanted()) {
+    if (!pts.raf) pts.raf = requestAnimationFrame(ptsTick);
+  } else if (!pts.raf) {
+    ptsDraw(performance.now());
+  }
+}
+
+window.addEventListener("pointermove", e => {
+  pts.mx = e.clientX;
+  pts.my = e.clientY;
+}, { passive: true });
+window.addEventListener("blur", () => { pts.focused = false; ptsApply(); });
+window.addEventListener("focus", () => { pts.focused = true; ptsApply(); });
+document.addEventListener("visibilitychange", () => ptsApply());
+window.addEventListener("resize", () => {
+  ptsResize();
+  if (!pts.raf) ptsDraw(performance.now());
+});
 
 /* ------------------------------------------------------------------ */
 /* the scene echo: while a job runs, its frames ghost through the   */
@@ -178,7 +392,6 @@ function refresh() {
   en("btn-route", state.jobOutputs.replay && !state.busy);
   en("btn-depth", !state.busy);
   en("btn-playdepth", state.depthReady && !state.busy);
-  en("btn-markers", !state.busy);
   $("breathdot").classList.toggle("busy", state.busy);
 }
 function selectVideo(name, path) {
@@ -367,11 +580,6 @@ $("btn-route").addEventListener("click", async () => {
   if (bridge) { await bridge.open_route_replay(state.jobDir); return; }
   log("路线回放（演示）。");
 });
-$("btn-markers").addEventListener("click", async () => {
-  if (bridge) { await bridge.print_markers(); return; }
-  log("打印标记纸（演示）。");
-});
-
 /* history */
 function renderHistory(items) {
   state.lastHistory = items;
@@ -503,6 +711,7 @@ $("set-tray").addEventListener("change", async e => {
 const AP_RANGES = [
   // [element id, appearance key, value format]
   ["ap-brightness", "brightness", v => Math.round(v) + "%"],
+  ["ap-particle-density", "particleDensity", v => Math.round(v) + "%"],
   ["ap-veil", "veil", v => v.toFixed(2)],
   ["ap-work-veil", "workVeil", v => v.toFixed(2)],
   ["ap-set-veil", "setVeil", v => v.toFixed(2)],

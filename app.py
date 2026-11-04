@@ -66,7 +66,6 @@ PLAIN_STATUS = {
     "正在抽帧": "正在看画面",
     "正在挑清晰的帧": "正在挑清楚的画面",
     "正在算相机轨迹": "正在找回拍摄的路线",
-    "正在认标记纸": "正在认标记纸",
     "正在算每帧的远近": "正在量每处的远近",
     "正在拼场景": "正在拼场景",
     "正在清噪": "正在把场景收拾干净",
@@ -90,27 +89,12 @@ def _resource_path(relative: str) -> Path:
     return Path(__file__).resolve().parent / relative
 
 
-def open_marker_sheet() -> Path:
-    """Open the printable marker sheet PDF with the system viewer."""
-    pdf = _resource_path("assets/markers_sheet.pdf")
-    if not pdf.exists():
-        raise FileNotFoundError(str(pdf))
-    if sys.platform.startswith("win"):
-        os.startfile(str(pdf))  # noqa: S606 - opening our own bundled PDF
-    elif sys.platform == "darwin":
-        subprocess.Popen(["open", str(pdf)])
-    else:
-        subprocess.Popen(["xdg-open", str(pdf)])
-    return pdf
-
-
 def run_pipeline(video: Path, jobs_root: Path, log, job_sink=None) -> Path:
     """Run every stage in order. log(str) receives human progress
     lines; job_sink(job_dir), when given, is called once the job
     folder exists (the live preview watches it from there)."""
     from echo_scene.pipeline import stage_depth, stage_extract, stage_present, stage_select
     from echo_scene.pipeline import stage_clean, stage_mesh, stage_poses, stage_preview, stage_replay, stage_scale, stage_voxel
-    from echo_scene.markers import stage_markers
     from echo_scene.fuse import stage_fuse
 
     job = jobs_root / f"job_{video.stem[:24]}"
@@ -150,7 +134,6 @@ def run_pipeline(video: Path, jobs_root: Path, log, job_sink=None) -> Path:
         ("正在抽帧", lambda: stage_extract(video, job)),
         ("正在挑清晰的帧", lambda: stage_select(job)),
         ("正在算相机轨迹", lambda: stage_poses(job)),
-        ("正在认标记纸", lambda: stage_markers(job)),
         ("正在算每帧的远近", lambda: stage_depth(job)),
         ("正在拼场景", lambda: stage_fuse(job)),
         ("正在清噪", lambda: stage_clean(job)),
@@ -714,13 +697,6 @@ def main():
     btn_depth_play = pill(depth_btn_row, "播放深度视频", font_size=12,
                           state="disabled")
     btn_depth_play.pack(side="left", padx=(8, 0))
-
-    # Marker-sheet tile.
-    marker_tile = make_tile(2, 1, padx=(4, 0))
-    tile_header(marker_tile, "grid", "打印标记纸",
-                "打印出来贴在房间里，帮场景认准大小。")
-    btn_markers = pill(marker_tile, "打印标记纸", primary=True, font_size=12)
-    btn_markers.pack(anchor="w", padx=14, pady=(2, 12))
 
     # Settings tile: a slim strip under the grid. The tile itself only
     # opens the settings view; the desc line mirrors where jobs go and
@@ -1426,13 +1402,6 @@ def main():
     def open_replay():
         ensure_and_open("replay", state["job"])
 
-    def print_markers():
-        try:
-            open_marker_sheet()
-            log("已打开标记纸：打印时选实际大小（100%），0 号平贴地板，1-3 号贴墙。")
-        except Exception:
-            messagebox.showerror("打不开", "没找到标记纸文件（assets/markers_sheet.pdf）。")
-
     def selected_history_job():
         sel = hist_list.curselection()
         if sel and sel[0] < len(state["history"]):
@@ -1695,7 +1664,6 @@ def main():
     btn_hist_folder.configure(command=open_history_folder)
     btn_hist_preview.configure(command=open_history_preview)
     btn_hist_replay.configure(command=open_history_replay)
-    btn_markers.configure(command=print_markers)
     btn_depth.configure(command=pick_depth)
     btn_depth_play.configure(command=play_depth)
     btn_settings.configure(command=open_settings)
@@ -1783,7 +1751,7 @@ def main():
 
             tracked = [hist_list]
             for fr in (header, band, hero, hist_tile, depth_tile,
-                       marker_tile, settings_tile, panel):
+                       settings_tile, panel):
                 _collect(fr, tracked)
             wall.track_labels(tracked)
             wall.track_grout([outer, center, tiles])

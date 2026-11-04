@@ -7,15 +7,13 @@ Stages (each writes into the job dir and updates job.json):
                 dead frames dropped, legacy grid unioned in)
   2. poses    - COLMAP SfM camera trajectory (single camera) plus
                 two-hop PnP relocalization of unregistered frames
-  3. markers  - printed AprilTag sheet -> metric scale + floor level
-                (optional; writes markers.json, no-op without markers)
-  4. depth    - per-frame metric-aligned depth           (later milestone)
-  5. fuse     - per-frame depth fusion + corroboration trim
-  6. clean    - continuity cleanup: keep the connected main body
-  6b. scale   - true-scale anchoring: find a standard-size reference
+  3. depth    - per-frame metric-aligned depth           (later milestone)
+  4. fuse     - per-frame depth fusion + corroboration trim
+  5. clean    - continuity cleanup: keep the connected main body
+  5b. scale   - true-scale anchoring: find a standard-size reference
                 object (catalogue in echo_scene/scale.py) and rescale
                 the scene to metres; unknown scale never blocks a job
-  7. present  - standalone scene.html (data embedded, opens as a file)
+  6. present  - standalone scene.html (data embedded, opens as a file)
   mesh        - optional surface mesh via echo_scene.mesh, after fuse;
                 best-effort, skipped quietly when the module is absent
   voxel       - frozen voxel solidification, after mesh; best-effort
@@ -1147,10 +1145,6 @@ def main(argv):
         info = stage_poses(Path(argv[2]).resolve())
     elif len(argv) >= 2 and argv[1] == "select" and len(argv) == 3:
         info = stage_select(Path(argv[2]).resolve())
-    elif len(argv) >= 2 and argv[1] == "markers" and len(argv) == 3:
-        from echo_scene.markers import stage_markers
-
-        info = stage_markers(Path(argv[2]).resolve())
     elif len(argv) >= 2 and argv[1] == "depth" and len(argv) == 3:
         info = stage_depth(Path(argv[2]).resolve())
     elif len(argv) >= 2 and argv[1] == "fuse" and len(argv) == 3:

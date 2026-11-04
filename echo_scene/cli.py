@@ -141,7 +141,6 @@ def _run_steps(job: Path):
     """The desktop app's stage sequence (app.run_pipeline), driven
     headless: same stages, same order, same pipeline functions."""
     from echo_scene.fuse import stage_fuse
-    from echo_scene.markers import stage_markers
     from echo_scene.pipeline import (stage_clean, stage_depth,
                                      stage_extract, stage_mesh,
                                      stage_poses, stage_present,
@@ -157,7 +156,6 @@ def _run_steps(job: Path):
         ("正在抽帧", lambda: stage_extract(Path(video), job)),
         ("正在挑清晰的帧", lambda: stage_select(job)),
         ("正在算相机轨迹", lambda: stage_poses(job)),
-        ("正在认标记纸", lambda: stage_markers(job)),
         ("正在算每帧的远近", lambda: stage_depth(job)),
         ("正在拼场景", lambda: stage_fuse(job)),
         ("正在清噪", lambda: stage_clean(job)),
