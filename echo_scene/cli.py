@@ -15,6 +15,9 @@ settings). Every subcommand reuses the existing pipeline stages and
 modules -- this file is only argument parsing, sequencing and
 reporting. Progress goes to stdout, failures to stderr, and the exit
 code carries the verdict: 0 ok, 1 failed, 2 usage error (argparse).
+Each finished command also leaves one activity-event line for the
+desktop frontend's silent toast strip (echo_app.cli_events) --
+best-effort only; a failed event write changes nothing here.
 """
 from __future__ import annotations
 
@@ -38,6 +41,12 @@ KNOWN_ARTIFACTS = {
 }
 VOXEL_FORMATS = {"voxel": ("glb", "ply"), "voxel-glb": ("glb",),
                  "voxel-ply": ("ply",)}
+
+# The one output name a depth-video / export command produced, set
+# by the command itself just before it reports success, so the
+# activity event (below) can name the actual file. Purely cosmetic
+# -- nothing branches on it.
+_EVENT_DETAIL = {"out": ""}
 
 
 def default_jobs_root() -> Path:
@@ -217,6 +226,7 @@ def cmd_depth_video(args) -> int:
         print(f"depth-video: failed: {info.get('reason', '未知原因')}",
               file=sys.stderr)
         return 1
+    _EVENT_DETAIL["out"] = out.name
     print(f"depth video: {out}")
     return 0
 
@@ -239,6 +249,11 @@ def cmd_export(args) -> int:
             job, out_dir=Path(args.out) if args.out else None,
             voxel_size=args.voxel_size, formats=VOXEL_FORMATS[fmt])
         print(json.dumps(info, ensure_ascii=False, indent=2))
+        if info.get("ok") and info.get("files"):
+            files = info["files"]
+            pick = files.get("glb") or next(iter(files.values()), "")
+            if pick:
+                _EVENT_DETAIL["out"] = Path(pick).name
         return 0 if info.get("ok") else 1
     name = KNOWN_ARTIFACTS[fmt]
     src = job / name
@@ -252,6 +267,7 @@ def cmd_export(args) -> int:
         dest = out / name if out.is_dir() or not out.suffix else out
         dest.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(src, dest)
+    _EVENT_DETAIL["out"] = dest.name
     print(f"exported: {dest}")
     return 0
 
@@ -338,9 +354,64 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+# -------------------------------------------------------------------
+# activity events (the frontend's silent toast strip)
+# -------------------------------------------------------------------
+
+def _summary_for(args, rc: int) -> str:
+    """One product-language line describing what the command just
+    did -- the words the desktop frontend's toast shows."""
+    ok = rc == 0
+    cmd = getattr(args, "command", "?")
+    out = _EVENT_DETAIL["out"]
+    if cmd == "import":
+        src = Path(args.source)
+        label = (src.stem if src.suffix.lower() in VIDEO_SUFFIXES
+                 else src.name)
+        return f"已导入 {label}" if ok else f"导入 {label} 失败"
+    if cmd == "run":
+        label = Path(args.job).name
+        return f"{label} 跑完" if ok else f"{label} 没跑成"
+    if cmd == "depth-video":
+        if ok:
+            return f"深度视频做好了：{out}" if out else "深度视频做好了"
+        return "深度视频没做成"
+    if cmd == "export":
+        label = Path(args.job).name
+        if ok:
+            return (f"已导出 {out}" if out
+                    else f"已导出 {label} 的 {args.format}")
+        return f"导出 {label} 失败"
+    if cmd == "status":
+        return "查了状态" if ok else "查状态失败"
+    return f"{cmd} 完成" if ok else f"{cmd} 失败"
+
+
+def _emit_event(args, rc: int) -> None:
+    """Leave one event line for the desktop frontend (see
+    echo_app.cli_events): every finished command, success or
+    failure, so the user can eyeball that the CLI is alive from
+    inside the app. Fully contained -- reporting must never change
+    a command's behaviour or its exit code."""
+    try:
+        from echo_app import cli_events
+
+        cli_events.append_event(getattr(args, "command", "?"),
+                                rc == 0, _summary_for(args, rc))
+    except Exception:
+        pass
+
+
 def main(argv=None) -> int:
     args = build_parser().parse_args(argv)
-    return args.fn(args)
+    _EVENT_DETAIL["out"] = ""
+    try:
+        rc = args.fn(args)
+    except Exception:
+        _emit_event(args, 1)
+        raise
+    _emit_event(args, rc)
+    return rc
 
 
 if __name__ == "__main__":

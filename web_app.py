@@ -27,6 +27,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import app as backend  # the desktop shell's module-level backend
+from echo_app import cli_events
 from echo_app.settings import coerce_appearance, load_settings, save_settings
 from echo_app.version import APP_VERSION
 
@@ -93,6 +94,7 @@ class Bridge:
         self._all_log = []
         self._hist_sig = None
         self._inbox_sig = None
+        self._cli_cursor = cli_events.load_cursor()
         self._preview_seq = 0
         self._preview_data = None
         self._preview_stop = threading.Event()
@@ -253,6 +255,31 @@ class Bridge:
             return {"ok": False, "message": "这段采集还没传完。"}
         return self.select_video_path(cap / "video.mp4")
 
+    # -- CLI activity (silent toasts) ---------------------------------
+    # The headless CLI is a separate process; it leaves one JSON
+    # line per finished command in the settings folder (see
+    # echo_app.cli_events), and the page shows each as a one-line
+    # silent toast -- the user's eyeball check that the CLI is
+    # alive. The cursor (highest seq already handed to the page)
+    # persists in the same folder, so a restart never replays old
+    # news: the snapshot catches up only unpresented events from
+    # the last ten minutes, while poll drains new ones as they
+    # land. Events skipped as stale still advance the cursor.
+    def _drain_cli_events(self, recent_only=False):
+        try:
+            events, hi = cli_events.read_since(self._cli_cursor)
+            if hi > self._cli_cursor:
+                self._cli_cursor = hi
+                cli_events.save_cursor(hi)
+            if recent_only:
+                cutoff = time.time() - 600
+                events = [e for e in events
+                          if float(e.get("ts", 0)) >= cutoff]
+            return [{"cmd": e.get("cmd"), "ok": bool(e.get("ok")),
+                     "summary": e.get("summary", "")} for e in events]
+        except Exception:
+            return []
+
     # -- snapshot + polling ------------------------------------------
     def get_snapshot(self):
         hist = self._history()
@@ -274,6 +301,7 @@ class Bridge:
             "frac": self.frac,
             "busy": self.busy,
             "log": list(self._all_log),
+            "cliEvents": self._drain_cli_events(recent_only=True),
         }
 
     def poll(self):
@@ -289,6 +317,9 @@ class Bridge:
             "update": self.update,
         }
         self._pending_log = []
+        cli_new = self._drain_cli_events()
+        if cli_new:
+            out["cliEvents"] = cli_new
         hist = self._history()
         sig = json.dumps(hist, ensure_ascii=False)
         if sig != self._hist_sig:

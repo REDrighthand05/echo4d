@@ -247,6 +247,70 @@ def main():
     finally:
         del os.environ["ECHO_INBOX_DIR"]
 
+    # -- CLI activity events -> silent toasts ----------------------
+    # The CLI is a separate process; its event file in the settings
+    # folder is the only channel. The snapshot catches up
+    # unpresented events from the last ten minutes (older ones are
+    # skipped but still consumed), poll drains new ones as they
+    # land, and the cursor persists -- a fresh bridge never replays
+    # what the page was already given.
+    from echo_app import cli_events
+
+    real_dir = cli_events.settings_dir
+    state_dir = tmp / "state"
+    cli_events.settings_dir = lambda: state_dir
+    try:
+        now = time.time()
+        cli_events.append_event("import", True, "已导入 capture_x",
+                                ts=now - 60)
+        cli_events.append_event("run", False, "job_x 没跑成",
+                                ts=now - 3600)
+        cli_events.append_event("export", True, "已导出 scene.glb",
+                                ts=now - 30)
+        b2 = web_app.Bridge()
+        snap = b2.get_snapshot()
+        shown = [e["summary"] for e in snap.get("cliEvents", [])]
+        check("snapshot catches up recent unpresented CLI events only",
+              shown == ["已导入 capture_x", "已导出 scene.glb"],
+              str(shown))
+        check("snapshot does not hand them out twice",
+              b2.get_snapshot().get("cliEvents") == [])
+        cli_events.append_event("status", True, "查了状态",
+                                ts=time.time())
+        poll = b2.poll()
+        check("poll drains a CLI event landing while the app runs",
+              [e["summary"] for e in poll.get("cliEvents", [])]
+              == ["查了状态"])
+        check("poll stays silent once drained",
+              "cliEvents" not in b2.poll())
+        b3 = web_app.Bridge()
+        check("a fresh bridge does not replay presented events",
+              b3.get_snapshot().get("cliEvents") == [])
+        check("cursor persisted in the settings folder",
+              (state_dir / "cli_events_seen").exists()
+              and cli_events.load_cursor() == 4)
+    finally:
+        cli_events.settings_dir = real_dir
+
+    # Frontend wiring for the toast strip (static checks: the page
+    # carries the host column, consumes cliEvents from both the
+    # snapshot and poll, and styles the toasts in the glass
+    # language with the sheet's own variables).
+    ui = Path(web_app.__file__).resolve().parent / "web_ui"
+    html = (ui / "index.html").read_text(encoding="utf-8")
+    js = (ui / "app.js").read_text(encoding="utf-8")
+    css = (ui / "style.css").read_text(encoding="utf-8")
+    check("page carries the CLI toast column",
+          'id="cli-toasts"' in html)
+    check("page consumes cliEvents from snapshot + poll",
+          "snap.cliEvents" in js and "out.cliEvents" in js
+          and "queueCliToasts" in js and "pumpCliToasts" in js)
+    check("toasts cap at three live and retire on a timer",
+          "cliToastLive < 3" in js and "6000" in js)
+    check("toast styles ride the glass variables",
+          ".cli-toast" in css and "var(--glass-bg)" in css
+          and "pointer-events: none" in css)
+
     print(f"FAILURES: {len(failures)}")
     return 1 if failures else 0
 

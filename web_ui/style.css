@@ -603,6 +603,42 @@ body.working #sheen { opacity: 0; }
 }
 #logtab:hover { color: var(--ink); background: var(--grey-hover); }
 
+/* -- CLI activity toasts --------------------------------------------------
+   One silent line per finished CLI command, stacked down the right
+   side in the sheet's own glass. Purely presentational: the column
+   takes no pointer events, steals no focus, and each toast fades
+   out on its own (app.js retires them after ~6 s, at most 3 live). */
+#cli-toasts {
+  position: fixed; top: 96px; right: 16px; z-index: 80;
+  display: flex; flex-direction: column; gap: 8px;
+  width: 308px; pointer-events: none;
+}
+.cli-toast {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 12px; border-radius: var(--r-row);
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-edge);
+  box-shadow: var(--glass-shadow);
+  -webkit-backdrop-filter: blur(var(--frost-blur)) saturate(var(--frost-sat));
+  backdrop-filter: blur(var(--frost-blur)) saturate(var(--frost-sat));
+  color: var(--ink); font-size: 12.5px; line-height: 1.35;
+  opacity: 0; transform: translateX(12px);
+  transition: opacity 0.35s ease, transform 0.35s ease;
+}
+.cli-toast.show { opacity: 1; transform: none; }
+.cli-toast .cli-dot {
+  flex: none; width: 8px; height: 8px; border-radius: 50%;
+  background: #2e9e5b;
+}
+.cli-toast.bad .cli-dot { background: #d64545; }
+.cli-toast .cli-tag {
+  flex: none; font-weight: 600; letter-spacing: 0.04em;
+  color: var(--subink);
+}
+.cli-toast .cli-text {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
 /* -- settings page: browser layout ---------------------------------
    Left category nav, a search pill in the header, and on the right
    grouped cards whose rows are full-width entries (title + note on

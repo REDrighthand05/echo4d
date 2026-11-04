@@ -993,6 +993,49 @@ $("pvcanvas").addEventListener("wheel", e => {
 $("pvcanvas").addEventListener("contextmenu", e => e.preventDefault());
 $("pvcanvas").addEventListener("dblclick", () => $("btn-full").click());
 
+/* CLI activity toasts: one silent line per finished CLI command,
+   down the right side of the sheet. The bridge drains the CLI's
+   event file (snapshot catch-up + poll), this side only displays:
+   at most three live, the rest queue in order, each lives ~6 s.
+   No focus, no sound, no clicks -- an eyeball check, nothing more. */
+const cliToastQueue = [];
+let cliToastLive = 0;
+function queueCliToasts(events) {
+  (events || []).forEach(ev => {
+    if (ev && ev.summary) cliToastQueue.push(ev);
+  });
+  pumpCliToasts();
+}
+function pumpCliToasts() {
+  const host = $("cli-toasts");
+  if (!host) return;
+  while (cliToastLive < 3 && cliToastQueue.length) {
+    const ev = cliToastQueue.shift();
+    cliToastLive++;
+    const el = document.createElement("div");
+    el.className = "cli-toast" + (ev.ok ? "" : " bad");
+    const dot = document.createElement("span");
+    dot.className = "cli-dot";
+    const tag = document.createElement("span");
+    tag.className = "cli-tag";
+    tag.textContent = "CLI";
+    const text = document.createElement("span");
+    text.className = "cli-text";
+    text.textContent = ev.summary;
+    el.append(dot, tag, text);
+    host.appendChild(el);
+    requestAnimationFrame(() => el.classList.add("show"));
+    setTimeout(() => {
+      el.classList.remove("show");
+      setTimeout(() => {
+        el.remove();
+        cliToastLive--;
+        pumpCliToasts();
+      }, 380);
+    }, 6000);
+  }
+}
+
 /* bridge boot + polling */
 async function initBridge() {
   const snap = await bridge.get_snapshot();
@@ -1016,6 +1059,7 @@ async function initBridge() {
       rebuildWall();
   }
   (snap.log || []).forEach(l => log(l));
+  queueCliToasts(snap.cliEvents);
   renderHistory(snap.history || []);
   renderInbox(snap.inbox || []);
   setStatus(snap.status, snap.frac);
@@ -1030,6 +1074,7 @@ async function initBridge() {
     if (!out.busy && wasBusy) setWorking(false);
     wasBusy = !!out.busy;
     (out.logs || []).forEach(l => log(l));
+    if (out.cliEvents) queueCliToasts(out.cliEvents);
     if (out.history) renderHistory(out.history);
     if (out.inbox) renderInbox(out.inbox);
     if (!out.busy && out.hasJob && !state.jobDir && out.jobOutputs) {
