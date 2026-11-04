@@ -410,6 +410,19 @@ function selectVideo(name, path) {
 $("win-min").addEventListener("click", () => { if (bridge) bridge.win_minimize(); });
 $("win-max").addEventListener("click", () => { if (bridge) bridge.win_toggle_max(); });
 $("win-close").addEventListener("click", () => { if (bridge) bridge.win_close(); });
+/* The titlebar is the window's drag region, and it carries working
+   buttons (the view tabs, the caption trio). pywebview starts a
+   window move whenever a mousedown bubbles up from inside a drag
+   region, so a press that begins on one of those buttons would
+   drag the window instead of pressing it. Swallow the bubble for
+   interactive targets only: the press still lands and clicks, the
+   window stays put. Presses on the strip's empty glass fall
+   through and drag as they should. */
+$("titlebar").addEventListener("mousedown", (e) => {
+  if (e.target.closest("button, a, input, select, textarea, [contenteditable]")) {
+    e.stopPropagation();
+  }
+});
 $("titlebar").addEventListener("dblclick", (e) => {
   if (e.target.closest(".tb-btns, #tabstrip")) return;
   if (bridge) bridge.win_toggle_max();

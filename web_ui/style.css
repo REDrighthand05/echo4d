@@ -152,19 +152,26 @@ body {
 .amb-layer {
   position: absolute; inset: 0;
   width: 100%; height: 100%;
-  object-fit: cover;
   opacity: 0;
   transition: opacity 0.65s ease;
 }
 .amb-layer.on { opacity: 1; }
-/* the one live layer: GPU mist particles over the picture,
-   under the veil. A single canvas, a single draw call per frame
-   (see app.js) -- it never touches layout. */
+.amb-layer > video, .amb-layer > img {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
+  object-fit: cover;
+}
+/* the one live layer: the graffiti theme's stroke particles over
+   the theme's still, under the veil. A single canvas, a single
+   draw call per frame (see app.js) -- it never touches layout.
+   Its opacity follows the theme crossfade (graffiti only). */
 #pts {
   position: fixed; inset: 0;
   z-index: 1;
   width: 100%; height: 100%;
   pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.65s ease;
 }
 #echo {
   position: fixed; inset: 0;

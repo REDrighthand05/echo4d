@@ -883,10 +883,16 @@ def main():
     _here = Path(__file__).resolve().parent / "web_ui" / "index.html"
     index = _here if _here.exists() else backend._resource_path(
         "web_ui/index.html")
+    # easy_drag stays OFF: pywebview's easy drag arms a window move
+    # on *every* mousedown anywhere in the page, which ate the
+    # settings sliders alive (the window chased the cursor out from
+    # under the thumb; only clicking could set a value). Dragging
+    # lives where it belongs -- the .pywebview-drag-region titlebar
+    # -- through pywebview's drag-region path alone.
     window = webview.create_window(
         "ECHO 回声", url=str(index),
         js_api=bridge, width=1040, height=836,
-        min_size=(880, 620), frameless=True,
+        min_size=(880, 620), frameless=True, easy_drag=False,
         background_color="#dbe2eb")
     bridge._window = window
     _polish_window(window)

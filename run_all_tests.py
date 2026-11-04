@@ -40,6 +40,7 @@ SUITES = [
     ("paths", [sys.executable, "tests/test_paths.py"]),
     ("paths", [sys.executable, "tests/test_depth_progress.py"]),
     ("webshell", [sys.executable, "tests/test_win_controls.py"]),
+    ("webshell", [sys.executable, "tests/test_window_drag.py"]),
     ("parts", [sys.executable, "tests/test_hwaccel.py"]),
     ("parts", [sys.executable, "tests/test_depth_batch.py"]),
     ("parts", [sys.executable, "tests/test_frame_feed.py"]),

@@ -8,22 +8,26 @@
 </head>
 <body>
 <!-- The ambience is a finished picture, not a live render
-     (the user's bake-it ruling): seamless loops baked offline by
-     tools/bake_ambient.py -- two themes, crossfaded on two stacked
-     video layers (opacity only). #pts is the one live layer the
-     user kept: mist particles on a single GPU canvas (WebGL
-     points, hard-capped, pauses when hidden/blurred), floating
-     above the picture and below the veil. Above everything, #veil
-     is a static translucent wash -- no backdrop-filter exists
-     anywhere in this shell. #echo stays the scene's own layer,
-     visible while a job runs. -->
+     (the user's bake-it ruling): assets baked offline by
+     tools/bake_ambient.py, crossfaded on two stacked layers
+     (opacity only). Theme rings plays its baked loop on the
+     layer's video element; theme graffiti is a baked still with
+     the strokes drawn by #pts -- the one live layer, whose
+     particles ARE the graffiti: they flow along the baked stroke
+     paths and part around the pointer (a single GPU canvas, one
+     draw call, hard-capped, pauses when hidden/blurred). Above
+     everything, #veil is a static translucent wash -- no
+     backdrop-filter exists anywhere in this shell. #echo stays
+     the scene's own layer, visible while a job runs. -->
 <div id="amb" aria-hidden="true">
-  <video class="amb-layer on" id="amb-a" data-theme="graffiti"
-         muted loop autoplay playsinline preload="auto"
-         poster="assets/ambient/graffiti.jpg"
-         src="assets/ambient/graffiti.mp4"></video>
-  <video class="amb-layer" id="amb-b"
-         muted loop playsinline preload="auto"></video>
+  <div class="amb-layer on" id="amb-a" data-theme="graffiti">
+    <img class="amb-still" src="assets/ambient/graffiti_base.jpg" alt="">
+    <video class="amb-vid" muted loop playsinline preload="auto"></video>
+  </div>
+  <div class="amb-layer" id="amb-b">
+    <img class="amb-still" alt="">
+    <video class="amb-vid" muted loop playsinline preload="auto"></video>
+  </div>
 </div>
 <canvas id="pts"></canvas>
 <canvas id="echo"></canvas>
