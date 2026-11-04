@@ -35,15 +35,9 @@ from echo_app.version import APP_VERSION
 # snake_case -- the same translation jobsRoot/updateProxy get,
 # table-driven so the snapshot and the save path cannot drift.
 _APPEARANCE_KEYS = [
-    ("frostBlur", "frost_blur"), ("frostVeil", "frost_veil"),
-    ("frostSaturate", "frost_saturate"), ("workHaze", "work_haze"),
-    ("setBlur", "set_blur"), ("setVeil", "set_veil"),
-    ("setSaturate", "set_saturate"), ("grafCount", "graf_count"),
-    ("grafWidth", "graf_width"), ("grafOpacity", "graf_opacity"),
-    ("grafSaturate", "graf_saturate"), ("mistDensity", "mist_density"),
-    ("mistSize", "mist_size"), ("motionOn", "motion_on"),
-    ("motionSpeed", "motion_speed"), ("motionAmp", "motion_amp"),
-    ("sheenOn", "sheen_on"),
+    ("motionOn", "motion_on"), ("theme", "theme"),
+    ("brightness", "brightness"), ("veil", "veil"),
+    ("workVeil", "work_veil"), ("setVeil", "set_veil"),
 ]
 
 

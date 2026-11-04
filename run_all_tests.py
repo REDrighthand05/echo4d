@@ -50,6 +50,7 @@ SUITES = [
     ("parts", [sys.executable, "tests/test_gaussian_adapter.py"]),
     ("parts", [sys.executable, "tests/test_photo_discovery.py"]),
     ("ledger", [sys.executable, "tests/test_versions_ledger.py"]),
+    ("desktop", [sys.executable, "tests/test_version.py"]),
 ]
 
 

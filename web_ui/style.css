@@ -1,11 +1,12 @@
-/* ECHO web shell -- Meta-style real glass, Chrome skeleton.
-   One continuous sheet: a living bead-graffiti wall behind,
-   translucent panels frosted by real backdrop blur, text with
-   no background at all (HTML text never had one). The window's
-   frame follows Chrome: a tab strip on top (views as tabs), one
-   toolbar row under it (nav cluster, omnibox capsule, overflow
-   menu), then the content. All colours come from the graffiti
-   blue plus Chrome's restrained greys -- no third palette.
+/* ECHO web shell -- light glass over a baked picture, Chrome
+   skeleton. One continuous sheet: a finished looping picture
+   behind (baked offline, haze inside it), one static
+   translucent veil over it, text with no background at all
+   (HTML text never had one). The window's frame follows
+   Chrome: a tab strip on top (views as tabs), one toolbar row
+   under it (nav cluster, omnibox capsule, overflow menu),
+   then the content. All colours come from the picture's blue
+   plus Chrome's restrained greys -- no third palette.
 
    v3 (user, 2026-11-04): the sheet is LIGHT glass, always -- it
    never flips dark. There is no black preview stage: while a
@@ -22,14 +23,25 @@
    through untouched, so the content sheet's ink flips light
    in that state only. The settings veil goes one notch
    deeper, its blur unchanged, and the wall behind it comes
-   through more saturated (v3 washed it out). */
+   through more saturated (v3 washed it out).
+
+   v5 (user, 2026-11-04): the wall is BAKED. The living bead
+   wall and every backdrop blur are gone -- they kept a
+   renderer at a full CPU core while the app idled and made
+   window drags stutter. The ambience is now one seamless
+   looping picture, baked offline (tools/bake_ambient.py)
+   with its haze already inside it, played by a plain video
+   element; the "glass" is a static translucent veil over it,
+   and the switchable-glass running state just thins that
+   veil. Nothing in this file blurs, and nothing decorative
+   repaints per frame. */
 
 :root {
   --ink: #14171a;
   --subink: #454f5a;
   --accent: #0064d1;
   --accent-hover: #0053ad;
-  --glass-bg: rgba(255, 255, 255, 0.47);
+  --glass-bg: rgba(255, 255, 255, 0.88);
   --glass-edge: rgba(255, 255, 255, 0.45);
   --glass-shadow: 0 10px 34px rgba(30, 50, 100, 0.10),
                   inset 0 1px 0 rgba(255, 255, 255, 0.65),
@@ -42,30 +54,23 @@
   --grey-hover: rgba(32, 33, 36, 0.07);
   --grey-press: rgba(32, 33, 36, 0.12);
   --grey-icon: #5f6368;
-  --frame-bg: rgba(255, 255, 255, 0.55);
+  --frame-bg: rgba(255, 255, 255, 0.78);
   --frame-shadow: 0 1px 3px rgba(30, 50, 100, 0.10);
   /* hairlines: the only separators the content area may use --
      its text sits on the one shared sheet of glass, never on
      a filled block of its own */
   --hairline: rgba(20, 40, 90, 0.10);
   --hairline-soft: rgba(20, 40, 90, 0.06);
-  /* appearance （设置 → 显示）: the user's own hand on the glass,
-     the graffiti and the ambient motion. The values here are
-     v0.6.4's shipped numbers; app.js rewrites them live from
-     the saved settings, and the -w set is the running state's
-     pane, interpolated from the haze slider. */
-  --frost-blur: 2.5px;
-  --frost-veil: 0.26;
-  --frost-sat: 155%;
-  --frost-blur-w: 0.5px;
-  --frost-veil-w: 0.05;
-  --frost-sat-w: 108%;
-  --set-blur: 24px;
+  /* appearance （设置 → 显示）: the user's own hand on the baked
+     picture and the veils. The veil alphas here are v0.6.4's
+     shipped numbers carried over; app.js rewrites them live
+     from the saved settings, and --veil-w is the running
+     state's thinned veil. There are no blur variables: the
+     picture is baked hazy, the veils are plain colour. */
+  --veil: 0.26;
+  --veil-w: 0.05;
   --set-veil: 0.72;
-  --set-sat: 200%;
-  --graf-opacity: 1;
-  --graf-sat: 115%;
-  --sheen-dur: 34s;
+  --amb-bright: 100%;
 }
 /* while a job runs, the switchable glass clears (v4): the
    frame keeps its own light surfaces and dark ink, but the
@@ -135,87 +140,46 @@ body {
   user-select: none;
 }
 
-#beads {
+/* the baked ambience: one looping picture fills the window.
+   Playback is the video element's own hardware path -- this
+   rule only places it and sets a static brightness. */
+#amb {
   position: fixed; inset: 0;
   width: 100%; height: 100%;
-  filter: saturate(var(--graf-sat));
-  opacity: var(--graf-opacity);
+  object-fit: cover;
+  filter: brightness(var(--amb-bright));
   pointer-events: none;
-  transition: opacity 1.4s ease;
 }
 #echo {
   position: fixed; inset: 0;
   width: 100%; height: 100%;
   pointer-events: none;
   opacity: 0;
-  transition: opacity 1.4s ease, filter 1.2s ease;
+  transition: opacity 1.4s ease;
 }
-#frost {
+/* the glass, demoted to what it now honestly is: one static
+   milk-white wash over the picture. A flat translucent rect
+   costs the compositor nothing per frame, and it never
+   changes except when the state or a slider says so. */
+#veil {
   position: fixed; inset: 0;
   z-index: 1;
-  /* the light sheet itself: a milk-white wash over the living
-     wall, just frosted enough that the giant strokes read as
-     art behind glass, never as noise behind text */
-  background: rgba(250, 251, 253, var(--frost-veil));
-  -webkit-backdrop-filter: blur(var(--frost-blur)) saturate(var(--frost-sat));
-  backdrop-filter: blur(var(--frost-blur)) saturate(var(--frost-sat));
+  background: rgba(250, 251, 253, var(--veil));
   pointer-events: none;
-  transition: background 1.2s ease, backdrop-filter 1.2s ease,
-              -webkit-backdrop-filter 1.2s ease;
+  transition: background 1.2s ease;
 }
-/* while syncing, the switchable glass clears (v4): the haze
-   drops to nearly transparent -- a whisper of veil and half a
-   pixel of blur are all that say "glass" -- and the scene
-   shows through at full strength. The 1.2 s frost transition
-   is the switch flipping. No black anywhere; the sheet does
-   not darken, it clears */
-body.working #frost {
-  background: rgba(248, 250, 252, var(--frost-veil-w));
-  -webkit-backdrop-filter: blur(var(--frost-blur-w)) saturate(var(--frost-sat-w));
-  backdrop-filter: blur(var(--frost-blur-w)) saturate(var(--frost-sat-w));
+/* while a job runs, the switchable glass clears (v4's 电控玻璃，
+   kept): the veil thins to the running alpha and the scene on
+   the echo layer shows through at full strength. A static
+   colour change is the whole trick now -- no blur wakes up.
+   No black anywhere; the sheet does not darken, it clears */
+body.working #veil {
+  background: rgba(248, 250, 252, var(--veil-w));
 }
-body.working #beads { opacity: calc(var(--graf-opacity) * 0.1); }
-/* while a 显示 slider is mid-drag the state-change easing would
-   trail the user's hand -- freeze it until the drag lets go */
-body.tuning #frost, body.tuning #beads { transition: none; }
 /* the scene layer arrives untouched in the running state:
    no lifted blacks, no squeezed contrast, full presence */
 body.working #echo {
   opacity: 1;
-  filter: none;
-}
-
-/* ambient light: one very pale sheen crosses the sheet every
-   half minute or so, slow and quiet -- light moving on glass,
-   not a shine on a balloon. It retires while a job runs. */
-#sheen {
-  position: fixed; inset: 0; z-index: 1;
-  overflow: hidden; pointer-events: none;
-  transition: opacity 1.2s ease;
-}
-#sheen::before {
-  content: "";
-  position: absolute; top: -25%; bottom: -25%; left: 0; width: 34%;
-  background: linear-gradient(100deg,
-    transparent,
-    rgba(255, 255, 255, 0.13) 42%,
-    rgba(255, 255, 255, 0.24) 50%,
-    rgba(255, 255, 255, 0.13) 58%,
-    transparent);
-  transform: translateX(-170%) skewX(-8deg);
-  animation: sheen-pass var(--sheen-dur) ease-in-out infinite;
-}
-/* the sheen pass is a setting now （常态动效 → 光泽扫过）:
-   off -- or the whole ambient motion off -- and it never comes */
-body.no-sheen #sheen { display: none; }
-@keyframes sheen-pass {
-  0% { transform: translateX(-170%) skewX(-8deg); }
-  38% { transform: translateX(430%) skewX(-8deg); }
-  100% { transform: translateX(430%) skewX(-8deg); }
-}
-body.working #sheen { opacity: 0; }
-@media (prefers-reduced-motion: reduce) {
-  #sheen::before { animation: none; }
 }
 
 #app { position: relative; z-index: 2; height: 100%; }
@@ -252,8 +216,6 @@ body.working #sheen { opacity: 0; }
 .tab:hover { background: rgba(255, 255, 255, 0.35); }
 .tab.active {
   background: var(--frame-bg);
-  -webkit-backdrop-filter: blur(18px) saturate(150%);
-  backdrop-filter: blur(18px) saturate(150%);
   color: var(--ink);
   box-shadow: 0 1px 0 var(--frame-bg);
 }
@@ -273,8 +235,6 @@ body.working #sheen { opacity: 0; }
   z-index: 55; display: flex; align-items: center; gap: 8px;
   padding: 0 10px;
   background: var(--frame-bg);
-  -webkit-backdrop-filter: blur(18px) saturate(150%);
-  backdrop-filter: blur(18px) saturate(150%);
   box-shadow: var(--frame-shadow);
   transition: background 1.2s ease;
 }
@@ -316,9 +276,7 @@ body.working #sheen { opacity: 0; }
 #menu {
   position: absolute; top: calc(100% + 6px); right: 0;
   min-width: 212px; padding: 6px; z-index: 70;
-  background: rgba(255, 255, 255, 0.94);
-  -webkit-backdrop-filter: blur(22px) saturate(150%);
-  backdrop-filter: blur(22px) saturate(150%);
+  background: rgba(255, 255, 255, 0.97);
   border-radius: var(--r-card);
   box-shadow: 0 4px 18px rgba(20, 30, 60, 0.20),
               0 0 0 1px rgba(20, 40, 90, 0.06);
@@ -515,8 +473,6 @@ body.working #sheen { opacity: 0; }
   position: absolute; inset: 0;
   z-index: -1;
   background: rgba(5, 7, 14, 0.94);
-  -webkit-backdrop-filter: blur(20px);
-  backdrop-filter: blur(20px);
   -webkit-mask-image:
     linear-gradient(to right, transparent, black 18px, black calc(100% - 18px), transparent),
     linear-gradient(to bottom, transparent, black 18px, black calc(100% - 18px), transparent);
@@ -578,9 +534,7 @@ body.working #sheen { opacity: 0; }
   position: fixed; top: 88px; right: 0; bottom: 0; width: 308px;
   transform: translateX(100%);
   transition: transform 0.35s cubic-bezier(0.22, 0.9, 0.3, 1);
-  background: transparent;
-  -webkit-backdrop-filter: blur(22px) saturate(150%);
-  backdrop-filter: blur(22px) saturate(150%);
+  background: rgba(250, 251, 253, 0.92);
   box-shadow: none;
   border-left: 1px solid var(--hairline);
   z-index: 30; display: flex; flex-direction: column;
@@ -619,8 +573,6 @@ body.working #sheen { opacity: 0; }
   background: var(--glass-bg);
   border: 1px solid var(--glass-edge);
   box-shadow: var(--glass-shadow);
-  -webkit-backdrop-filter: blur(var(--frost-blur)) saturate(var(--frost-sat));
-  backdrop-filter: blur(var(--frost-blur)) saturate(var(--frost-sat));
   color: var(--ink); font-size: 12.5px; line-height: 1.35;
   opacity: 0; transform: translateX(12px);
   transition: opacity 0.35s ease, transform 0.35s ease;
@@ -648,18 +600,15 @@ body.working #sheen { opacity: 0; }
   position: fixed; inset: 0; z-index: 40;
   display: flex; align-items: flex-start; justify-content: center;
   padding: 100px 22px 26px;
-  /* the veil is the same LIGHT sheet of glass, frosted enough
-     that the wall behind it softens to a breath -- the settings
-     text never sits on the smudge, and the veil never turns
-     into a solid slab: the graffiti still ghosts through.
-     v4: one notch deeper than v3's near-white wash, the blur
-     exactly as it was, and the wall's colour comes through
-     more saturated instead of washed pale. All three numbers
-     are the user's now （设置 → 显示）, dragged live while this
-     very veil sits in front of them */
+  /* the veil is the same LIGHT sheet, one notch deeper than
+     the main sheet's wash: the baked picture ghosts through
+     it, the settings text never sits on the picture itself,
+     and the veil never turns into a solid slab. The depth is
+     the user's own number （设置 → 显示）, dragged live while
+     this very veil sits in front of it. It used to blur the
+     wall live; since v5 the picture is baked hazy, so this is
+     a plain colour wash like every other veil in the shell */
   background: rgba(216, 224, 238, var(--set-veil));
-  -webkit-backdrop-filter: blur(var(--set-blur)) saturate(var(--set-sat));
-  backdrop-filter: blur(var(--set-blur)) saturate(var(--set-sat));
 }
 #settings-page[hidden] { display: none; }
 .btn:active:not(:disabled) { transform: scale(0.96); }
@@ -859,6 +808,17 @@ body.working #sheen { opacity: 0; }
   font-size: 12.5px; font-weight: 600; color: var(--subink);
   font-variant-numeric: tabular-nums;
 }
+
+/* -- settings: theme select （显示 → 背景影像） -------------------- */
+.set-select {
+  font: inherit; font-size: 12.5px; font-weight: 500;
+  color: var(--ink);
+  background: transparent;
+  border: 1px solid rgba(20, 40, 90, 0.14);
+  border-radius: 99px; padding: 7px 14px; min-width: 190px;
+  outline: none; cursor: pointer;
+}
+.set-select:focus { border-color: var(--accent); }
 
 /* -- settings: proxy input ----------------------------------------- */
 #set-proxy {
