@@ -53,6 +53,12 @@ class Camera2Recorder(
     private val onDepth: (Long, IntArray) -> Unit,
     private val onFrameMeta: (Int, Long, Long, Int, Double, Int, Int) -> Unit,
     private val onPreview: (android.graphics.Bitmap) -> Unit,
+    /** Display rotation for video.mp4, computed by the controller
+     *  at record start from the display rotation and the sensor
+     *  orientation; handed to MediaRecorder so the file itself
+     *  carries its orientation (meta.json's orientation block
+     *  records the same value). */
+    private val orientationHintDeg: Int = 0,
 ) {
     private val cm = context.getSystemService(CameraManager::class.java)
     private var thread: HandlerThread? = null
@@ -112,6 +118,7 @@ class Camera2Recorder(
         rec.setVideoSize(size.width, size.height)
         rec.setVideoFrameRate(30)
         rec.setVideoEncodingBitRate(12_000_000)
+        rec.setOrientationHint(orientationHintDeg)
         rec.prepare()
 
         val surfaces = ArrayList<Surface>()

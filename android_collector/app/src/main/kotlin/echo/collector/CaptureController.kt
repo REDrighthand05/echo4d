@@ -108,6 +108,15 @@ class CaptureController(
     private val notes = ArrayList<String>()
     private var encodedFrames: Int = -1
 
+    /** Orientation facts fixed at record start (v0.10): the display
+     *  rotation the device was held at, and the video rotation that
+     *  follows from it and the camera's sensor orientation. Written
+     *  into meta.json's orientation block and handed to the
+     *  recorders as video.mp4's orientation hint, so a capture's
+     *  orientation is stated at birth — the desktop never guesses. */
+    private var displayRotationDeg = 0
+    private var videoRotationDeg = 0
+
     val frameCount get() = synchronized(lock) { writer?.frameCount ?: 0 }
     val imuCount get() = synchronized(lock) { writer?.imuCount ?: 0 }
     val tofCount get() = synchronized(lock) { writer?.tofCount ?: 0 }
@@ -138,6 +147,11 @@ class CaptureController(
         frameSeq = 0
         notes.clear()
         encodedFrames = -1
+        displayRotationDeg = currentDisplayRotationDeg()
+        // Rear cameras only in this app: for the video to stand
+        // upright as held, it must be rotated by (sensor - display).
+        videoRotationDeg =
+            (caps.chosenSensorOrientation - displayRotationDeg + 360) % 360
         latestQuat = null
         synchronized(lock) { trailPoints.clear() }
         // The capture exists on disk from this moment on.
@@ -206,7 +220,8 @@ class CaptureController(
                     }
                 },
                 onDepth,
-                { bmp -> emitPreview(bmp) })
+                { bmp -> emitPreview(bmp) },
+                orientationHintDeg = videoRotationDeg)
             val err = rec.prepareBlocking(onError)
             if (err == null) {
                 arcore = rec
@@ -252,10 +267,24 @@ class CaptureController(
                         exposureNs, iso, focusM, ae, af)
                 }
             },
-            onPreview = { bmp -> emitPreview(bmp) }
+            onPreview = { bmp -> emitPreview(bmp) },
+            orientationHintDeg = videoRotationDeg
         )
         camera2 = rec
         rec.start(onError)
+    }
+
+    private fun currentDisplayRotationDeg(): Int {
+        val dm = context.getSystemService(
+            android.hardware.display.DisplayManager::class.java)
+        val rotation = dm?.getDisplay(android.view.Display.DEFAULT_DISPLAY)
+            ?.rotation ?: android.view.Surface.ROTATION_0
+        return when (rotation) {
+            android.view.Surface.ROTATION_90 -> 90
+            android.view.Surface.ROTATION_180 -> 180
+            android.view.Surface.ROTATION_270 -> 270
+            else -> 0
+        }
     }
 
     /** Periodic housekeeping while recording (the UI/service ticker
@@ -363,12 +392,36 @@ class CaptureController(
         val tofFov = camera2?.depthFovDeg ?: 45.0
         fun hz(count: Int) = if (duration > 0) count / duration else 0.0
         val intrinsics = camera2?.intrinsicsJson() ?: arcore?.intrinsicsJson()
+        // Orientation, stated at record time (v0.10): the class is
+        // the coded aspect swapped when the video rotation is a
+        // quarter turn. Before a backend has run, the coded aspect
+        // is the sensor's native one (a 90/270 sensor delivers
+        // landscape-shaped frames); at stop, the real recorded
+        // size replaces the derivation.
+        val recSize = camera2?.videoSize ?: arcore?.videoSize
+        val codedLandscape = if (recSize != null) recSize.width > recSize.height
+            else caps.chosenSensorOrientation % 180 == 90
+        val orientation = JsonObj()
+            .put("capture_orientation",
+                if (codedLandscape != (videoRotationDeg % 180 == 90))
+                    "landscape" else "portrait")
+            .put("video_rotation_deg", videoRotationDeg)
+            .put("display_rotation_deg", displayRotationDeg)
+            .put("sensor_orientation_deg", caps.chosenSensorOrientation)
+            .put("note", "fixed at record time from the display " +
+                "rotation and the camera sensor orientation; " +
+                "video_rotation_deg is the orientation hint given " +
+                "to the recorder/muxer for video.mp4")
+        if (recSize != null) {
+            orientation.put("video_width", recSize.width)
+            orientation.put("video_height", recSize.height)
+        }
         val meta = JsonObj()
             .put("format_version", echo.shared.FORMAT_VERSION)
             .put("device", JsonObj()
                 .put("name", "ECHO Collector")
                 .put("board", "${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}")
-                .put("firmware", "android-collector 0.9"))
+                .put("firmware", "android-collector 0.10"))
             .put("clock", JsonObj()
                 .put("type", "monotonic")
                 .put("unit", "s")
@@ -420,6 +473,7 @@ class CaptureController(
             .put("calibration", JsonObj()
                 .put("cam_from_device", camFd.map { it.toList() })
                 .put("camera", intrinsics))
+            .put("orientation", orientation)
             .put("android", JsonObj()
                 .put("backend",
                     if (activeBackend != "none") activeBackend

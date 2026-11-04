@@ -27,6 +27,13 @@ import java.util.Locale
  *   frame_meta.csv  frame,t_s,exposure_ns,iso,focus_m,ae_state,af_state
  *               (sidecar: per-frame camera state from the capture
  *               result — the diagnosis stream for blur/exposure)
+ *   meta.json "orientation" block (collector v0.10+, optional):
+ *               capture_orientation (portrait|landscape),
+ *               video_rotation_deg / display_rotation_deg /
+ *               sensor_orientation_deg (quarter turns), coded
+ *               video_width x video_height — the capture's
+ *               orientation stated at record time, validated on the
+ *               desktop by sensor_record.parse_orientation.
  *   mag.csv / baro.csv / gps.csv        sidecars, as before
  * All timestamps: seconds on ONE monotonic clock since capture start,
  * strictly increasing per stream (the reader rejects ties/regressions).

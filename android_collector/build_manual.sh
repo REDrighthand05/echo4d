@@ -67,7 +67,7 @@ sed 's|<manifest xmlns:android="http://schemas.android.com/apk/res/android">|<ma
     --manifest "$B/apk/AndroidManifest.merged.xml" \
     --java "$B/gen" --extra-packages com.google.ar.core \
     --min-sdk-version 26 --target-sdk-version 34 \
-    --version-code 9 --version-name 0.9 "$B/apk/arcore-res.zip"
+    --version-code 10 --version-name 0.10 "$B/apk/arcore-res.zip"
 mkdir -p "$B/rclasses" "$B/dex"
 javac -cp "$ANDROID_JAR" -d "$B/rclasses" \
     "$B/gen/echo/collector/R.java" "$B/gen/com/google/ar/core/R.java"

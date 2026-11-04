@@ -88,6 +88,20 @@ v0.2 是「第一次真机采集之前」的完善版：位姿转正、流式落
   - payoff 复现：ToF 尺度 **0.2500 m/unit**（参照 0.25，+0.00%），
     IMU 水平 **0.13°**（门槛 1.0°）。
 
+## v0.10 改动（2026-11-04，朝向在录制时定死）
+
+- **朝向一等字段**：录制开始时按设备显示旋转＋相机传感器朝向算定
+  `video_rotation_deg = (sensor − display) mod 360`（本应用只用后置相机），
+  写进 meta.json 的 `orientation` 块（capture_orientation 横/竖、
+  video/display/sensor 三个旋转角、编码尺寸），并作为 orientation hint
+  交给 Camera2 的 MediaRecorder 与 ARCore 的 MediaMuxer——video.mp4 本体
+  与记录互相印证，桌面端不再猜朝向（桌面 sensor_record.parse_orientation
+  校验该块、自相矛盾即报错，import 时透传进 job 记录）。
+- 版本：versionCode 10 / versionName 0.10（build_manual.sh 的打包戳同步）。
+- 构建状态：本机手动构建全程通过（JVM 17 测试、桌面 harness 合同验证、
+  APK 打包＋apksigner 验签）；仍 **UNTESTED ON HARDWARE**——朝向 hint 在
+  真机上的实际写入效果（及 ffprobe 读数）待第一次真机采集核对。
+
 ## v0.2 完善清单（本轮改了什么）
 
 - **位姿转正**：ARCore 可用即走位姿后端（见上）；位姿逐行带跟踪状态；

@@ -297,6 +297,98 @@ def _ffprobe_video_size(video: Path):
     return int(stream["width"]), int(stream["height"])
 
 
+def _probe_video_stream(video: Path) -> dict:
+    """ffprobe's first video stream entry, with the display-matrix
+    rotation fields included."""
+    out = subprocess.run(
+        [_tool_path("ffprobe"), "-v", "error", "-select_streams", "v:0",
+         "-show_entries",
+         "stream=width,height:stream_side_data=rotation:stream_tags=rotate",
+         "-of", "json", str(video)],
+        capture_output=True, text=True, check=True)
+    return json.loads(out.stdout)["streams"][0]
+
+
+def _stream_rotation(stream: dict) -> float:
+    """Display-matrix rotation (degrees) from a probed stream entry;
+    the legacy `rotate` tag is honoured for files from older muxers."""
+    rotation = 0.0
+    for side in stream.get("side_data_list") or []:
+        if "rotation" in side:
+            rotation = float(side["rotation"])
+            break
+    if rotation == 0.0:
+        tag = (stream.get("tags") or {}).get("rotate")
+        if tag:
+            try:
+                rotation = float(tag)
+            except (TypeError, ValueError):
+                rotation = 0.0
+    return rotation
+
+
+def _ffprobe_decoded_size(video: Path):
+    """(width, height) of frames as ffmpeg actually decodes them.
+
+    The coded size is not the decoded size when the stream carries a
+    display-matrix rotation: ffmpeg applies the rotation while
+    decoding, so a portrait phone clip stored as 1920x1080 with
+    rotation=-90 comes out of the decoder as 1080x1920 -- the same
+    byte count per frame, the opposite aspect. Reading the raw stream
+    at the coded size silently re-tiles every frame into diagonal
+    garbage (room2, 2026-11-04: registration collapsed to 21/875
+    instead of 773/875). Returns the coded size swapped when the
+    rotation is a quarter turn.
+    """
+    stream = _probe_video_stream(video)
+    width, height = int(stream["width"]), int(stream["height"])
+    if abs(_stream_rotation(stream)) % 180 == 90:
+        return height, width
+    return width, height
+
+
+def _ffprobe_orientation(video: Path):
+    """The source video's orientation as an established fact, probed
+    once at the pipeline entrance: coded size, decoded (display)
+    size, display-matrix rotation, and the portrait/landscape class
+    of the DECODED frames. stage_extract stamps this into the job
+    record; downstream stages read the extracted frames and never
+    re-guess orientation. None when the probe fails -- orientation
+    bookkeeping must never break an import."""
+    try:
+        stream = _probe_video_stream(video)
+        coded_w, coded_h = int(stream["width"]), int(stream["height"])
+        rotation = _stream_rotation(stream)
+    except Exception:
+        return None
+    if abs(rotation) % 180 == 90:
+        dec_w, dec_h = coded_h, coded_w
+    else:
+        dec_w, dec_h = coded_w, coded_h
+    return {
+        "coded_width": coded_w,
+        "coded_height": coded_h,
+        "decoded_width": dec_w,
+        "decoded_height": dec_h,
+        "rotation_deg": int(round(rotation)),
+        "orientation": "portrait" if dec_h > dec_w else "landscape",
+    }
+
+
+def _orientation_fields(video: Path) -> dict:
+    """job.json fields recording the source orientation (see
+    _ffprobe_orientation); empty when the probe failed."""
+    info = _ffprobe_orientation(video)
+    if info is None:
+        return {}
+    return {
+        "source_orientation": info["orientation"],
+        "source_rotation_deg": info["rotation_deg"],
+        "source_size": [info["coded_width"], info["coded_height"]],
+        "frame_size": [info["decoded_width"], info["decoded_height"]],
+    }
+
+
 def _extract_frame_indices(video: Path, indices, frames_dir: Path) -> bool:
     """Extract exactly the given container-frame indices, in order, as
     frame_%05d.jpg, by streaming one full decode and saving the wanted
@@ -308,7 +400,9 @@ def _extract_frame_indices(video: Path, indices, frames_dir: Path) -> bool:
     from PIL import Image
 
     try:
-        width, height = _ffprobe_video_size(video)
+        # Decoded size, not coded size: with a rotation marker the
+        # decoder swaps width/height (see _ffprobe_decoded_size).
+        width, height = _ffprobe_decoded_size(video)
     except Exception:
         return False
     frame_bytes = width * height * 3
@@ -324,6 +418,12 @@ def _extract_frame_indices(video: Path, indices, frames_dir: Path) -> bool:
         while True:
             buf = proc.stdout.read(frame_bytes)
             if len(buf) < frame_bytes:
+                if buf:
+                    # A partial frame means the decoded stream does
+                    # not match the probed geometry. Refuse (caller
+                    # falls back to ffmpeg's own image writer) rather
+                    # than quietly saving re-tiled garbage frames.
+                    return False
                 break
             idx += 1
             if idx in want:
@@ -354,6 +454,7 @@ def stage_extract(video: Path, job_dir: Path) -> dict:
     duration = _ffprobe_duration(video)
     thumbs = _gray_thumbs_from_video(video)
     plan_info = None
+    dense_failed = False
     if thumbs is not None and len(thumbs) >= 8:
         indices, plan_info = _plan_pose_frames(thumbs, duration)
         for stale in frames_dir.glob("frame_*.jpg"):
@@ -370,6 +471,7 @@ def stage_extract(video: Path, job_dir: Path) -> dict:
                 "duration_seconds": round(duration, 2),
                 "frame_count": len(frames),
                 "frames_dir": str(frames_dir),
+                **_orientation_fields(video),
                 **plan_info,
             }
             if paired:
@@ -377,6 +479,7 @@ def stage_extract(video: Path, job_dir: Path) -> dict:
             (job_dir / "job.json").write_text(
                 json.dumps(info, ensure_ascii=False, indent=2))
             return info
+        dense_failed = bool(indices)
         plan_info = None  # dense path failed; legacy extraction below
     # Legacy fallback (thumbnail decode or indexed extraction failed):
     # the pre-v0.2 uniform grid, roughly 160-320 frames -- one frame
@@ -406,7 +509,12 @@ def stage_extract(video: Path, job_dir: Path) -> dict:
         "frame_interval_seconds": round(interval, 3),
         "frame_count": len(frames),
         "frames_dir": str(frames_dir),
+        **_orientation_fields(video),
     }
+    if dense_failed:
+        # Never silent: a dense-path failure (e.g. a decoded-geometry
+        # mismatch) is recorded on the job so the fallback is visible.
+        info["dense_extract_fallback"] = True
     if paired:
         info["frame_capture_times"] = paired
     (job_dir / "job.json").write_text(json.dumps(info, ensure_ascii=False, indent=2))
@@ -900,31 +1008,39 @@ def stage_depth(job_dir: Path) -> dict:
     depth_dir.mkdir(exist_ok=True)
     preview_dir.mkdir(exist_ok=True)
     # Batched inference (DS kernel, merge-gated in
-    # tests/test_depth_batch.py); falls back to per-frame on any
-    # batch-level failure, per frame on a batch miss.
+    # tests/test_depth_batch.py), streamed chunk by chunk so peak
+    # memory stays bounded no matter how many frames registered:
+    # the pre-streaming batch call held every depth map in RAM
+    # (~6.4GB at 773 full-res frames) and was OOM-killed with zero
+    # output. Falls back to per-frame on any batch-level failure
+    # (from wherever streaming stopped), per frame on a batch miss.
     existing = [n for n in names if (frames_dir / n).exists()]
-    depths = None
-    try:
-        from .depth import _get_session
-        from .depth_batch import estimate_depth_batch
-
-        depths = estimate_depth_batch(
-            [frames_dir / n for n in existing], _get_session(model),
-            batch_size=4)
-        if depths is None or len(depths) != len(existing):
-            depths = None
-    except Exception:
-        depths = None
     done = []
-    for i, name in enumerate(existing):
-        src = frames_dir / name
-        depth = depths[i] if depths is not None else None
-        if depth is None:
-            depth = estimate_depth(src, model)
+
+    def _save_depth(name, depth):
         stem = Path(name).stem
         np.save(depth_dir / f"{stem}.npy", depth)
         save_depth_preview(depth, preview_dir / f"{stem}.png")
         done.append(name)
+
+    streamed = True
+    try:
+        from .depth import _get_session
+        from .depth_batch import iter_depth_estimates
+
+        for i, depth in iter_depth_estimates(
+                [frames_dir / n for n in existing], _get_session(model),
+                batch_size=4):
+            if depth is None:
+                depth = estimate_depth(frames_dir / existing[i], model)
+            _save_depth(existing[i], depth)
+    except Exception:
+        streamed = False
+    if not streamed:
+        have = set(done)
+        for name in existing:
+            if name not in have:
+                _save_depth(name, estimate_depth(frames_dir / name, model))
     info = {"stage": "depth", "ok": True, "depth_frames": len(done), "model": model.name}
     (job_dir / "job.json").write_text(json.dumps(info, ensure_ascii=False, indent=2))
     return info

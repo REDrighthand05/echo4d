@@ -135,24 +135,10 @@ body {
   user-select: none;
 }
 
-/* the wall, rolled back (v0.6.17): the graffiti is a STATIC
-   picture -- bead-constituted strokes painted once onto #graf,
-   the frost blur baked into that one layer as a cached filter
-   instead of a full-window backdrop-filter that re-blurred an
-   animated wall every frame (the old whole-core idle burn).
-   #beads above it carries only a sparse drift of free mist
-   dots, the calm remnant of the ambient motion. */
-#graf {
-  position: fixed; inset: 0;
-  width: 100%; height: 100%;
-  filter: blur(var(--frost-blur)) saturate(var(--wall-sat, var(--graf-sat)));
-  opacity: var(--graf-opacity);
-  pointer-events: none;
-  transition: opacity 1.4s ease, filter 1.2s ease;
-}
 #beads {
   position: fixed; inset: 0;
   width: 100%; height: 100%;
+  filter: saturate(var(--graf-sat));
   opacity: var(--graf-opacity);
   pointer-events: none;
   transition: opacity 1.4s ease;
@@ -170,12 +156,12 @@ body {
   /* the light sheet itself: a milk-white wash over the living
      wall, just frosted enough that the giant strokes read as
      art behind glass, never as noise behind text */
-  /* v0.6.17: no backdrop-filter on the full-window sheet -- the
-     blur lives on the static #graf layer now; this sheet is the
-     plain milk-white wash only, so nothing re-blurs per frame */
   background: rgba(250, 251, 253, var(--frost-veil));
+  -webkit-backdrop-filter: blur(var(--frost-blur)) saturate(var(--frost-sat));
+  backdrop-filter: blur(var(--frost-blur)) saturate(var(--frost-sat));
   pointer-events: none;
-  transition: background 1.2s ease;
+  transition: background 1.2s ease, backdrop-filter 1.2s ease,
+              -webkit-backdrop-filter 1.2s ease;
 }
 /* while syncing, the switchable glass clears (v4): the haze
    drops to nearly transparent -- a whisper of veil and half a
@@ -185,18 +171,13 @@ body {
    not darken, it clears */
 body.working #frost {
   background: rgba(248, 250, 252, var(--frost-veil-w));
-}
-/* the running state clears the wall the old way -- the veil
-   drops above -- and the graffiti's own baked haze drops with
-   it (blur/saturate swap on the one static layer) */
-body.working #graf {
-  filter: blur(var(--frost-blur-w)) saturate(var(--frost-sat-w));
-  opacity: calc(var(--graf-opacity) * 0.1);
+  -webkit-backdrop-filter: blur(var(--frost-blur-w)) saturate(var(--frost-sat-w));
+  backdrop-filter: blur(var(--frost-blur-w)) saturate(var(--frost-sat-w));
 }
 body.working #beads { opacity: calc(var(--graf-opacity) * 0.1); }
 /* while a 显示 slider is mid-drag the state-change easing would
    trail the user's hand -- freeze it until the drag lets go */
-body.tuning #frost, body.tuning #beads, body.tuning #graf { transition: none; }
+body.tuning #frost, body.tuning #beads { transition: none; }
 /* the scene layer arrives untouched in the running state:
    no lifted blacks, no squeezed contrast, full presence */
 body.working #echo {

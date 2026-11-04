@@ -15,6 +15,26 @@ Layout
       imu.csv       t_s,qw,qx,qy,qz,ax,ay,az,gx,gy,gz
       tof.csv       t_s,z00,z01,...,z63   8x8 zones, millimetres, -1 = no target
 
+Optional meta.json block (collector v0.10+; absent in earlier
+captures, readers expose None):
+
+      "orientation": {
+        "capture_orientation": "portrait" | "landscape",
+        "video_rotation_deg": 0 | 90 | 180 | 270,
+        "display_rotation_deg": 0 | 90 | 180 | 270,
+        "video_width": <coded frame width>, "video_height": <coded>}
+
+  Written by the collector AT RECORD TIME from the device display
+  rotation and the camera sensor orientation, so a capture's
+  orientation is a stated fact from birth, never a downstream guess:
+  video_rotation_deg is the orientation hint handed to the recorder
+  / muxer for video.mp4 (the display rotation a player must apply),
+  and capture_orientation is the portrait/landscape class of the
+  video as it stands upright (coded size, swapped on quarter turns).
+  parse_orientation validates the block -- including that the class
+  agrees with the coded size and rotation -- and Capture exposes it
+  as .orientation.
+
 Optional streams (added 2026-11-01 for the expanded collection head;
 absent in earlier captures, readers expose None when missing):
 
@@ -88,6 +108,7 @@ __all__ = [
     "write_spec",
     "Capture",
     "read_capture",
+    "parse_orientation",
     "zone_distances_from_points",
     "register_imu_frame",
     "estimate_up_from_imu",
@@ -217,6 +238,56 @@ def write_spec(folder: Path, t_s: np.ndarray, counts: np.ndarray) -> Path:
 # Reader.
 # ---------------------------------------------------------------------------
 
+_QUARTER_TURNS = (0, 90, 180, 270)
+
+
+def parse_orientation(meta: dict) -> dict | None:
+    """Validate meta.json's optional "orientation" block (written by
+    the collector at record time; see the module header) and return
+    it normalized, or None when the capture predates the block.
+
+    Strict on purpose: the block exists so orientation never has to
+    be guessed downstream, so a block that contradicts itself --
+    unknown class, a rotation that is not a quarter turn, or a class
+    that disagrees with the coded size under that rotation -- is a
+    format error, not something to silently paper over.
+    """
+    raw = meta.get("orientation")
+    if raw is None:
+        return None
+    if not isinstance(raw, dict):
+        raise ValueError("orientation block is not an object")
+    label = raw.get("capture_orientation")
+    if label not in ("portrait", "landscape"):
+        raise ValueError(f"bad capture_orientation {label!r}")
+    rotation = raw.get("video_rotation_deg")
+    if rotation not in _QUARTER_TURNS:
+        raise ValueError(f"bad video_rotation_deg {rotation!r}")
+    out = {"capture_orientation": label,
+           "video_rotation_deg": int(rotation)}
+    display = raw.get("display_rotation_deg")
+    if display is not None:
+        if display not in _QUARTER_TURNS:
+            raise ValueError(f"bad display_rotation_deg {display!r}")
+        out["display_rotation_deg"] = int(display)
+    width, height = raw.get("video_width"), raw.get("video_height")
+    if width is not None or height is not None:
+        if not (isinstance(width, int) and isinstance(height, int)
+                and width > 0 and height > 0):
+            raise ValueError(
+                f"bad orientation video size {width!r}x{height!r}")
+        up_w, up_h = (height, width) if rotation in (90, 270) \
+            else (width, height)
+        expected = "portrait" if up_h > up_w else "landscape"
+        if expected != label:
+            raise ValueError(
+                f"capture_orientation {label!r} contradicts coded size "
+                f"{width}x{height} at rotation {rotation}")
+        out["video_width"] = width
+        out["video_height"] = height
+    return out
+
+
 class Capture:
     """A read capture folder. Arrays are float64 except tof_mm (int32).
 
@@ -328,6 +399,11 @@ class Capture:
         R = cal.get("cam_from_device")
         self.cam_from_device = (np.array(R, dtype=np.float64)
                                 if R is not None else None)
+        # Record-time orientation statement (collector v0.10+);
+        # None on captures that predate the block. Validated --
+        # a self-contradictory block fails the read (see
+        # parse_orientation).
+        self.orientation = parse_orientation(self.meta)
         self.tof_fov_deg = float(self.meta.get("tof", {}).get("fov_deg", 45.0))
 
         stamp_sets = [("frames", self.frame_t), ("imu", self.imu_t),
@@ -466,6 +542,12 @@ def import_capture_record(src_dir: Path, job_dir: Path) -> dict | None:
     src_dir = Path(src_dir)
     if not is_capture_folder(src_dir):
         return None
+    # The record-time orientation statement is validated and passed
+    # through into the job record at import, so the job states the
+    # capture's orientation outright. A malformed block fails the
+    # import loudly instead of landing an ambiguous record.
+    meta = json.loads((src_dir / "meta.json").read_text())
+    orientation = parse_orientation(meta)
     dest = Path(job_dir) / JOB_SENSOR_DIRNAME
     dest.mkdir(parents=True, exist_ok=True)
     copied = []
@@ -474,9 +556,13 @@ def import_capture_record(src_dir: Path, job_dir: Path) -> dict | None:
         if src.exists():
             shutil.copyfile(src, dest / name)
             copied.append(name)
-    return {"sensor_record": JOB_SENSOR_DIRNAME,
+    info = {"sensor_record": JOB_SENSOR_DIRNAME,
             "sensor_files": copied,
             "has_imu": "imu.csv" in copied}
+    if orientation is not None:
+        info["capture_orientation"] = orientation["capture_orientation"]
+        info["video_rotation_deg"] = orientation["video_rotation_deg"]
+    return info
 
 
 def read_job_capture(job_dir: Path) -> Capture | None:

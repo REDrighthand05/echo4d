@@ -329,6 +329,13 @@ def _collect_anchor_pairs(job_dir: Path, depth_dir: Path):
     frame's depth can be aligned with its own fit when it has enough
     anchors; monocular depth scale drifts from frame to frame, and one
     global fit leaves the walls bent.
+
+    Depth maps are streamed -- loaded, sampled, dropped. Image stems
+    are unique, so the cache this replaces never hit twice; it only
+    held every map in RAM (~6.4GB at 773 full-res frames, OOM-killed
+    on a 7.7GB machine). Outputs are identical (verified value for
+    value against the cached version on the 204141 product job by
+    experiments/goodlight_recheck/replica_fuse.py).
     """
     import pycolmap
 
@@ -343,7 +350,6 @@ def _collect_anchor_pairs(job_dir: Path, depth_dir: Path):
         (pycolmap.Reconstruction(str(d)) for d in models),
         key=lambda r: r.num_reg_images(),
     )
-    depth_cache = {}
     rel_vals, inv_z = [], []
     per_frame = {}
     for image in rec.images.values():
@@ -354,9 +360,7 @@ def _collect_anchor_pairs(job_dir: Path, depth_dir: Path):
         npy = depth_dir / f"{stem}.npy"
         if not npy.exists():
             continue
-        if stem not in depth_cache:
-            depth_cache[stem] = np.load(npy)
-        depth = depth_cache[stem]
+        depth = np.load(npy)
         h, w = depth.shape
         cfw = image.cam_from_world() if callable(image.cam_from_world) else image.cam_from_world
         q = cfw.rotation.quat
@@ -375,6 +379,7 @@ def _collect_anchor_pairs(job_dir: Path, depth_dir: Path):
             if 0 <= px < w and 0 <= py < h:
                 f_rel.append(float(depth[py, px]))
                 f_inv.append(1.0 / z)
+        del depth
         if f_rel:
             per_frame[stem] = (np.array(f_rel), np.array(f_inv))
             rel_vals.extend(f_rel)

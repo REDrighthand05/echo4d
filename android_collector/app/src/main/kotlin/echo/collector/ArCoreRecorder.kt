@@ -42,6 +42,11 @@ class ArCoreRecorder(
     private val onPose: (Long, Pose, String) -> Unit,
     private val onDepth: (Long, IntArray) -> Unit,
     private val onPreview: (android.graphics.Bitmap) -> Unit,
+    /** Display rotation for video.mp4, computed by the controller
+     *  at record start; handed to the muxer so the file itself
+     *  carries its orientation (meta.json's orientation block
+     *  records the same value). */
+    private val orientationHintDeg: Int = 0,
 ) {
     @Volatile private var running = false
     private var thread: Thread? = null
@@ -54,6 +59,11 @@ class ArCoreRecorder(
     private var intrinsics: JsonObj? = null
     private var preparedW = 0
     private var preparedH = 0
+
+    /** Coded video size once the camera image is known, else null. */
+    val videoSize: android.util.Size?
+        get() = if (preparedW > 0 && preparedH > 0)
+            android.util.Size(preparedW, preparedH) else null
 
     // Bring-up handshake: the loop thread performs EGL + session
     // setup (the GL context must live on the thread that calls
@@ -291,6 +301,7 @@ class ArCoreRecorder(
             File(folder, "video.mp4").absolutePath,
             MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4
         )
+        muxer.setOrientationHint(orientationHintDeg)
         var track = -1
         var muxerStarted = false
         codec.start()

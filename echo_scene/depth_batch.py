@@ -58,6 +58,33 @@ def make_session(model_path, providers=None):
     return ort.InferenceSession(str(model_path))
 
 
+def iter_depth_estimates(image_paths, session, batch_size: int = 4,
+                         chunk_size: int = 16):
+    """Yield (index, depth_or_None) streaming over bounded chunks.
+
+    estimate_depth_batch holds every result until it returns; at full
+    frame resolution one depth map is ~8MB, so a job with several
+    hundred registered frames kept ~6.4GB resident and was OOM-killed
+    before writing anything (room2 recheck, 2026-11-04). This walks
+    the list in chunks and yields each frame as its chunk finishes,
+    so the caller can save it and let it go. chunk_size is rounded
+    down to a whole number of batches, so the batch groupings -- and
+    therefore every result -- are exactly the ones a single
+    estimate_depth_batch call over the whole list would produce.
+    """
+    paths = list(image_paths)
+    if batch_size > 1:
+        chunk_size = max(batch_size,
+                         chunk_size // batch_size * batch_size)
+    for start in range(0, len(paths), chunk_size):
+        chunk = paths[start:start + chunk_size]
+        depths = estimate_depth_batch(chunk, session,
+                                      batch_size=batch_size)
+        for offset, depth in enumerate(depths):
+            yield start + offset, depth
+        del depths
+
+
 def estimate_depth_batch(image_paths, session, batch_size: int = 4) -> list:
     paths = list(image_paths)
     if not paths:

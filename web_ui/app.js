@@ -9,11 +9,13 @@
    The graffiti is redrawn at random on every launch: one to
    three strokes, never more. Since v3 the hand is GIANT -- each
    stroke is a thick sweep wider than the window, cropped by its
-   edges. Rolled back in v0.6.17: the picture itself no longer
-   moves (the v0.6.12-16 baked loops and live particle layers
-   were retired by the user's ruling); only the mist drifts and
-   a pale sheen passes, under hard performance limits -- see
-   the wall section below.
+   edges -- and the wall is alive: the strokes breathe and
+   wander very slowly, every bead drifts, and the field steps
+   aside for the pointer. The bead physics is the original
+   v0.6.5 system, unchanged; since the GPU restoration it runs
+   in WebGL shaders (the user's ruling: performance comes from
+   the graphics card, never from thinning the particles), under
+   hard engine limits -- see the wall section below.
 
    If a pywebview bridge is present it drives everything for real;
    in a plain browser a demo state machine mirrors the app's own
@@ -66,19 +68,9 @@ function applyAppearance() {
   root.setProperty("--graf-opacity", a.grafOpacity);
   root.setProperty("--graf-sat", a.grafSaturate + "%");
   root.setProperty("--sheen-dur", (34 / Math.max(0.2, a.motionSpeed)) + "s");
-  /* the wall's combined saturation: the graffiti slider and the
-     sheet's own鲜明度 both land on the one static layer now */
-  root.setProperty("--wall-sat", (a.grafSaturate * a.frostSaturate / 100) + "%");
   document.body.classList.toggle("no-sheen", !a.sheenOn || !a.motionOn);
-  /* the dot size lives inside the static picture: a change
-     repaints it once, debounced -- never per frame */
-  if (paintedMistSize !== null && a.mistSize !== paintedMistSize) {
-    clearTimeout(grafRepaintTimer);
-    grafRepaintTimer = setTimeout(paintGraffiti, 120);
-  }
   wakeWall();
 }
-let grafRepaintTimer = null;
 
 let appearanceSaveTimer = null;
 function saveAppearance() {
@@ -202,39 +194,42 @@ function randomStrokes(w, h, rng) {
 }
 
 /* ------------------------------------------------------------------ */
-/* the wall (v0.6.17 rollback): tiny matte dots, no gloss, no         */
-/* balloons. The graffiti is a STATIC picture: its beads are dealt    */
-/* once and painted exactly once onto #graf, and the sheet's frost    */
-/* blur is a cached filter on that single layer -- not a              */
-/* full-window backdrop-filter re-blurring an animated wall every     */
-/* frame (the old whole-core idle burn; the look comes back, that     */
-/* cost does not). Above the picture, a sparse drift of free mist     */
-/* dots on #beads is the only thing that ever moves.                  */
-/*                                                                    */
-/* The performance limits are HARD, not aspirational:                 */
-/*   - the ambient loop is capped at WALL_FPS;                        */
-/*   - hidden / blurred / minimised window: the loop stops dead,      */
-/*     zero frames, woken only by focus / visibility / job events;    */
-/*   - the mist is hard-capped at MIST_MAX dots;                      */
-/*   - graffiti and glass never repaint per frame.                    */
-/* Reduced-motion users get a still wall.                             */
+/* the wall: tiny matte dots, no gloss, no balloons. The bead        */
+/* field IS the original pre-v0.6.12 system, restored whole by the   */
+/* user's ruling: the giant strokes are constituted by thousands of  */
+/* beads with real depth (near beads bigger and denser than far      */
+/* ones), the whole field breathes, wanders and drifts calmly, and   */
+/* every bead springs aside for the pointer and settles home after.  */
+/* Density, size and behaviour are the original parameters --        */
+/* performance is taken at the ENGINE layer only, never by           */
+/* thinning the particles:                                       */
+/*   - the bead physics runs on the GPU (WebGL2): attributes are     */
+/*     uploaded once into static textures, position/velocity live    */
+/*     in ping-pong state textures, and the CPU hands over nothing   */
+/*     per frame but uniforms (time, pointer, amplitude) -- one      */
+/*     physics draw and one point draw per frame;                    */
+/*   - the ambient loop is capped at WALL_FPS;                       */
+/*   - hidden / blurred / minimised window: the loop stops dead,     */
+/*     zero frames, woken by focus / visibility / job events;        */
+/*   - where WebGL2 float targets do not exist, the same bead        */
+/*     field runs through the original 2D-canvas code path, so       */
+/*     the look never depends on the GPU being there.                */
 /* ------------------------------------------------------------------ */
-const grafCanvas = document.getElementById("graf");
-const gtx = grafCanvas.getContext("2d");
 const canvas = document.getElementById("beads");
-const ctx = canvas.getContext("2d");
+let ctx = null;               // 2D context, only on the fallback path
 const echoCanvas = document.getElementById("echo");
 const echoCtx = echoCanvas.getContext("2d");
 const WALL_FPS = 30;          // hard cap: ambient frame rate
-const MIST_MAX = 240;         // hard cap: free mist dots
-let W = 0, H = 0, mouse = null;
-let grafBeads = [];           // the static picture's beads
-let mist = [];                // the only beads that still move
-let paintedMistSize = null;   // mistSize the picture was painted at
-let echoSrc = null;  // image/canvas/video shown behind the glass
-let echoDrawn = false;
+let W = 0, H = 0, beads = [], mouse = null;
+let wallStrokes = [];
+/* ambient motion (v3): each giant stroke gets its own slow
+   clock -- a two-to-three-minute wander and a ~48 s breath.
+   Reduced-motion users get a still wall. */
+let strokeAnim = [];
 const REDUCED_MOTION = !!(window.matchMedia &&
   matchMedia("(prefers-reduced-motion: reduce)").matches);
+let echoSrc = null;  // image/canvas/video shown behind the glass
+let echoDrawn = false;
 
 function gauss() {
   return Math.max(-1.15, Math.min(1.15, (Math.random() + Math.random() + Math.random()) / 1.5 - 1));
@@ -254,29 +249,39 @@ function pushOutOfZones(x, y, zones) {
 
 function buildField() {
   W = window.innerWidth; H = window.innerHeight;
-  grafCanvas.width = W; grafCanvas.height = H;
   canvas.width = W; canvas.height = H;
   echoCanvas.width = W; echoCanvas.height = H;
+  beads = [];
   const zones = calmZones();
-  grafBeads = [];
-  const wallStrokes = randomStrokes(W, H, launchRng);
+  wallStrokes = randomStrokes(W, H, launchRng);
+  strokeAnim = wallStrokes.map(() => ({
+    phX: Math.random() * Math.PI * 2,
+    phY: Math.random() * Math.PI * 2,
+    phB: Math.random() * Math.PI * 2,
+  }));
   wallStrokes.forEach((st, si) => {
     // The stroke is not painted -- it is CONSTITUTED by micro
     // particles: a dense jittered lattice fills the whole band,
     // each dot a tiny fraction of the whole, overlapping into
     // one rich solid ribbon whose rim feathers out particle by
-    // particle. The lattice step grows with the brush: a giant
-    // ribbon keeps the same ~30 rows of mist across its band
-    // instead of exploding the bead count. Dealt once, painted
-    // once -- the picture does not move any more.
+    // particle. Same bead objects, same physics as always.
+    // The lattice step grows with the brush: a giant ribbon
+    // keeps the same ~30 rows of mist across its band instead
+    // of exploding the bead count (and the frame budget).
     const step = Math.max(2.4, Math.min(6.5, st.width / 30));
     let sAcc = 0, carry = 0;
     const pushBead = (hx, hy, hz) => {
       const [px, py] = pushOutOfZones(hx, hy, zones);
-      grafBeads.push({
-        rx: hx, ry: hy, hx: px, hy: py, hz,
+      const ang = Math.random() * Math.PI * 2;
+      beads.push({
+        si,
+        rx: hx, ry: hy, hx: px, hy: py, hz, x: px, y: py, z: hz,
+        vx: 0, vy: 0, vz: 0,
         rj: 0.85 + Math.random() * 0.3,
         color: st.color, alpha: st.alpha / 255,
+        sdirx: Math.cos(ang), sdiry: Math.sin(ang),
+        zdir: Math.random() < 0.5 ? -1 : 1,
+        phase: Math.random() * Math.PI * 2,
       });
     };
     for (let i = 0; i < st.pts.length - 1; i++) {
@@ -308,47 +313,318 @@ function buildField() {
       sAcc += segLen;
     }
   });
-  grafBeads.sort((a, b) => a.hz - b.hz);
-  paintGraffiti();
-  buildMist(zones);
+  /* draw order is depth order (the painter's algorithm the 2D
+     path re-sorts every frame; z excursions are a tenth of the
+     range, so the dealt order stands for the GPU path) */
+  beads.sort((a, b) => a.hz - b.hz);
+  if (gpuEnsure()) gpuUploadField();
+  wakeWall();
 }
 
-/* the static picture: every bead at home, painted exactly once.
-   It repaints only when the picture itself changes -- a re-roll,
-   a structural setting, a resize, the calm zones settling, or
-   the dot-size slider (debounced in applyAppearance). */
-function paintGraffiti() {
-  gtx.clearRect(0, 0, W, H);
-  for (const b of grafBeads) {
-    const zn = Math.max(0, Math.min(1, (b.hz + 1.15) / 2.3));
-    const r = (1.7 + 1.15 * zn) * b.rj * appearance.mistSize;
-    gtx.globalAlpha = b.alpha * (0.6 + 0.4 * zn);
-    gtx.drawImage(spriteFor(b.color, zn), b.hx - r, b.hy - r, r * 2, r * 2);
+/* ------------------------------------------------------------------ */
+/* the GPU engine: the original bead physics, in shaders.            */
+/* Static per-bead data lives in four float textures uploaded once   */
+/* per dealt field; position/velocity live in two ping-pong state    */
+/* textures integrated by a fragment shader (the exact spring        */
+/* equations of the original tick); rendering is a single POINTS     */
+/* draw whose vertex shader fetches the state texture. Per frame     */
+/* the CPU sets a handful of uniforms and issues <= 3 physics draws  */
+/* (substeps of <= 1/60 s, so the springs behave at any frame rate)  */
+/* plus one render draw. No buffer is re-uploaded per frame.         */
+/* ------------------------------------------------------------------ */
+let gl = null, gpuOK = false, gpuTried = false;
+const gpu = {};
+const GPU_VS = `#version 300 es
+void main() {
+  vec2 p = vec2(float((gl_VertexID << 1) & 2), float(gl_VertexID & 2));
+  gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0);
+}`;
+const GPU_PHYS = `#version 300 es
+precision highp float;
+uniform sampler2D uS0, uS1, uA0, uA1, uA2;
+uniform float uDt, uAmbT, uAmp;
+uniform vec3 uMouse;
+layout(location = 0) out vec4 o0;
+layout(location = 1) out vec4 o1;
+void main() {
+  ivec2 ij = ivec2(gl_FragCoord.xy - 0.5);
+  vec4 st0 = texelFetch(uS0, ij, 0);
+  vec4 st1 = texelFetch(uS1, ij, 0);
+  vec4 a0 = texelFetch(uA0, ij, 0);
+  vec4 a1 = texelFetch(uA1, ij, 0);
+  vec4 a2 = texelFetch(uA2, ij, 0);
+  float x = st0.x, y = st0.y, z = st0.z;
+  float vx = st1.x, vy = st1.y, vz = st1.z;
+  float driftX = sin(uAmbT * 0.045 + a1.x) * 15.0 * uAmp;
+  float driftY = cos(uAmbT * 0.037 + a1.y) * 10.0 * uAmp;
+  float swayx = a0.x + driftX + sin(uAmbT * 0.9 + a0.w) * 3.0 * uAmp;
+  float swayy = a0.y + driftY + cos(uAmbT * 0.7 + a0.w * 1.3) * 2.1 * uAmp;
+  float swayz = a0.z + sin(uAmbT * 0.5 + a0.w) * 0.12 * uAmp;
+  float ax = 30.0 * (swayx - x) - 9.3 * vx;
+  float ay = 30.0 * (swayy - y) - 9.3 * vy;
+  vz += (14.0 * (swayz - z) - 6.0 * vz) * uDt;
+  if (uMouse.z > 0.5) {
+    float dx = x - uMouse.x, dy = y - uMouse.y;
+    float d = sqrt(dx * dx + dy * dy);
+    if (d < 140.0 && d > 0.01) {
+      float zn0 = (z + 1.15) / 2.3;
+      float f = 1.0 - d / 140.0;
+      ax += (dx / d) * 4200.0 * (0.5 + 0.8 * zn0) * f + a2.x * 950.0 * f;
+      ay += (dy / d) * 4200.0 * (0.5 + 0.8 * zn0) * f + a2.y * 950.0 * f;
+      vz += f * a1.w * 62.0 * uDt * 3.0;
+    }
   }
-  gtx.globalAlpha = 1;
-  paintedMistSize = appearance.mistSize;
-}
+  vx += ax * uDt; vy += ay * uDt;
+  float sp = sqrt(vx * vx + vy * vy);
+  if (sp > 950.0) { vx *= 950.0 / sp; vy *= 950.0 / sp; }
+  x += vx * uDt; y += vy * uDt;
+  z = clamp(z + vz * uDt, -1.3, 1.3);
+  o0 = vec4(x, y, z, 1.0);
+  o1 = vec4(vx, vy, vz, 1.0);
+}`;
+const GPU_PT_VS = `#version 300 es
+precision highp float;
+uniform sampler2D uS0, uA1, uA2, uA3;
+uniform vec2 uViewport;
+uniform float uAmbT, uAmp, uMistSize;
+uniform int uCount;
+out vec3 vColor;
+out float vAlpha;
+void main() {
+  int i = gl_VertexID;
+  if (i >= uCount) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); gl_PointSize = 0.0; vColor = vec3(0.0); vAlpha = 0.0; return; }
+  ivec2 dims = textureSize(uS0, 0);
+  ivec2 ij = ivec2(i % dims.x, i / dims.x);
+  vec4 st0 = texelFetch(uS0, ij, 0);
+  vec4 a1 = texelFetch(uA1, ij, 0);
+  vec4 a2 = texelFetch(uA2, ij, 0);
+  vec4 a3 = texelFetch(uA3, ij, 0);
+  float zn = clamp((st0.z + 1.15) / 2.3, 0.0, 1.0);
+  float breath = 1.0 - uAmp * 0.15 + uAmp * 0.15 * sin(uAmbT * 0.13 + a1.z);
+  float r = (1.7 + 1.15 * zn) * a2.z * uMistSize;
+  gl_PointSize = 2.0 * r;
+  vAlpha = a3.a * breath * (0.6 + 0.4 * zn);
+  float stepf = floor(zn * 7.0 + 0.5);
+  vColor = mix(a3.rgb, vec3(150.0, 185.0, 255.0) / 255.0,
+               0.55 * (1.0 - stepf / 7.0));
+  gl_Position = vec4(st0.x / uViewport.x * 2.0 - 1.0,
+                     1.0 - st0.y / uViewport.y * 2.0, 0.0, 1.0);
+}`;
+const GPU_PT_FS = `#version 300 es
+precision highp float;
+in vec3 vColor;
+in float vAlpha;
+out vec4 o;
+void main() {
+  float d = length(gl_PointCoord - 0.5) * 2.0;
+  float edge = d <= 0.8 ? 1.0 : clamp(1.0 - (d - 0.8) / 0.2, 0.0, 1.0);
+  float a = vAlpha * edge;
+  /* the canvas buffer is premultiplied (as the 2D canvas always
+     was): store colour already scaled by alpha, or every bead
+     washes toward the page background and the ink goes pale */
+  o = vec4(vColor * a, a);
+}`;
 
-/* the free mist: the calm remnant of the ambient motion -- a
-   sparse field of the same matte dots, drifting slowly, still
-   stepping aside for the pointer. Hard-capped at MIST_MAX. */
-function buildMist(zones) {
-  mist = [];
-  const colors = [INK_PALE, PALE_FAR, INK_SOFT, PALE_FAR];
-  for (let i = 0; i < MIST_MAX; i++) {
-    const [hx, hy] = pushOutOfZones(Math.random() * W,
-                                    Math.random() * H, zones);
-    const ang = Math.random() * Math.PI * 2;
-    mist.push({
-      hx, hy, x: hx, y: hy, z: Math.random() * 2 - 1,
-      vx: 0, vy: 0,
-      rj: 0.85 + Math.random() * 0.3,
-      color: colors[i % colors.length],
-      alpha: 0.10 + Math.random() * 0.20,
-      sdirx: Math.cos(ang), sdiry: Math.sin(ang),
-      phase: Math.random() * Math.PI * 2,
-    });
+function gpuCompile(type, src) {
+  const sh = gl.createShader(type);
+  gl.shaderSource(sh, src);
+  gl.compileShader(sh);
+  if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) {
+    console.warn("wall shader:", gl.getShaderInfoLog(sh));
+    return null;
   }
+  return sh;
+}
+function gpuProgram(vsSrc, fsSrc) {
+  const vs = gpuCompile(gl.VERTEX_SHADER, vsSrc);
+  const fs = gpuCompile(gl.FRAGMENT_SHADER, fsSrc);
+  if (!vs || !fs) return null;
+  const pr = gl.createProgram();
+  gl.attachShader(pr, vs);
+  gl.attachShader(pr, fs);
+  gl.linkProgram(pr);
+  return gl.getProgramParameter(pr, gl.LINK_STATUS) ? pr : null;
+}
+function f32ToF16(v) {
+  const u = new Uint32Array(new Float32Array([v]).buffer)[0];
+  const sign = (u >> 16) & 0x8000;
+  let e = ((u >> 23) & 0xff) - 112;
+  let m = u & 0x7fffff;
+  if (e <= 0) return sign;
+  if (e >= 31) return sign | 0x7bff;
+  return sign | (e << 10) | (m >> 13);
+}
+function gpuTex(data, side) {
+  const t = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, t);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  if (gpu.half) {
+    const h = new Uint16Array(data.length);
+    for (let i = 0; i < data.length; i++) h[i] = f32ToF16(data[i]);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA16F, side, side, 0,
+                  gl.RGBA, gl.HALF_FLOAT, h);
+  } else {
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, side, side, 0,
+                  gl.RGBA, gl.FLOAT, data);
+  }
+  return t;
+}
+function gpuFbo(texA, texB) {
+  const f = gl.createFramebuffer();
+  gl.bindFramebuffer(gl.FRAMEBUFFER, f);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0,
+                          gl.TEXTURE_2D, texA, 0);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT1,
+                          gl.TEXTURE_2D, texB, 0);
+  gl.drawBuffers([gl.COLOR_ATTACHMENT0, gl.COLOR_ATTACHMENT1]);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  return f;
+}
+function gpuEnsure() {
+  if (gpuTried) return gpuOK;
+  gpuTried = true;
+  gl = canvas.getContext("webgl2", { alpha: true, antialias: false,
+                     depth: false, stencil: false });
+  if (!gl) { ctx = canvas.getContext("2d"); return false; }
+  gpu.half = !gl.getExtension("EXT_color_buffer_float");
+  if (gpu.half && !gl.getExtension("EXT_color_buffer_half_float")) {
+    gl = null; ctx = canvas.getContext("2d"); return false;
+  }
+  gpu.phys = gpuProgram(GPU_VS, GPU_PHYS);
+  gpu.pt = gpuProgram(GPU_PT_VS, GPU_PT_FS);
+  if (!gpu.phys || !gpu.pt) {
+    gl = null; ctx = canvas.getContext("2d"); return false;
+  }
+  gpu.u = {};
+  for (const name of ["uS0", "uS1", "uA0", "uA1", "uA2",
+                      "uDt", "uAmbT", "uAmp", "uMouse"])
+    gpu.u["p_" + name] = gl.getUniformLocation(gpu.phys, name);
+  for (const name of ["uS0", "uA1", "uA2", "uA3",
+                      "uViewport", "uAmbT", "uAmp", "uMistSize", "uCount"])
+    gpu.u["r_" + name] = gl.getUniformLocation(gpu.pt, name);
+  gl.disable(gl.DEPTH_TEST);
+  gl.enable(gl.BLEND);
+  /* premultiplied source-over: the accumulation the 2D canvas
+     did implicitly for every drawImage */
+  gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+  gpuOK = true;
+  return true;
+}
+function gpuPackStatics() {
+  const n = beads.length, side = gpu.side, out = [];
+  const packs = [
+    b => [b.hx, b.hy, b.hz, b.phase],
+    b => { const a = strokeAnim[b.si];
+           return [a.phX, a.phY, a.phB, b.zdir]; },
+    b => [b.sdirx, b.sdiry, b.rj, 0],
+    b => [b.color[0] / 255, b.color[1] / 255, b.color[2] / 255, b.alpha],
+  ];
+  for (const pack of packs) {
+    const arr = new Float32Array(side * side * 4);
+    beads.forEach((b, i) => arr.set(pack(b), i * 4));
+    out.push(arr);
+  }
+  return out;
+}
+function gpuUploadField() {
+  const n = beads.length;
+  gpu.side = Math.max(1, Math.ceil(Math.sqrt(n)));
+  gpu.count = n;
+  const side = gpu.side;
+  for (const t of gpu.texStatics || []) gl.deleteTexture(t);
+  for (const t of gpu.texState || []) gl.deleteTexture(t);
+  for (const f of gpu.fbos || []) gl.deleteFramebuffer(f);
+  gpu.texStatics = gpuPackStatics().map(a => gpuTex(a, side));
+  const s0 = new Float32Array(side * side * 4);
+  const s1 = new Float32Array(side * side * 4);
+  beads.forEach((b, i) => {
+    s0.set([b.x, b.y, b.z, 1], i * 4);
+    s1.set([b.vx, b.vy, b.vz, 0], i * 4);
+  });
+  gpu.texState = [gpuTex(s0, side), gpuTex(s1, side),
+                  gpuTex(s0, side), gpuTex(s1, side)];
+  gpu.fbos = [gpuFbo(gpu.texState[2], gpu.texState[3]),
+              gpuFbo(gpu.texState[0], gpu.texState[1])];
+  gpu.read = 0;   // state pair index being read: 0 -> texState[0..1]
+}
+function gpuUploadStatics() {
+  /* homes moved (calm zones / resize): refresh the static
+     textures only -- the live state keeps its momentum */
+  if (!gpuOK || !gpu.texStatics) return;
+  const side = gpu.side;
+  gpuPackStatics().forEach((arr, k) => {
+    gl.bindTexture(gl.TEXTURE_2D, gpu.texStatics[k]);
+    if (gpu.half) {
+      const h = new Uint16Array(arr.length);
+      for (let i = 0; i < arr.length; i++) h[i] = f32ToF16(arr[i]);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA16F, side, side, 0,
+                    gl.RGBA, gl.HALF_FLOAT, h);
+    } else {
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, side, side, 0,
+                    gl.RGBA, gl.FLOAT, arr);
+    }
+  });
+}
+function gpuStep(dt) {
+  const side = gpu.side, u = gpu.u;
+  const ampL = appearance.motionAmp * motionLevel;
+  const steps = Math.min(3, Math.max(1, Math.ceil(dt / (1 / 60))));
+  const sdt = dt / steps;
+  gl.useProgram(gpu.phys);
+  gl.uniform1f(u.p_uAmbT, ambT);
+  gl.uniform1f(u.p_uAmp, ampL);
+  gl.uniform3f(u.p_uMouse, mouse ? mouse.x : 0, mouse ? mouse.y : 0,
+               mouse ? 1 : 0);
+  gl.activeTexture(gl.TEXTURE2);
+  gl.bindTexture(gl.TEXTURE_2D, gpu.texStatics[0]);
+  gl.uniform1i(u.p_uA0, 2);
+  gl.activeTexture(gl.TEXTURE3);
+  gl.bindTexture(gl.TEXTURE_2D, gpu.texStatics[1]);
+  gl.uniform1i(u.p_uA1, 3);
+  gl.activeTexture(gl.TEXTURE4);
+  gl.bindTexture(gl.TEXTURE_2D, gpu.texStatics[2]);
+  gl.uniform1i(u.p_uA2, 4);
+  gl.viewport(0, 0, side, side);
+  for (let k = 0; k < steps; k++) {
+    const r = gpu.read, w = 1 - r;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, gpu.fbos[r]); // fbos[r] writes pair w? see below
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, gpu.texState[r * 2]);
+    gl.uniform1i(u.p_uS0, 0);
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, gpu.texState[r * 2 + 1]);
+    gl.uniform1i(u.p_uS1, 1);
+    gl.uniform1f(u.p_uDt, sdt);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+    gpu.read = w;
+  }
+  /* render: one POINTS draw over the state texture */
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  gl.viewport(0, 0, canvas.width, canvas.height);
+  gl.clearColor(0, 0, 0, 0);
+  gl.clear(gl.COLOR_BUFFER_BIT);
+  gl.useProgram(gpu.pt);
+  gl.activeTexture(gl.TEXTURE0);
+  gl.bindTexture(gl.TEXTURE_2D, gpu.texState[gpu.read * 2]);
+  gl.uniform1i(u.r_uS0, 0);
+  gl.activeTexture(gl.TEXTURE1);
+  gl.bindTexture(gl.TEXTURE_2D, gpu.texStatics[1]);
+  gl.uniform1i(u.r_uA1, 1);
+  gl.activeTexture(gl.TEXTURE2);
+  gl.bindTexture(gl.TEXTURE_2D, gpu.texStatics[2]);
+  gl.uniform1i(u.r_uA2, 2);
+  gl.activeTexture(gl.TEXTURE3);
+  gl.bindTexture(gl.TEXTURE_2D, gpu.texStatics[3]);
+  gl.uniform1i(u.r_uA3, 3);
+  gl.uniform2f(u.r_uViewport, W, H);
+  gl.uniform1f(u.r_uAmbT, ambT);
+  gl.uniform1f(u.r_uAmp, ampL);
+  gl.uniform1f(u.r_uMistSize, appearance.mistSize);
+  gl.uniform1i(u.r_uCount, gpu.count);
+  gl.drawArrays(gl.POINTS, 0, side * side);
 }
 
 /* Window geometry changes NEVER re-roll the graffiti: the launch
@@ -358,37 +634,29 @@ function buildMist(zones) {
    re-deals while the window is dragged. */
 function applyCalmZones() {
   const zones = calmZones();
-  for (const b of grafBeads) {
+  for (const b of beads) {
     const [px, py] = pushOutOfZones(b.rx, b.ry, zones);
     b.hx = px; b.hy = py;
   }
-  for (const m of mist) {
-    const [px, py] = pushOutOfZones(m.hx, m.hy, zones);
-    m.hx = px; m.hy = py;
-  }
-  paintGraffiti();
+  gpuUploadStatics();
 }
 
-let grafResizeTimer = null;
 function rescaleField() {
   const nW = window.innerWidth, nH = window.innerHeight;
   if (!nW || !nH) return;
   if (nW === W && nH === H) { applyCalmZones(); return; }
   const sx = W ? nW / W : 1, sy = H ? nH / H : 1;
   W = nW; H = nH;
-  grafCanvas.width = W; grafCanvas.height = H;
   canvas.width = W; canvas.height = H;
   echoCanvas.width = W; echoCanvas.height = H;
-  for (const b of grafBeads) {
-    b.rx *= sx; b.ry *= sy; b.hx *= sx; b.hy *= sy;
+  for (const b of beads) {
+    b.rx *= sx; b.ry *= sy; b.x *= sx; b.y *= sy;
   }
-  for (const m of mist) {
-    m.hx *= sx; m.hy *= sy; m.x *= sx; m.y *= sy;
-  }
-  /* the canvases follow immediately so nothing stretches; the
-     one static repaint is debounced off the drag's hot path */
-  clearTimeout(grafResizeTimer);
-  grafResizeTimer = setTimeout(applyCalmZones, 90);
+  applyCalmZones();
+  /* the GPU state restarts from the (scaled) homes on a resize;
+     the field re-settles in a breath -- during a window drag
+     this keeps the wall from smearing */
+  if (gpuOK && gpu.texState) gpuUploadField();
 }
 
 function calmZones() {
@@ -438,7 +706,7 @@ function drawEcho(time) {
   echoCtx.drawImage(echoSrc, px, py, w, h);
 }
 
-/* the ambient loop: the mist drift plus the running state's
+/* the ambient loop: the bead field plus the running state's
    scene echo -- nothing else ever moves. Hard limits: capped
    at WALL_FPS, and the moment the window hides, blurs or
    minimises, wallActive() goes false and the loop stops dead
@@ -464,9 +732,6 @@ function wallLoop(t) {
   if (wallLast && t - wallLast < 1000 / WALL_FPS) return;
   const dt = Math.min(0.05, wallLast ? (t - wallLast) / 1000 : 0.016);
   wallLast = t;
-  stepWall(dt, t);
-}
-function stepWall(dt, t) {
   /* the scene echo is drawn only while its state is on show */
   if (echoSrc && document.body.classList.contains("working")) {
     drawEcho(t);
@@ -477,36 +742,56 @@ function stepWall(dt, t) {
   }
   /* the settings own the clock （设置 → 显示 → 常态动效）:
      ambT advances at the user's speed, motionLevel eases the
-     drift in and out so the switch never snaps */
+     dance in and out so the switch never snaps. Reduced-motion
+     users keep their still wall regardless. */
   const motionTarget = motionWanted() ? 1 : 0;
   motionLevel += (motionTarget - motionLevel) * Math.min(1, dt * 3);
   ambT += dt * appearance.motionSpeed * motionLevel;
-  const ampL = appearance.motionAmp * motionLevel;
+  if (gpuOK) gpuStep(dt);
+  else if (ctx) stepWall2D(dt);
+}
+
+/* the fallback path: the original 2D-canvas tick, verbatim --
+   the same bead objects, the same springs, the same sprites.
+   It runs only where WebGL2 float targets do not exist. */
+function stepWall2D(dt) {
   ctx.clearRect(0, 0, W, H);
-  for (const b of mist) {
-    const swayx = b.hx + Math.sin(ambT * 0.9 + b.phase) * 3.0 * ampL;
-    const swayy = b.hy + Math.cos(ambT * 0.7 + b.phase * 1.3) * 2.1 * ampL;
-    const zt = Math.max(-1, Math.min(1,
-      b.z + Math.sin(ambT * 0.5 + b.phase) * 0.12 * ampL));
+  const ampL = appearance.motionAmp * motionLevel;
+  const driftX = [], driftY = [], breathA = [];
+  for (let si = 0; si < strokeAnim.length; si++) {
+    const a = strokeAnim[si];
+    driftX[si] = Math.sin(ambT * 0.045 + a.phX) * 15 * ampL;
+    driftY[si] = Math.cos(ambT * 0.037 + a.phY) * 10 * ampL;
+    breathA[si] = 1 - ampL * 0.15 + ampL * 0.15 * Math.sin(ambT * 0.13 + a.phB);
+  }
+  const order = beads.map((b, i) => [b.z, i]).sort((a, b) => a[0] - b[0]);
+  for (const [, i] of order) {
+    const b = beads[i];
+    const swayx = b.hx + (driftX[b.si] || 0) + Math.sin(ambT * 0.9 + b.phase) * 3.0 * ampL;
+    const swayy = b.hy + (driftY[b.si] || 0) + Math.cos(ambT * 0.7 + b.phase * 1.3) * 2.1 * ampL;
+    const swayz = b.hz + Math.sin(ambT * 0.5 + b.phase) * 0.12 * ampL;
     let ax = 30 * (swayx - b.x) - 9.3 * b.vx;
     let ay = 30 * (swayy - b.y) - 9.3 * b.vy;
+    b.vz += (14 * (swayz - b.z) - 6 * b.vz) * dt;
     if (mouse) {
       const dx = b.x - mouse.x, dy = b.y - mouse.y;
       const d = Math.hypot(dx, dy);
       if (d < 140 && d > 0.01) {
-        const zn0 = (zt + 1.15) / 2.3;
+        const zn0 = (b.z + 1.15) / 2.3;
         const f = 1 - d / 140;
         ax += (dx / d) * 4200 * (0.5 + 0.8 * zn0) * f + b.sdirx * 950 * f;
         ay += (dy / d) * 4200 * (0.5 + 0.8 * zn0) * f + b.sdiry * 950 * f;
+        b.vz += f * b.zdir * 62 * dt * 3;
       }
     }
     b.vx += ax * dt; b.vy += ay * dt;
     const sp = Math.hypot(b.vx, b.vy);
     if (sp > 950) { b.vx *= 950 / sp; b.vy *= 950 / sp; }
     b.x += b.vx * dt; b.y += b.vy * dt;
-    const zn = Math.max(0, Math.min(1, (zt + 1.15) / 2.3));
+    b.z = Math.max(-1.3, Math.min(1.3, b.z + b.vz * dt));
+    const zn = Math.max(0, Math.min(1, (b.z + 1.15) / 2.3));
     const r = (1.7 + 1.15 * zn) * b.rj * appearance.mistSize;
-    ctx.globalAlpha = b.alpha * (0.6 + 0.4 * zn);
+    ctx.globalAlpha = b.alpha * (breathA[b.si] || 1) * (0.6 + 0.4 * zn);
     ctx.drawImage(spriteFor(b.color, zn), b.x - r, b.y - r, r * 2, r * 2);
   }
   ctx.globalAlpha = 1;
@@ -514,7 +799,6 @@ function stepWall(dt, t) {
 document.addEventListener("visibilitychange", wakeWall);
 window.addEventListener("focus", () => { pageFocused = true; wakeWall(); });
 window.addEventListener("blur", () => { pageFocused = false; });
-
 window.addEventListener("mousemove", e => { mouse = { x: e.clientX, y: e.clientY }; });
 window.addEventListener("mouseout", () => { mouse = null; });
 window.addEventListener("resize", rescaleField);
