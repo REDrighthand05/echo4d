@@ -44,6 +44,7 @@ SUITES = [
     ("parts", [sys.executable, "tests/test_depth_batch.py"]),
     ("parts", [sys.executable, "tests/test_frame_feed.py"]),
     ("cli", [sys.executable, "tests/test_cli.py"]),
+    ("cli", [sys.executable, "tests/test_cli_appctl.py"]),
     ("parts", [sys.executable, "tests/test_voxel_export.py"]),
     ("parts", [sys.executable, "tests/test_gaussian_adapter.py"]),
     ("parts", [sys.executable, "tests/test_photo_discovery.py"]),

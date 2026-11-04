@@ -240,6 +240,61 @@ def relay_plan(current_version, index):
         return None
 
 
+def _hop_release_from_entry(entry, setup_url):
+    """The release-shaped dict one relay index entry stands for --
+    the same shape relay_plan hands to the hot-update client."""
+    tag = "v" + str(entry["version"])
+    return {
+        "tag_name": tag,
+        "draft": False, "prerelease": False,
+        "assets": [
+            {"name": "echoscene-manifest.json",
+             "browser_download_url": RELAY_BASE + "/" + entry["manifest"]},
+            {"name": "EchoScene-Update.zip",
+             "browser_download_url": RELAY_BASE + "/" + entry["pack"]},
+            {"name": SETUP_ASSET,
+             "browser_download_url": setup_url}]}
+
+
+def relay_chain(index, current_version):
+    """The WHOLE climb from a relay index: (latest_version,
+    [hop_release, ...]) in the order the hops must be applied --
+    relay_plan's multi-hop sibling for callers (the CLI) that walk
+    the chain themselves instead of one hop per app relaunch.
+    Returns (current_version, []) when already at the top, and None
+    when the index is unusable or the chain has a gap (the caller
+    then falls back to the GitHub API flow). Pure; never raises."""
+    try:
+        entries = index["versions"]
+        if not isinstance(entries, list) or not entries:
+            return None
+        by_from = {}
+        latest = None
+        latest_key = None
+        for entry in entries:
+            key = parse_version("v" + str(entry["version"]))
+            if key is None:
+                return None
+            by_from[str(entry["from"])] = entry
+            if latest_key is None or key > latest_key:
+                latest, latest_key = str(entry["version"]), key
+        if not is_newer("v" + latest, current_version):
+            return (current_version, [])
+        setup_url = (f"https://github.com/{REPO}/releases/download/"
+                     f"v{latest}/{SETUP_ASSET}")
+        hops = []
+        current = current_version
+        while is_newer("v" + latest, current):
+            entry = by_from.get(current)
+            if entry is None:
+                return None     # a gap: this chain cannot be walked
+            hops.append(_hop_release_from_entry(entry, setup_url))
+            current = str(entry["version"])
+        return (latest, hops)
+    except Exception:
+        return None
+
+
 def _fetch_json(url=LATEST_URL, timeout=CHECK_TIMEOUT):
     req = urllib.request.Request(
         url, headers={"User-Agent": _USER_AGENT,
@@ -281,6 +336,27 @@ def pick_hop(releases, current_version):
         return best
     except Exception:
         return None
+
+
+def github_chain(releases, current_version, max_hops=64):
+    """The whole climb from a releases list: pick_hop applied
+    repeatedly, in application order. [] when already at the top.
+    Pure; never raises."""
+    hops = []
+    current = current_version
+    try:
+        for _ in range(max_hops):
+            hop = pick_hop(releases, current)
+            if hop is None:
+                break
+            hops.append(hop)
+            key = parse_version(hop.get("tag_name"))
+            if key is None:
+                break
+            current = ".".join(str(p) for p in key)
+    except Exception:
+        return hops
+    return hops
 
 
 def check_for_update(current_version, fetch=None):

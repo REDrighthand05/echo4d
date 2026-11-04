@@ -8,6 +8,18 @@ all from the shell, so Muse (or a script) can operate it directly.
     python -m echo_scene.cli depth-video <video> [--out P] [--fps N]
     python -m echo_scene.cli export <job> --format F [--out P]
     python -m echo_scene.cli status [<job>]
+    python -m echo_scene.cli shutdown [--force]
+    python -m echo_scene.cli restart [--force]
+    python -m echo_scene.cli update [--check] [--no-restart] [--force]
+
+shutdown / restart / update are the app-lifecycle commands (user
+directive, 2026-11-04): the software updates often, and clicking
+through its window is not always reliable, so closing, updating
+and relaunching must all work as one remote CLI command each.
+They reuse the existing hot-update machinery end to end
+(echo_app.hotupdate to check/stage, echo_app.hotapply to swap,
+echo_app.appctl for process control) -- no second update logic
+lives here.
 
 A <job> is a job folder path or a bare name under the jobs root
 (default: the same jobs root the desktop app uses, from the saved
@@ -44,9 +56,11 @@ VOXEL_FORMATS = {"voxel": ("glb", "ply"), "voxel-glb": ("glb",),
 
 # The one output name a depth-video / export command produced, set
 # by the command itself just before it reports success, so the
-# activity event (below) can name the actual file. Purely cosmetic
-# -- nothing branches on it.
-_EVENT_DETAIL = {"out": ""}
+# activity event (below) can name the actual file. "note" lets a
+# lifecycle command dictate its event line outright (a shutdown
+# refused because a job is running must say exactly that).
+# Purely cosmetic -- nothing branches on either.
+_EVENT_DETAIL = {"out": "", "note": ""}
 
 
 def default_jobs_root() -> Path:
@@ -312,6 +326,273 @@ def cmd_status(args) -> int:
 
 
 # -------------------------------------------------------------------
+# app lifecycle: shutdown / restart / update
+# -------------------------------------------------------------------
+
+# Stages after which a job counts as finished for the lifecycle
+# guards. Anything earlier with fresh files on disk is treated as
+# mid-run (see _running_job).
+_TERMINAL_STAGES = {"present", "done", "complete"}
+
+
+def _running_job(jobs_root: Path, fresh_seconds: float = 180.0,
+                 now: float | None = None):
+    """The job under jobs_root that looks mid-run right now, or
+    None. Cross-process evidence is all we have: a job is running
+    when its record is not in a finished state AND its folder was
+    written to within `fresh_seconds` -- the heavy stages (poses,
+    depth, fuse) write into the job folder as they go, so a live
+    job's folder is never quiet for long. A finished job (ok False,
+    or a terminal stage with ok True) never counts, however fresh
+    its files are. Deliberately conservative in one direction only:
+    callers refuse to close/update over a 'running' verdict unless
+    --force, and say so out loud."""
+    import time as _time
+
+    now = _time.time() if now is None else now
+    if not jobs_root.is_dir():
+        return None
+    for job in sorted(jobs_root.iterdir()):
+        if not job.is_dir() or not (job / "job.json").exists():
+            continue
+        rec = _read_job_json(job)
+        if rec.get("ok") is False:
+            continue                      # failed = finished
+        if rec.get("ok") is True and rec.get("stage") in _TERMINAL_STAGES:
+            continue                      # done = finished
+        if rec.get("stage") in (None, "imported"):
+            continue                      # never started
+        newest = 0.0
+        for path in job.rglob("*"):
+            try:
+                newest = max(newest, path.stat().st_mtime)
+            except OSError:
+                continue
+            if now - newest <= fresh_seconds:
+                return job
+    return None
+
+
+def _lifecycle_event(summary: str, ok: bool = True) -> None:
+    """One step line for the frontend toast strip, in the same
+    format every other CLI event uses (see _emit_event)."""
+    try:
+        from echo_app import cli_events
+
+        cli_events.append_event("update", ok, summary)
+    except Exception:
+        pass
+
+
+def _shutdown_flow(jobs_root: Path, force: bool):
+    """Shared by shutdown/restart/update: (rc, was_running).
+    rc 0 means the app is down (or was never up) and the caller
+    may proceed; the job guard refuses over a mid-run job unless
+    force, and leaves the app untouched when it refuses."""
+    from echo_app import appctl, hotupdate
+
+    root = hotupdate.install_root()
+    if not appctl.find_app_pids(root):
+        return 0, False
+    if not force:
+        job = _running_job(jobs_root)
+        if job is not None:
+            print(f"有 job 正在跑（{job.name}），先等它跑完，"
+                  "或加 --force 强行关闭。", file=sys.stderr)
+            _EVENT_DETAIL["note"] = "有 job 在跑，没关软件"
+            return 1, True
+    result = appctl.shutdown_app(root)
+    if not result["ok"]:
+        print("软件进程没能退干净，关不掉。", file=sys.stderr)
+        _EVENT_DETAIL["note"] = "软件关不掉"
+        return 1, True
+    return 0, True
+
+
+def cmd_shutdown(args) -> int:
+    rc, was_running = _shutdown_flow(Path(args.jobs_root), args.force)
+    if rc == 0:
+        print("EchoScene 已退出。" if was_running
+              else "EchoScene 没有在运行。")
+        _EVENT_DETAIL["note"] = "已关掉软件" if was_running else "软件没开着"
+    return rc
+
+
+def _confirm_started(root, timeout: float = 6.0) -> int | None:
+    """Poll for the relaunched app's pid; None when it never shows."""
+    import time as _time
+
+    from echo_app import appctl
+
+    deadline = _time.time() + timeout
+    while _time.time() < deadline:
+        pids = appctl.find_app_pids(root)
+        if pids:
+            return pids[0]
+        _time.sleep(0.25)
+    return None
+
+
+def cmd_restart(args) -> int:
+    from echo_app import appctl, hotupdate
+
+    root = hotupdate.install_root()
+    rc, was_running = _shutdown_flow(Path(args.jobs_root), args.force)
+    if rc != 0:
+        return rc
+    pid = appctl.start_app(root)
+    shown = _confirm_started(root) if pid is not None else None
+    if shown is None:
+        print("restart: 软件没能重新拉起来。", file=sys.stderr)
+        _EVENT_DETAIL["note"] = "重启没拉起来"
+        return 1
+    print(f"EchoScene 已{'重新' if was_running else ''}启动（pid {shown}）。")
+    _EVENT_DETAIL["note"] = "软件已重启"
+    return 0
+
+
+def _update_plan(current: str):
+    """(latest, [release dicts in climb order]) for the update
+    command: the relay chain first (no API quota), the GitHub
+    releases chain as fallback -- the same sources, in the same
+    order, the app itself checks. Raises when neither answers."""
+    from echo_app import updater
+
+    try:
+        from echo_app.settings import load_settings
+
+        updater.set_proxy(load_settings().update_proxy)
+    except Exception:
+        pass
+    try:
+        chain = updater.relay_chain(updater.fetch_relay_index(), current)
+    except Exception:
+        chain = None
+    if chain is not None:
+        return chain
+    hops = updater.github_chain(updater.fetch_releases(), current)
+    if not hops:
+        return current, []
+    from echo_app.version import parse_version
+
+    key = parse_version(hops[-1].get("tag_name"))
+    latest = ".".join(str(p) for p in key) if key else current
+    return latest, hops
+
+
+def _relaunch_after_update(root, was_running: bool, no_restart: bool):
+    """Bring the app back after an apply phase, per the command's
+    contract: only when it was running before, and never under
+    --no-restart. Returns the new pid or None."""
+    if not was_running or no_restart:
+        return None
+    from echo_app import appctl
+
+    pid = appctl.start_app(root)
+    if pid is None:
+        return None
+    return _confirm_started(root)
+
+
+def cmd_update(args) -> int:
+    from echo_app import appctl, hotapply, hotupdate
+
+    root = hotupdate.install_root()
+    jobs_root = Path(args.jobs_root)
+    try:
+        hotupdate.recover(root)   # repair a previously interrupted apply
+    except Exception:
+        pass
+    current = hotupdate.local_version(root)
+    _lifecycle_event("开始检查更新")
+    print(f"当前版本：{current}", flush=True)
+    try:
+        latest, hops = _update_plan(current)
+    except Exception as e:
+        print(f"update: 检查更新没连上（{type(e).__name__}: {e}）",
+              file=sys.stderr)
+        _EVENT_DETAIL["note"] = "检查更新没连上"
+        return 1
+    if not hops:
+        print(f"已是最新版（{current}），不用更新。")
+        _EVENT_DETAIL["note"] = f"已是最新 {current}"
+        return 0
+    print(f"可更新到 {latest}，共 {len(hops)} 跳。", flush=True)
+    if args.check:
+        _EVENT_DETAIL["note"] = f"有新版 {latest}（{len(hops)} 跳）"
+        return 0
+
+    was_running = bool(appctl.find_app_pids(root))
+    if was_running and not args.force:
+        job = _running_job(jobs_root)
+        if job is not None:
+            print(f"有 job 正在跑（{job.name}），更新取消；"
+                  "等它跑完再更，或加 --force。", file=sys.stderr)
+            _EVENT_DETAIL["note"] = "有 job 在跑，更新取消"
+            return 1
+    closed = False
+    applied = current
+    try:
+        for i, hop in enumerate(hops, 1):
+            hot = hotupdate.check_hot_update(hop, root)
+            if hot is None:
+                tag = hop.get("tag_name", "?")
+                raise RuntimeError(
+                    f"第 {i} 跳（{tag}）走不了热更新通道，"
+                    "需要完整安装包，CLI 不自动装整包")
+            _lifecycle_event(f"正在下载更新（第 {i}/{len(hops)} 跳）")
+            print(f"[{i}/{len(hops)}] 下载并校验 v{hot.version}…",
+                  flush=True)
+            hotupdate.download_and_stage(root, hot)
+            if was_running and not closed:
+                rc, _ = _shutdown_flow(jobs_root, args.force)
+                if rc != 0:
+                    raise RuntimeError("软件没能关掉，更新中止")
+                closed = True
+                _lifecycle_event("已关闭软件，开始换文件")
+            hotupdate.request_apply(root, hot)
+            result = hotapply.apply(root)
+            if not result.get("ok"):
+                raise RuntimeError(
+                    f"第 {i} 跳应用失败（已回滚）：{result.get('error')}")
+            applied = hot.version
+            _lifecycle_event(f"已更新到 {applied}")
+            print(f"[{i}/{len(hops)}] 已应用 v{applied}。", flush=True)
+    except Exception as e:
+        print(f"update: failed: {e}", file=sys.stderr)
+        try:
+            hotupdate.recover(root)
+        except Exception:
+            pass
+        if not _EVENT_DETAIL["note"]:
+            # _shutdown_flow may already have written the specific
+            # reason (a job started mid-download); keep it.
+            _EVENT_DETAIL["note"] = (f"更新没成（停在 {applied}）"
+                                      if applied != current
+                                      else "更新没成")
+        _relaunch_after_update(root, was_running, args.no_restart)
+        return 1
+
+    print(f"完成。当前版本：{applied}")
+    if was_running and not args.no_restart:
+        shown = _relaunch_after_update(root, was_running, args.no_restart)
+        if shown is None:
+            print("update: 更新好了，但软件没能重新拉起来。",
+                  file=sys.stderr)
+            _EVENT_DETAIL["note"] = "更新好了，但没拉起来"
+            return 1
+        print(f"EchoScene 已重新启动（pid {shown}）。")
+        _lifecycle_event(f"更新完成，已重启到 {applied}")
+        _EVENT_DETAIL["note"] = f"已更新到 {applied} 并重启"
+    elif was_running:
+        print("更新已应用，软件保持关闭（--no-restart）。")
+        _EVENT_DETAIL["note"] = f"已更新到 {applied}"
+    else:
+        _EVENT_DETAIL["note"] = f"已更新到 {applied}"
+    return 0
+
+
+# -------------------------------------------------------------------
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
@@ -349,6 +630,27 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("status", help="列出 job 与产物")
     p.add_argument("job", nargs="?", help="只看这一个 job（名或路径）")
     p.set_defaults(fn=cmd_status)
+
+    p = sub.add_parser("shutdown", help="把正在运行的软件干净关掉"
+                                        "（没在运行也算成功）")
+    p.add_argument("--force", action="store_true",
+                   help="有 job 在跑也关（默认先拒绝）")
+    p.set_defaults(fn=cmd_shutdown)
+
+    p = sub.add_parser("restart", help="关掉软件再重新拉起（没开着就直接拉起）")
+    p.add_argument("--force", action="store_true",
+                   help="有 job 在跑也重启（默认先拒绝）")
+    p.set_defaults(fn=cmd_restart)
+
+    p = sub.add_parser("update", help="热更新全自动：逐跳下载、校验、"
+                                      "关软件、换文件、重新拉起")
+    p.add_argument("--check", action="store_true",
+                   help="只查不更：报当前版、最新版和待跳数")
+    p.add_argument("--no-restart", action="store_true",
+                   help="只应用更新，不重新拉起软件")
+    p.add_argument("--force", action="store_true",
+                   help="有 job 在跑也更新（默认先拒绝）")
+    p.set_defaults(fn=cmd_update)
     return parser
 
 
@@ -361,6 +663,8 @@ def _summary_for(args, rc: int) -> str:
     did -- the words the desktop frontend's toast shows."""
     ok = rc == 0
     cmd = getattr(args, "command", "?")
+    if _EVENT_DETAIL["note"]:
+        return _EVENT_DETAIL["note"]
     out = _EVENT_DETAIL["out"]
     if cmd == "import":
         src = Path(args.source)
@@ -382,6 +686,12 @@ def _summary_for(args, rc: int) -> str:
         return f"导出 {label} 失败"
     if cmd == "status":
         return "查了状态" if ok else "查状态失败"
+    if cmd == "shutdown":
+        return "已关掉软件" if ok else "关软件失败"
+    if cmd == "restart":
+        return "软件已重启" if ok else "重启失败"
+    if cmd == "update":
+        return "更新完成" if ok else "更新没成"
     return f"{cmd} 完成" if ok else f"{cmd} 失败"
 
 
@@ -403,6 +713,7 @@ def _emit_event(args, rc: int) -> None:
 def main(argv=None) -> int:
     args = build_parser().parse_args(argv)
     _EVENT_DETAIL["out"] = ""
+    _EVENT_DETAIL["note"] = ""
     try:
         rc = args.fn(args)
     except Exception:
