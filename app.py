@@ -135,6 +135,16 @@ def run_pipeline(video: Path, jobs_root: Path, log, job_sink=None) -> Path:
              "video": str(video)}, ensure_ascii=False, indent=2))
     except Exception:
         pass
+    # Phone-capture imports (inbox selection or a drag-in of the
+    # capture's own video.mp4) land the capture's sensor record inside
+    # the job -- the same helper the CLI import uses -- so the fuse
+    # stage can orient by IMU gravity. A plain video in an ordinary
+    # folder is not a capture folder and imports exactly as before.
+    try:
+        from echo_scene import sensor_record as sr
+        sr.import_capture_record(video.parent, job)
+    except Exception:
+        pass
 
     steps = [
         ("正在抽帧", lambda: stage_extract(video, job)),

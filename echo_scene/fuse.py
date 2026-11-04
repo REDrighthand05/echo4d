@@ -103,6 +103,65 @@ def _estimate_world_up(poses: dict) -> np.ndarray | None:
     return -down
 
 
+def _estimate_up_from_imu(job_dir: Path, poses: dict):
+    """World up from the job's landed IMU record, or None.
+
+    The production LEVEL path for capture jobs: import landed the
+    collector's sensor record in job_dir/sensor_record (see
+    sensor_record.py), and its measured gravity -- the registered
+    accelerometer mean -- IS up, outranking every camera-only
+    estimate in stage_fuse. Returns (up, info) or None on any gap
+    (no record, no calibration, too few pairable poses): IMU
+    orientation is an upgrade, never a requirement, and declining
+    is always the honest move.
+
+    Pairing uses frame_capture_times.json (written by stage_extract)
+    because extracted frames are renumbered pulls from the video.
+    For stored-frame captures (cam_from_device_stored applies a
+    roll) the capture's own frame table would silently pair each
+    pose with the wrong instant, so without the map this declines;
+    native-frame captures (Pi / simulator) pair by name as designed.
+    """
+    from echo_scene import sensor_record as sr
+
+    cap = sr.read_job_capture(job_dir)
+    if cap is None:
+        return None
+    cfd = sr.cam_from_device_stored(cap)
+    if cfd is None:
+        return None
+    frame_times = None
+    times_path = job_dir / "frame_capture_times.json"
+    if times_path.exists():
+        try:
+            raw = json.loads(times_path.read_text())
+            frame_times = {str(k): float(v) for k, v in raw.items()}
+        except (OSError, ValueError, TypeError):
+            frame_times = None
+    if frame_times is None and sr.stored_frame_roll_deg(cap) != 0.0:
+        return None
+    pairs = sum(
+        1 for name, pose in poses.items()
+        if pose.get("cam_from_world_quat_xyzw") is not None
+        and (frame_times.get(name) if frame_times is not None
+             else cap.frame_time.get(name)) is not None)
+    if pairs < 3:
+        return None
+    try:
+        R_align = sr.register_imu_frame(cap, poses, cfd,
+                                        frame_times=frame_times)
+        up = sr.estimate_up_from_imu(cap, R_align)
+    except (ValueError, AssertionError, IndexError):
+        return None
+    up = np.asarray(up, dtype=np.float64)
+    n = float(np.linalg.norm(up))
+    if not np.isfinite(n) or n < 1e-9:
+        return None
+    info = {"pairs": int(pairs),
+            "stored_frame_roll_deg": sr.stored_frame_roll_deg(cap)}
+    return up / n, info
+
+
 def _view_directions(poses: dict) -> np.ndarray:
     """Camera view (forward) axes in world coordinates, one per pose.
 
@@ -663,27 +722,36 @@ def stage_fuse(job_dir: Path, stride: int = 4) -> dict:
             points = points * float(marker_scale)
             marker_info["marker_scale_to_meters"] = float(marker_scale)
 
-    # Up alignment (camera-estimated): the COLMAP world frame is
-    # arbitrary, so without this step the exported scene can sit upside
-    # down in the viewer (whose up is +Y) and in every other tool. When
-    # the marker stage did not already level the cloud from a measured
-    # floor, world up comes from the poses alone (never the cloud):
-    # the great-circle fit over the view directions (user's method,
-    # 2026-11-04 -- see _estimate_up_great_circle), with the image-up
-    # cluster as its degenerate-input fallback. The whole cloud is
-    # then rotated rigidly so that up lands on +Y. One rotation
-    # applied to every point -- nothing is moved relative to anything
-    # else, and the trim / voxel_pick results above are untouched.
-    # Runs after voxel_pick, so the mesh and voxel stages (which
-    # consume points.bin) inherit the upright frame.
+    # Up alignment: the COLMAP world frame is arbitrary, so without
+    # this step the exported scene can sit upside down in the viewer
+    # (whose up is +Y) and in every other tool. When the marker stage
+    # did not already level the cloud from a measured floor, world up
+    # comes first from the job's IMU record when import landed one
+    # (measured gravity -- see _estimate_up_from_imu); only capture
+    # jobs without a usable record fall back to the poses alone
+    # (never the cloud): the great-circle fit over the view
+    # directions (user's method, 2026-11-04 -- see
+    # _estimate_up_great_circle), with the image-up cluster as its
+    # degenerate-input fallback. The whole cloud is then rotated
+    # rigidly so that up lands on +Y. One rotation applied to every
+    # point -- nothing is moved relative to anything else, and the
+    # trim / voxel_pick results above are untouched. Runs after
+    # voxel_pick, so the mesh and voxel stages (which consume
+    # points.bin) inherit the upright frame.
     align_info = {}
     if export_rot is None:
         up_est = None
-        gc = _estimate_up_great_circle(poses)
-        if gc is not None:
-            up_est, gc_info = gc
-            align_info["up_method"] = gc_info.pop("method")
-            align_info["great_circle"] = gc_info
+        imu_est = _estimate_up_from_imu(job_dir, poses)
+        if imu_est is not None:
+            up_est, imu_info = imu_est
+            align_info["up_method"] = "imu"
+            align_info["imu"] = imu_info
+        if up_est is None:
+            gc = _estimate_up_great_circle(poses)
+            if gc is not None:
+                up_est, gc_info = gc
+                align_info["up_method"] = gc_info.pop("method")
+                align_info["great_circle"] = gc_info
         if up_est is None:
             up_est = _estimate_world_up(poses)
             if up_est is not None:
@@ -691,7 +759,8 @@ def stage_fuse(job_dir: Path, stride: int = 4) -> dict:
         if up_est is not None:
             export_rot = _rotation_mapping(up_est, np.array([0.0, 1.0, 0.0]))
             points = points @ export_rot.T
-            align_info["up_alignment"] = "camera_poses"
+            align_info["up_alignment"] = (
+                "imu_gravity" if imu_est is not None else "camera_poses")
             align_info["estimated_up_world"] = [float(v) for v in up_est]
     alignment_file = job_dir / "alignment.json"
     if export_rot is not None:

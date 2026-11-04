@@ -236,6 +236,99 @@ def test_great_circle_no_poses():
     assert _estimate_up_great_circle({"a.jpg": {}}) is None
 
 
+def _imu_job(td: Path, with_times: bool = True,
+             with_record: bool = True):
+    """A job whose landed sensor record + poses are fabricated
+    consistently: boot frame is ENU-like (up = +Z), the recon frame
+    is the boot frame turned 35 deg about X, device orientations
+    sweep a heading arc, accel is specific force (reaction). Poses
+    carry EXTRACTION names (frame_00101.jpg...) that the capture's
+    own frame table does not know -- pairing must go through
+    frame_capture_times.json. Returns (job, poses, up_true_recon)."""
+    from scipy.spatial.transform import Rotation
+
+    from echo_scene import sensor_record as sr
+    from echo_scene.fuse import _estimate_up_from_imu  # noqa: F401
+
+    job = Path(td)
+    up_boot = np.array([0.0, 0.0, 1.0])
+    R_align_true = _axis_angle(np.array([1.0, 0.0, 0.0]),
+                               np.radians(35.0))
+    cfd_native = np.array([[0.0, 1.0, 0.0], [1.0, 0.0, 0.0],
+                           [0.0, 0.0, -1.0]])
+    a90 = np.radians(-90.0)
+    rz_m90 = np.array([[np.cos(a90), -np.sin(a90), 0.0],
+                       [np.sin(a90), np.cos(a90), 0.0], [0.0, 0.0, 1.0]])
+    cfd_stored = rz_m90 @ cfd_native
+
+    def device_rot(t):
+        return Rotation.from_euler(
+            "ZYX", [np.degrees(1.1 * t), 8.0 * np.sin(2.0 * t),
+                    5.0 * np.sin(1.3 * t)], degrees=True)
+
+    poses = {}
+    times = {}
+    if with_record:
+        rec = job / sr.JOB_SENSOR_DIRNAME
+        sr.write_meta(rec, {
+            "device": {"name": "test"},
+            "android": {"sensor_orientation_deg": 90},
+            "calibration": {"cam_from_device": cfd_native.tolist()},
+            "tof": {"fov_deg": 45.0}})
+        sr.write_frames(rec, np.arange(3), np.array([0.0, 1.0, 2.0]),
+                        ["frame_00001.jpg", "frame_00002.jpg",
+                         "frame_00003.jpg"])
+        imu_t = np.arange(0.0, 2.01, 0.05)
+        quats = np.stack([device_rot(t).as_quat()[[3, 0, 1, 2]]
+                          for t in imu_t])  # wxyz
+        accel = np.stack([device_rot(t).inv().apply(up_boot * 9.81)
+                          for t in imu_t])
+        sr.write_imu(rec, imu_t, quats, accel,
+                     np.zeros((len(imu_t), 3)))
+        sr.write_tof(rec, np.array([0.0]),
+                     np.full((1, 64), 1000, dtype=np.int32))
+    for k in range(8):
+        t = 0.2 + 0.2 * k
+        name = f"frame_0010{k + 1}.jpg"
+        R_wc = R_align_true @ device_rot(t).as_matrix() \
+            @ cfd_stored.T
+        poses[name] = {
+            "cam_from_world_quat_xyzw":
+                _matrix_to_quat_xyzw(R_wc.T).tolist(),
+            "cam_from_world_t": [0.0, 0.0, 0.0]}
+        times[name] = t
+    if with_times:
+        (job / "frame_capture_times.json").write_text(
+            json.dumps(times))
+    return job, poses, R_align_true @ up_boot
+
+
+def test_fuse_imu_up_from_landed_record():
+    from echo_scene.fuse import _estimate_up_from_imu
+    with tempfile.TemporaryDirectory() as td:
+        job, poses, up_true = _imu_job(Path(td))
+        res = _estimate_up_from_imu(job, poses)
+        assert res is not None
+        up, info = res
+        assert info["pairs"] == 8
+        assert info["stored_frame_roll_deg"] == -90.0
+        assert _angle(up, up_true) < 1.5, \
+            f"IMU up off by {_angle(up, up_true):.2f} deg"
+
+
+def test_fuse_imu_declines_without_time_map_or_record():
+    from echo_scene.fuse import _estimate_up_from_imu
+    with tempfile.TemporaryDirectory() as td:
+        # stored-frame capture but no extraction-time map: pairing by
+        # the capture's own names would be silently wrong -> decline
+        job, poses, _ = _imu_job(Path(td), with_times=False)
+        assert _estimate_up_from_imu(job, poses) is None
+    with tempfile.TemporaryDirectory() as td:
+        # no landed record at all -> camera methods keep the job
+        job, poses, _ = _imu_job(Path(td), with_record=False)
+        assert _estimate_up_from_imu(job, poses) is None
+
+
 if __name__ == "__main__":
     test_up_recovered_despite_outliers()
     test_rotation_mapping_is_rigid_and_lands_on_y()
@@ -246,4 +339,6 @@ if __name__ == "__main__":
     test_great_circle_degenerate_straight_walk_falls_back()
     test_great_circle_degenerate_room_scan_not_dressed_up()
     test_great_circle_no_poses()
+    test_fuse_imu_up_from_landed_record()
+    test_fuse_imu_declines_without_time_map_or_record()
     print("up-alignment contract: ALL PASS")

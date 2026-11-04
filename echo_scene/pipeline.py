@@ -104,6 +104,95 @@ def _hwaccel_args() -> list:
     return _HWACCEL_CACHE
 
 
+_MATCH_W, _MATCH_H = 96, 54
+_MATCH_MIN_CORR = 0.9
+
+
+def _gray_thumbs_from_video(video: Path) -> np.ndarray | None:
+    """Every container frame of the video as a 96x54 gray thumbnail
+    (one ffmpeg decode, raw bytes). None when the decode fails."""
+    try:
+        out = subprocess.run(
+            [_tool_path("ffmpeg"), "-v", "error", "-i", str(video),
+             "-vf", f"scale={_MATCH_W}:{_MATCH_H},format=gray",
+             "-f", "rawvideo", "-"],
+            capture_output=True, check=True).stdout
+    except (subprocess.CalledProcessError, OSError):
+        return None
+    n = len(out) // (_MATCH_W * _MATCH_H)
+    if n == 0:
+        return None
+    return np.frombuffer(out[: n * _MATCH_W * _MATCH_H],
+                         dtype=np.uint8).reshape(
+                             n, _MATCH_H, _MATCH_W).astype(np.float64)
+
+
+def _gray_thumb_of_image(path: Path) -> np.ndarray | None:
+    try:
+        out = subprocess.run(
+            [_tool_path("ffmpeg"), "-v", "error", "-i", str(path),
+             "-vf", f"scale={_MATCH_W}:{_MATCH_H},format=gray",
+             "-f", "rawvideo", "-"],
+            capture_output=True, check=True).stdout
+    except (subprocess.CalledProcessError, OSError):
+        return None
+    if len(out) < _MATCH_W * _MATCH_H:
+        return None
+    return np.frombuffer(out[: _MATCH_W * _MATCH_H],
+                         dtype=np.uint8).reshape(
+                             _MATCH_H, _MATCH_W).astype(np.float64)
+
+
+def _write_frame_capture_times(video: Path, frames: list,
+                               job_dir: Path) -> int:
+    """Pair each extracted frame with its capture-clock time and
+    write frame_capture_times.json; returns the number paired.
+
+    Only for jobs whose import landed a sensor record (see
+    sensor_record.import_capture_record). The extracted frames are
+    renumbered pulls from the video -- frame_00004.jpg is the fourth
+    EXTRACTION, not the capture's fourth frame -- so the pairing is
+    recovered by visual correlation against the video itself (the
+    orientation audit's method: on the 2026-11-03 capture all 35
+    posed frames matched at corr 1.000). The winning container
+    frame's index is the capture frame's index, whose sensor time
+    the record's frames.csv carries. Matches below the correlation
+    bar are left out, and if fewer than half the frames pair, no
+    file is written at all: fuse then orients without IMU rather
+    than pairing poses with guessed instants.
+    """
+    from echo_scene import sensor_record as sr
+
+    cap = sr.read_job_capture(job_dir)
+    if cap is None or len(frames) == 0:
+        return 0
+    vid = _gray_thumbs_from_video(video)
+    if vid is None:
+        return 0
+    flat = vid.reshape(len(vid), -1)
+    flat = flat - flat.mean(axis=1, keepdims=True)
+    norms = np.linalg.norm(flat, axis=1)
+    mapping = {}
+    for path in frames:
+        img = _gray_thumb_of_image(path)
+        if img is None:
+            continue
+        v = img.reshape(-1).astype(np.float64)
+        v = v - v.mean()
+        nv = float(np.linalg.norm(v))
+        if nv < 1e-9:
+            continue
+        corr = (flat @ v) / (norms * nv + 1e-9)
+        idx = int(np.argmax(corr))
+        if corr[idx] >= _MATCH_MIN_CORR and idx < len(cap.frame_t):
+            mapping[path.name] = float(cap.frame_t[idx])
+    if len(mapping) < max(3, len(frames) // 2):
+        return 0
+    (job_dir / "frame_capture_times.json").write_text(
+        json.dumps(mapping, ensure_ascii=False, indent=2))
+    return len(mapping)
+
+
 def stage_extract(video: Path, job_dir: Path) -> dict:
     frames_dir = job_dir / "frames"
     frames_dir.mkdir(parents=True, exist_ok=True)
@@ -128,6 +217,7 @@ def stage_extract(video: Path, job_dir: Path) -> dict:
         _run([_tool_path("ffmpeg"), "-y", "-v", "error",
               "-i", video, *tail])
     frames = sorted(frames_dir.glob("frame_*.jpg"))
+    paired = _write_frame_capture_times(video, frames, job_dir)
     info = {
         "stage": "extract",
         "video": str(video),
@@ -136,6 +226,8 @@ def stage_extract(video: Path, job_dir: Path) -> dict:
         "frame_count": len(frames),
         "frames_dir": str(frames_dir),
     }
+    if paired:
+        info["frame_capture_times"] = paired
     (job_dir / "job.json").write_text(json.dumps(info, ensure_ascii=False, indent=2))
     return info
 

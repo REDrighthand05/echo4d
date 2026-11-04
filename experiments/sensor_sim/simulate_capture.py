@@ -25,6 +25,11 @@ go to ground_truth.json NEXT TO the capture folder, for the payoff
 report and tests -- never inside it. The importer must derive
 everything from the capture + reconstruction alone.
 
+The payoff tests pair this capture against the LIVE jobs/room2
+folder, so re-run this script whenever jobs/room2 is regenerated --
+a capture fabricated from an older room2 (different units, point
+set or frame) silently stops pairing with it.
+
     .venv/bin/python experiments/sensor_sim/simulate_capture.py
 """
 import json
@@ -118,13 +123,17 @@ def main() -> int:
                            drift.as_matrix() @ R_wd_true)
     quat_wxyz = Rotation.from_matrix(R_reported).as_quat()[:, [3, 0, 1, 2]]
 
-    g_world = -GRAVITY * up_true
     horiz = np.array([1.0, 0.0, 0.0])
     horiz = horiz - (horiz @ up_true) * up_true
     horiz /= np.linalg.norm(horiz)
     motion = (0.35 * np.sin(2 * np.pi * 1.9 * imu_t))[:, None] * up_true[None, :] \
         + (0.15 * np.sin(2 * np.pi * 0.95 * imu_t + 1.3))[:, None] * horiz[None, :]
-    accel_world = g_world[None, :] + motion
+    # Specific force, the format's convention (a resting device reads
+    # +G along its up axis): kinematic acceleration MINUS the gravity
+    # vector (-G * up), i.e. motion + G * up. An earlier version of
+    # this simulator wrote the gravity vector itself, which taught
+    # estimate_up_from_imu a sign the real writers never produce.
+    accel_world = (GRAVITY * up_true)[None, :] + motion
     accel_dev = np.einsum("nji,nj->ni", R_wd_true, accel_world)
     accel_dev += np.array([0.03, -0.02, 0.015])[None, :]
     accel_dev += rng.normal(0.0, 0.04, accel_dev.shape)

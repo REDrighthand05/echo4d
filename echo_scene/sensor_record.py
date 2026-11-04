@@ -69,6 +69,7 @@ maths only -- see experiments/sensor_sim/payoff_report.md.
 """
 import csv
 import json
+import shutil
 from pathlib import Path
 
 import numpy as np
@@ -91,6 +92,13 @@ __all__ = [
     "register_imu_frame",
     "estimate_up_from_imu",
     "estimate_scale_from_tof",
+    "RECORD_FILES",
+    "JOB_SENSOR_DIRNAME",
+    "is_capture_folder",
+    "import_capture_record",
+    "read_job_capture",
+    "stored_frame_roll_deg",
+    "cam_from_device_stored",
 ]
 
 FORMAT_VERSION = 1
@@ -426,6 +434,108 @@ def zone_distances_from_points(points_cam: np.ndarray, fov_deg: float = 45.0,
 
 
 # ---------------------------------------------------------------------------
+# Landing a capture's record inside a pipeline job, and the stored-frame
+# calibration convention. The importers (CLI import, the desktop app)
+# share import_capture_record; fuse reads the landed copy back with
+# read_job_capture. The video itself is NOT copied -- the job already
+# references it, and the record is the small text half of the capture.
+# ---------------------------------------------------------------------------
+
+RECORD_FILES = ("meta.json", "frames.csv", "imu.csv", "tof.csv",
+                "env.csv", "mag.csv", "spec.csv", "poses.csv",
+                "frame_meta.csv")
+JOB_SENSOR_DIRNAME = "sensor_record"
+
+
+def is_capture_folder(folder: Path) -> bool:
+    """True when folder carries the record half of a capture (the
+    three files no capture exists without)."""
+    folder = Path(folder)
+    return all((folder / name).exists()
+               for name in ("meta.json", "frames.csv", "imu.csv"))
+
+
+def import_capture_record(src_dir: Path, job_dir: Path) -> dict | None:
+    """Copy a capture folder's sensor record into
+    job_dir/JOB_SENSOR_DIRNAME, byte for byte (the record format is
+    the folder itself, so the landed copy reads back with
+    read_capture unchanged). Returns an info dict for the job record,
+    or None when src_dir is not a capture folder -- plain videos and
+    ordinary folders import exactly as before.
+    """
+    src_dir = Path(src_dir)
+    if not is_capture_folder(src_dir):
+        return None
+    dest = Path(job_dir) / JOB_SENSOR_DIRNAME
+    dest.mkdir(parents=True, exist_ok=True)
+    copied = []
+    for name in RECORD_FILES:
+        src = src_dir / name
+        if src.exists():
+            shutil.copyfile(src, dest / name)
+            copied.append(name)
+    return {"sensor_record": JOB_SENSOR_DIRNAME,
+            "sensor_files": copied,
+            "has_imu": "imu.csv" in copied}
+
+
+def read_job_capture(job_dir: Path) -> Capture | None:
+    """The job's landed sensor record, or None -- any gap (no record,
+    half-copied folder, unreadable file) is a quiet None, never an
+    exception: sensor orientation is an upgrade, not a requirement."""
+    folder = Path(job_dir) / JOB_SENSOR_DIRNAME
+    if not folder.is_dir():
+        return None
+    try:
+        return read_capture(folder)
+    except Exception:
+        return None
+
+
+def stored_frame_roll_deg(capture: Capture) -> float:
+    """In-plane roll (degrees) between the frame cam_from_device
+    describes and the frames the pipeline actually poses.
+
+    Proven on the real collector (orientation audit, 2026-11-04,
+    experiments/orientation_check): meta's cam_from_device targets
+    the camera's NATIVE sensor frame, while the stored landscape
+    frames are rotated -90 deg in-plane against it. Measured gravity
+    vs the image-down axis of the posed frames: 87.2 deg with the raw
+    calibration, 5.6 deg once the roll is applied (the other sign
+    gives ~177 deg -- decisively wrong). The collector's meta records
+    the sensor's mounting orientation (android.sensor_orientation_deg
+    = 90 on the OnePlus), so the stored-frame roll is its negation.
+    Captures without that record (the Pi program, the simulator)
+    store frames in the native frame already: roll 0, calibration
+    untouched.
+    """
+    android = capture.meta.get("android") or {}
+    deg = android.get("sensor_orientation_deg")
+    if deg is None:
+        return 0.0
+    return -float(deg)
+
+
+def cam_from_device_stored(capture: Capture) -> np.ndarray | None:
+    """cam_from_device corrected for the stored frames' in-plane
+    roll (stored_frame_roll_deg): R_stored = Rz(roll) @ R_native.
+    This is the calibration that pairs with COLMAP poses of the
+    stored frames; the raw cam_from_device pairs with native-frame
+    imagery only. None when the capture carries no calibration."""
+    R = capture.cam_from_device
+    if R is None:
+        return None
+    roll = stored_frame_roll_deg(capture)
+    if roll == 0.0:
+        return R
+    a = np.radians(roll)
+    Rz = np.array([[np.cos(a), -np.sin(a), 0.0],
+                   [np.sin(a), np.cos(a), 0.0],
+                   [0.0, 0.0, 1.0]])
+    return Rz @ R
+
+
+# ---------------------------------------------------------------------------
 # Payoff 1: LEVEL from the IMU.
 # ---------------------------------------------------------------------------
 
@@ -434,7 +544,8 @@ def _quat_wxyz_to_matrix(q: np.ndarray) -> np.ndarray:
 
 
 def register_imu_frame(capture: Capture, poses: dict,
-                       cam_from_device: np.ndarray) -> np.ndarray:
+                       cam_from_device: np.ndarray,
+                       frame_times: dict | None = None) -> np.ndarray:
     """Rotation R_align mapping the IMU's boot world frame onto the
     reconstruction's world frame (v_recon = R_align @ v_imu_world).
 
@@ -444,11 +555,20 @@ def register_imu_frame(capture: Capture, poses: dict,
     frames (R_wd_recon = R_wc @ cam_from_device), and solves the
     orthogonal Procrustes problem in closed form (Markley's method) --
     one global least-squares objective over all pairs, no voting.
+
+    Pairing times come from capture.frame_time (the capture's own
+    frame names) unless frame_times (name -> t_s) is given. The
+    override exists for pipeline jobs: stage_extract renumbers the
+    frames it pulls from the video, so a job pose named
+    frame_00004.jpg is NOT the capture's fourth frame -- production
+    passes the extraction-time map (frame_capture_times.json) instead
+    of silently pairing each pose with the wrong instant.
     """
     pairs_recon, pairs_imu = [], []
     slerp = Slerp(capture.imu_t, capture.imu_rotation())
     for name, pose in poses.items():
-        t = capture.frame_time.get(name)
+        t = (frame_times.get(name) if frame_times is not None
+             else capture.frame_time.get(name))
         q = pose.get("cam_from_world_quat_xyzw")
         if t is None or q is None:
             continue
@@ -472,17 +592,24 @@ def register_imu_frame(capture: Capture, poses: dict,
 def estimate_up_from_imu(capture: Capture, R_align: np.ndarray) -> np.ndarray:
     """Unit world-up vector in the reconstruction frame.
 
-    Every accelerometer sample is gravity (plus walking motion) written
-    in the device frame. Rotating each sample into the reconstruction
-    frame with the registered orientation stream and averaging over
-    the whole capture cancels the zero-mean walking motion; what
-    remains points along gravity. Up is its negation.
+    The format's accelerometer stream is specific force (see the
+    module header: a resting device reports ~+9.81 along its up
+    axis), so each sample is the reaction to gravity plus walking
+    motion, written in the device frame. Rotating every sample into
+    the reconstruction frame with the registered orientation stream
+    and averaging over the whole capture cancels the zero-mean
+    walking motion; what remains points along UP directly -- no
+    negation. (An earlier version negated the mean, matching the
+    simulated capture's then gravity-vector convention; both real
+    writers -- the Pi's BNO055 and Android TYPE_ACCELEROMETER --
+    report specific force, and on the 2026-11-03 phone capture the
+    rotated mean sits 0.2 deg off ENU +Z, i.e. up.)
     """
     R_wd = capture.imu_rotation().as_matrix()          # boot frame
     R_wd_recon = np.einsum("ij,njk->nik", R_align, R_wd)
-    g_recon = np.einsum("nij,nj->ni", R_wd_recon, capture.imu_accel)
-    g_mean = g_recon.mean(axis=0)
-    return -g_mean / np.linalg.norm(g_mean)
+    a_recon = np.einsum("nij,nj->ni", R_wd_recon, capture.imu_accel)
+    a_mean = a_recon.mean(axis=0)
+    return a_mean / np.linalg.norm(a_mean)
 
 
 # ---------------------------------------------------------------------------

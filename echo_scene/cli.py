@@ -109,6 +109,14 @@ def cmd_import(args) -> int:
     job = _new_job_dir(jobs_root, stem)
     record = {"stage": "imported", "ok": True, "status": "imported",
               "kind": kind, "source": str(src), "video": str(video)}
+    if kind == "capture":
+        # Land the capture's sensor record inside the job (shared
+        # with the desktop import -- see sensor_record.py): the fuse
+        # stage orients by IMU gravity when the record is present.
+        from echo_scene import sensor_record as sr
+        landed = sr.import_capture_record(src, job)
+        if landed is not None:
+            record.update(landed)
     (job / "job.json").write_text(
         json.dumps(record, ensure_ascii=False, indent=2))
     print(f"job: {job}")

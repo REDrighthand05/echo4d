@@ -31,7 +31,10 @@ from device_tethered.recorder import RecorderApp, cv2  # noqa: E402
 
 SIM = ROOT / "experiments" / "sensor_sim"
 CAPTURE = SIM / "capture_room2_sim"
-ANCHOR_SCALE = 0.25  # Pioneer A/D consensus centre, m per scene unit
+ANCHOR_SCALE = 0.25  # Pioneer A/D consensus centre, m per scene unit;
+# the loopback replays the capture fabricated from jobs/room2, so the
+# fixture binding in tests/test_sensor_record.py applies here too:
+# regenerate the simulated capture if jobs/room2 is regenerated
 
 
 def _load_points(job: Path) -> np.ndarray:
