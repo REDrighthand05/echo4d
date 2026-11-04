@@ -26,6 +26,8 @@ SUITES = [
     ("frozen", [sys.executable, "tests/test_voxel_frozen.py"]),
     ("frozen", [sys.executable, "tests/test_markers_synth.py"]),
     ("align", [sys.executable, "tests/test_up_alignment.py"]),
+    ("fuse", [sys.executable, "tests/test_voxel_pick_rule.py"]),
+    ("poses", [sys.executable, "tests/test_pose_chain.py"]),
     ("clean", [sys.executable, "tests/test_continuity_clean.py"]),
     ("replay", [sys.executable, "tests/test_replay.py"]),
     ("replay", [sys.executable, "tests/test_replay_walk.py"]),

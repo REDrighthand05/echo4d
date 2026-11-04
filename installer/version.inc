@@ -3,5 +3,5 @@
 ; workflow override it from the release tag vX.Y.Z via /DAppVersion).
 ; EchoScene.iss includes this file only when AppVersion is not already
 ; defined on the ISCC command line.
-#define AppVersion "0.6.8"
-#define AppVersionInfo "0.6.8.0"
+#define AppVersion "0.6.9"
+#define AppVersionInfo "0.6.9.0"

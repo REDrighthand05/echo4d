@@ -484,6 +484,46 @@ def _corroboration_trim(points, colors, frame_ids, lo, voxel):
     return points[keep], colors[keep], keep, stats
 
 
+def _pick_voxel_size(lo, hi) -> tuple[float, float]:
+    """Voxel pitch for the voxel_pick reduction -> (pitch, robust extent).
+
+    The pitch is the deliverable budget, not a sampling estimate: the
+    trimmed cloud oversamples every candidate pitch by an order of
+    magnitude, and occupied cells grow ~ (extent / pitch)^2, so the
+    divisor is what caps the final cloud (and with it the frozen
+    solidification deliverable, one cube per kept point). Two measured
+    corrections over the original raw-extent / 220, a constant
+    calibrated in the 52-pose era when it produced the reference
+    cloud:
+
+      * the extent is the trimmed cloud's robust 1-99% box diagonal
+        (percentiles taken on the cloud being picked, at the pick
+        site), not the raw max/min diagonal. On the 195-pose product
+        job (pose productization, 2026-11-04) the raw diagonal
+        (162.0) ran 22% above the robust one (132.3), inflated by a
+        few far corroborated sheets -- while the pose chain delivered
+        4.1x the corroborated points of the reference job, the pitch
+        grew with the inflated extent and the final cloud stalled at
+        baseline size (287,761 points, median NN 0.52, 2.1x coarser
+        than the reference product's granularity).
+      * divisor 250 on that robust extent lands the product job at
+        pitch ~0.53: final count ~2x, median NN 0.38 (parity with
+        the reference product, scale-corrected), old/new coverage
+        granularity in parity, stacking fraction and fixed-radius
+        surface thickness flat, same-view renders ghost-free -- at
+        ~2x the solidification deliverable. /400-class pitches were
+        measured in the same study (experiments/pose_productize
+        voxel comparison) and rejected on deliverable size alone.
+    """
+    robust_extent = float(
+        np.linalg.norm(
+            np.asarray(hi, dtype=np.float64)
+            - np.asarray(lo, dtype=np.float64)
+        )
+    )
+    return max(robust_extent / 250.0, 1e-6), robust_extent
+
+
 def stage_fuse(job_dir: Path, stride: int = 4) -> dict:
     poses = json.loads((job_dir / "poses.json").read_text())
     depth_dir = job_dir / "depth"
@@ -648,8 +688,9 @@ def stage_fuse(job_dir: Path, stride: int = 4) -> dict:
     # averaged all points in a voxel, which synthesizes phantom mid-surface
     # points no camera ever measured -- replaced on the user's
     # no-averaging principle.
-    extent = float(np.linalg.norm(points.max(axis=0) - points.min(axis=0)))
-    voxel = max(extent / 220.0, 1e-6)
+    voxel, pick_extent_robust = _pick_voxel_size(
+        np.percentile(points, 1, axis=0), np.percentile(points, 99, axis=0)
+    )
     keys = np.floor(points / voxel).astype(np.int64)
     _, inverse = np.unique(keys, axis=0, return_inverse=True)
     counts = np.bincount(inverse).astype(np.float64)
@@ -811,6 +852,8 @@ def stage_fuse(job_dir: Path, stride: int = 4) -> dict:
         "per_frame_fits": int(len(frame_fits)),
         "frames_used": used,
         "points": int(len(points)),
+        "pick_voxel_size": voxel,
+        "pick_extent_robust": pick_extent_robust,
         "trim_dropped_points": trim_dropped,
         "points_frame_ids": str(job_dir / "points_frame_ids.npy"),
         "frame_index": str(frame_index_path),
