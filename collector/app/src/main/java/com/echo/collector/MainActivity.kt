@@ -10,6 +10,9 @@ import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
+import android.os.SystemClock
 import android.view.View
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
@@ -50,6 +53,48 @@ class MainActivity : AppCompatActivity() {
     private var recording = false
     private var selectedLens = LensHelper.Lens.MAIN
     private var hasUltrawide = false
+    /** When the current recording started (local clock). Used by the
+     *  poller to show the user time is passing even before the first
+     *  status broadcast arrives. */
+    private var recordStartMs: Long = 0
+    /** When the last ACTION_STATUS broadcast arrived. If the service
+     *  stops reporting, the poller says so instead of leaving a frozen
+     *  status on screen. */
+    private var lastStatusMs: Long = 0
+    private val uiHandler = Handler(Looper.getMainLooper())
+
+    /**
+     * Direct preview + liveness poller. Runs on the main thread while
+     * recording, independent of the status broadcasts — so the preview
+     * and the clock keep moving even if a broadcast is missed. (v2.1.1:
+     * the preview only updated from broadcasts, and a dead ticker froze
+     * the whole screen.)
+     */
+    private val previewPollRunnable = object : Runnable {
+        override fun run() {
+            if (!recording) return
+            updatePreview()
+            val now = SystemClock.elapsedRealtime()
+            if (now - lastStatusMs > 2000 && recordStartMs > 0) {
+                val elapsed = (now - recordStartMs) / 1000
+                val mm = (elapsed / 60).toInt()
+                val ss = (elapsed % 60).toInt()
+                binding.statusText.text = getString(
+                    R.string.status_waiting, mm, ss
+                )
+            }
+            uiHandler.postDelayed(this, 500)
+        }
+    }
+
+    private fun startPreviewPoller() {
+        uiHandler.removeCallbacks(previewPollRunnable)
+        uiHandler.post(previewPollRunnable)
+    }
+
+    private fun stopPreviewPoller() {
+        uiHandler.removeCallbacks(previewPollRunnable)
+    }
     private var pulseAnimator: ObjectAnimator? = null
     private var pulseAnimatorY: ObjectAnimator? = null
 
@@ -57,6 +102,7 @@ class MainActivity : AppCompatActivity() {
         override fun onReceive(context: Context, intent: Intent) {
             when (intent.action) {
                 RecorderService.ACTION_STATUS -> {
+                    lastStatusMs = SystemClock.elapsedRealtime()
                     val elapsed = intent.getDoubleExtra(RecorderService.EXTRA_ELAPSED_S, 0.0)
                     val frames = intent.getLongExtra(RecorderService.EXTRA_FRAMES, 0)
                     val poses = intent.getLongExtra(RecorderService.EXTRA_POSES, 0)
@@ -73,6 +119,7 @@ class MainActivity : AppCompatActivity() {
                 }
                 RecorderService.ACTION_FINISHED -> {
                     recording = false
+                    stopPreviewPoller()
                     updateRecordButton()
                     val warning = intent.getStringExtra(RecorderService.EXTRA_WARNING)
                     if (warning != null) showWarning(warning)
@@ -165,7 +212,12 @@ class MainActivity : AppCompatActivity() {
         // "Stopping…". Re-sync with the service's real state.
         if (recording && !RecorderService.isRecording) {
             recording = false
+            stopPreviewPoller()
             updateRecordButton()
+        }
+        if (recording) {
+            // Resume the direct preview poller (it stops in onPause).
+            startPreviewPoller()
         }
         val filter = IntentFilter().apply {
             addAction(RecorderService.ACTION_STATUS)
@@ -182,6 +234,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onPause() {
         super.onPause()
+        stopPreviewPoller()
         try {
             unregisterReceiver(receiver)
         } catch (ignored: IllegalArgumentException) {
@@ -347,9 +400,12 @@ class MainActivity : AppCompatActivity() {
             }
             ContextCompat.startForegroundService(this, intent)
             recording = true
+            recordStartMs = SystemClock.elapsedRealtime()
+            lastStatusMs = 0
             binding.warningCard.visibility = View.GONE
             updateRecordButton()
             startPulse()
+            startPreviewPoller()
         } else {
             val intent = Intent(this, RecorderService::class.java).apply {
                 action = RecorderService.ACTION_STOP

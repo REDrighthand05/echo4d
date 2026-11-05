@@ -222,16 +222,30 @@ class RecorderSession(
 
     private val flushRunnable = object : Runnable {
         override fun run() {
-            if (!running) return
-            flushAll()
-            writerHandler.postDelayed(this, FLUSH_INTERVAL_MS)
+            // Always reschedule, even if flush throws — a dead ticker is
+            // worse than a missed flush. (v2.1.1: the status ticker died
+            // on its first exception and the screen froze.)
+            try {
+                if (!running) return
+                flushAll()
+            } catch (ignored: Exception) {
+            } finally {
+                if (running) writerHandler.postDelayed(this, FLUSH_INTERVAL_MS)
+            }
         }
     }
     private val statusRunnable = object : Runnable {
         override fun run() {
-            if (!running) return
-            onStatus(currentStatus())
-            statusHandler.postDelayed(this, STATUS_INTERVAL_MS)
+            // Always reschedule, even if the status callback throws — a
+            // dead ticker freezes the whole screen (status + preview).
+            try {
+                if (!running) return
+                onStatus(currentStatus())
+            } catch (e: Exception) {
+                Log.w(TAG, "status callback failed", e)
+            } finally {
+                if (running) statusHandler.postDelayed(this, STATUS_INTERVAL_MS)
+            }
         }
     }
 
@@ -1267,7 +1281,7 @@ class RecorderSession(
             root.put("device_model", android.os.Build.MODEL ?: "unknown")
             root.put("manufacturer", android.os.Build.MANUFACTURER ?: "unknown")
             root.put("android_version", android.os.Build.VERSION.RELEASE ?: "unknown")
-            root.put("app_version", "2.1.1")
+            root.put("app_version", "2.1.2")
             root.put("lens", lens.name.lowercase())
             root.put("lens_camera_id", cameraId)
             root.put("lens_focal_length_mm", info?.focalLengthMm?.toDouble() ?: JSONObject.NULL)

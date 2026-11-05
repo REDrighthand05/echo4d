@@ -11,8 +11,8 @@ android {
         applicationId = "com.echo.collector"
         minSdk = 28
         targetSdk = 34
-        versionCode = 6
-        versionName = "2.1.1"
+        versionCode = 7
+        versionName = "2.1.2"
     }
 
     buildTypes {

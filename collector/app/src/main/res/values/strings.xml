@@ -15,6 +15,7 @@
     <string name="lens_no_ultrawide">这台手机不开放超广角，只能用主摄。</string>
     <string name="sensors_title">正在记录的传感器</string>
     <string name="status_idle">就绪。选好镜头，按开始录制。</string>
+    <string name="status_waiting">录制中 %1$02d:%2$02d · 正在等服务回状态…</string>
     <string name="status_line">%1$02d:%2$02d · %6$s · 路线 %3$d 个点 · 视频 %4$d 帧 · %5$s</string>
     <string name="stale_warning">数据流停了：%1$s</string>
     <string name="dismiss">知道了</string>
