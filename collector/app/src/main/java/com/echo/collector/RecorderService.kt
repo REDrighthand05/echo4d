@@ -70,6 +70,35 @@ class RecorderService : Service() {
         @Volatile
         var isRecording = false
             private set
+
+        /**
+         * Latest preview thumbnail from the recording session (a small
+         * grayscale bitmap, ~5 fps). The Activity polls it and shows it
+         * in the preview ImageView. Volatile so the recording thread and
+         * the UI thread see the same reference; the old bitmap is
+         * recycled when replaced.
+         */
+        @Volatile
+        var latestPreview: android.graphics.Bitmap? = null
+            private set
+
+        fun updatePreview(bmp: android.graphics.Bitmap) {
+            val old = latestPreview
+            latestPreview = bmp
+            try {
+                old?.recycle()
+            } catch (ignored: Exception) {
+            }
+        }
+
+        fun clearPreview() {
+            val old = latestPreview
+            latestPreview = null
+            try {
+                old?.recycle()
+            } catch (ignored: Exception) {
+            }
+        }
     }
 
     private var session: RecorderSession? = null
@@ -149,7 +178,8 @@ class RecorderService : Service() {
                     putExtra(EXTRA_CAPTURE_DIR, dir.absolutePath)
                 }
                 sendBroadcast(b)
-            }
+            },
+            onPreview = { bmp -> updatePreview(bmp) },
             )
             session?.start()
         } catch (e: Exception) {
@@ -188,6 +218,7 @@ class RecorderService : Service() {
         fun finish(check: StreamWatchdog.SelfCheck?, timedOut: Boolean) {
             if (!finished.compareAndSet(false, true)) return
             isRecording = false
+            clearPreview()
             try {
                 wakeLock?.release()
             } catch (ignored: Exception) {

@@ -41,7 +41,7 @@ class EchoCollectorApp : Application() {
                             .append(Build.MODEL).append(" (").append(Build.DEVICE).append(")\n")
                         append("android: ").append(Build.VERSION.RELEASE)
                             .append(" (SDK ").append(Build.VERSION.SDK_INT).append(")\n")
-                        append("app: 2.0.3\n")
+                        append("app: 2.1.0\n")
                         append("thread: ").append(thread.name).append('\n')
                         append("---- stack trace ----\n")
                         append(sw.toString())

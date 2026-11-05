@@ -8,11 +8,8 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
-import android.graphics.SurfaceTexture
 import android.os.Build
 import android.os.Bundle
-import android.view.Surface
-import android.view.TextureView
 import android.view.View
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
@@ -67,6 +64,7 @@ class MainActivity : AppCompatActivity() {
                     val stale = intent.getStringArrayListExtra(RecorderService.EXTRA_STALE)
                         ?: arrayListOf()
                     updateStatus(elapsed, frames, poses, tracking, stale)
+                    updatePreview()
                 }
                 RecorderService.ACTION_WARNING -> {
                     val warning = intent.getStringExtra(RecorderService.EXTRA_WARNING) ?: return
@@ -105,7 +103,6 @@ class MainActivity : AppCompatActivity() {
         }
         selectLens(LensHelper.Lens.MAIN)
         updateRecordButton()
-        setupPreview()
         loadLastResult()
 
         ensurePermissions()
@@ -144,41 +141,20 @@ class MainActivity : AppCompatActivity() {
         binding.lastResultText.text = summary
     }
 
-    /** Live camera preview. The TextureView publishes its Surface so the
-     *  recording session (in the service) can feed it as a third camera
-     *  output. The hint text hides once the surface exists. */
-    private fun setupPreview() {
-        binding.previewView.surfaceTextureListener = object : TextureView.SurfaceTextureListener {
-            override fun onSurfaceTextureAvailable(
-                surfaceTexture: SurfaceTexture, width: Int, height: Int
-            ) {
-                // 1920x1080 is a size the main camera can output; it is
-                // also the video size, so the preview matches the recording.
-                surfaceTexture.setDefaultBufferSize(1920, 1080)
-                PreviewSurface.publish(Surface(surfaceTexture), width, height)
-                binding.previewHintText.visibility = View.GONE
-            }
-
-            override fun onSurfaceTextureSizeChanged(
-                surfaceTexture: SurfaceTexture, width: Int, height: Int
-            ) {
-            }
-
-            override fun onSurfaceTextureDestroyed(surfaceTexture: SurfaceTexture): Boolean {
-                PreviewSurface.clear()
-                binding.previewHintText.visibility = View.VISIBLE
-                return true
-            }
-
-            override fun onSurfaceTextureUpdated(surfaceTexture: SurfaceTexture) {}
-        }
-        // If the surface is already available (e.g. after rotation), the
-        // listener above still fires; nothing else to do here.
+    /** Live camera preview while recording. The session sends small
+     *  thumbnails (~5 fps) through the service; this shows the latest one
+     *  in the preview ImageView. Called on every status update (~2x/s).
+     *  The old TextureView + Camera2 surface approach is gone: ARCore now
+     *  owns the camera, so there is no Camera2 surface to feed. */
+    private fun updatePreview() {
+        val bmp = RecorderService.latestPreview ?: return
+        if (bmp.isRecycled) return
+        binding.previewView.setImageBitmap(bmp)
+        binding.previewHintText.visibility = View.GONE
     }
 
     override fun onDestroy() {
         super.onDestroy()
-        PreviewSurface.clear()
     }
 
     override fun onResume() {
