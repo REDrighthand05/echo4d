@@ -5,6 +5,7 @@ import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.CameraManager
 import android.util.Log
 import android.util.Size
+import android.util.SizeF
 import kotlin.math.atan
 
 /**
@@ -38,7 +39,7 @@ object LensHelper {
          *  and the physical sensor width. */
         val hFovDeg: Double,
         /** Physical sensor size in mm. */
-        val sensorSizeMm: Size?,
+        val sensorSizeMm: SizeF?,
         /** Video output sizes the camera can produce (for MediaRecorder). */
         val videoSizes: List<Size>,
     )

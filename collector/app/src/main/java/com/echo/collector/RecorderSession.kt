@@ -531,31 +531,27 @@ class RecorderSession(
             while (updateRunning) {
                 try {
                     val frame = session.update()
-                    try {
-                        val ts = frame.timestamp
-                        if (ts != lastFrameTimestamp) {
-                            lastFrameTimestamp = ts
-                            val camera = frame.camera
-                            val pose = camera.pose
-                            val tracking = camera.trackingState
-                            trackingState = tracking.name
-                            val t = (ts - t0Nanos) / 1e9
-                            poseLine.setLength(0)
-                            poseLine.append(t).append(',')
-                                .append(pose.tx()).append(',')
-                                .append(pose.ty()).append(',')
-                                .append(pose.tz()).append(',')
-                                .append(pose.qx()).append(',')
-                                .append(pose.qy()).append(',')
-                                .append(pose.qz()).append(',')
-                                .append(pose.qw()).append(',')
-                                .append(tracking.name).append('\n')
-                            posesWriter?.append(poseLine)
-                            poseCount++
-                            watchdog.noteSample(StreamWatchdog.POSES, ts)
-                        }
-                    } finally {
-                        frame.close()
+                    val ts = frame.timestamp
+                    if (ts != lastFrameTimestamp) {
+                        lastFrameTimestamp = ts
+                        val camera = frame.camera
+                        val pose = camera.pose
+                        val tracking = camera.trackingState
+                        trackingState = tracking.name
+                        val t = (ts - t0Nanos) / 1e9
+                        poseLine.setLength(0)
+                        poseLine.append(t).append(',')
+                            .append(pose.tx()).append(',')
+                            .append(pose.ty()).append(',')
+                            .append(pose.tz()).append(',')
+                            .append(pose.qx()).append(',')
+                            .append(pose.qy()).append(',')
+                            .append(pose.qz()).append(',')
+                            .append(pose.qw()).append(',')
+                            .append(tracking.name).append('\n')
+                        posesWriter?.append(poseLine)
+                        poseCount++
+                        watchdog.noteSample(StreamWatchdog.POSES, ts)
                     }
                 } catch (e: Exception) {
                     // update() throws when the session is paused/closed, or on
