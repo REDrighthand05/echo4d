@@ -14,5 +14,7 @@
     <color name="warning_amber">#FFC107</color>
     <color name="danger_red">#F44336</color>
     <color name="success_green">#4CAF50</color>
-    <color name="record_red">#E53935</color>
+    <!-- Stop red: deep and muted, not a screaming ad red. The bright
+         #E53935 made the whole screen look like a scam ad. -->
+    <color name="record_red">#B3261E</color>
 </resources>

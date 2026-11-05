@@ -15,11 +15,12 @@
         android:orientation="vertical"
         android:padding="16dp">
 
-        <!-- Blue graffiti behind the glass. -->
+        <!-- Blue graffiti behind the glass. Kept quiet (low alpha, short)
+             so it reads as a backdrop, not a loud scribble. -->
         <ImageView
             android:layout_width="match_parent"
-            android:layout_height="90dp"
-            android:alpha="0.55"
+            android:layout_height="64dp"
+            android:alpha="0.30"
             android:contentDescription="@null"
             android:scaleType="fitXY"
             android:src="@drawable/bg_graffiti" />
@@ -60,37 +61,51 @@
                 android:layout_marginTop="6dp"
                 android:textAppearance="@style/EchoBody" />
 
-            <!-- Live camera preview while recording. -->
-            <FrameLayout
+            <!-- Live camera preview while recording. A rounded viewfinder
+                 with a faint border, so it reads as a camera — not a black
+                 hole with text in it. -->
+            <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"
                 android:layout_height="200dp"
-                android:layout_marginTop="14dp"
-                android:background="#FF0B0E14">
+                android:layout_marginTop="16dp"
+                app:cardBackgroundColor="#FF141A26"
+                app:cardCornerRadius="16dp"
+                app:cardElevation="0dp"
+                app:strokeColor="@color/glass_border"
+                app:strokeWidth="1dp">
 
-                <ImageView
-                    android:id="@+id/previewView"
+                <FrameLayout
                     android:layout_width="match_parent"
-                    android:layout_height="match_parent"
-                    android:scaleType="fitCenter" />
+                    android:layout_height="match_parent">
 
-                <TextView
-                    android:id="@+id/previewHintText"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_gravity="center"
-                    android:text="@string/preview_hint"
-                    android:textAppearance="@style/EchoBody" />
-            </FrameLayout>
+                    <ImageView
+                        android:id="@+id/previewView"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:scaleType="fitCenter" />
 
+                    <TextView
+                        android:id="@+id/previewHintText"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_gravity="center"
+                        android:text="@string/preview_hint"
+                        android:textAppearance="@style/EchoBody" />
+                </FrameLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- Record / stop. A calm rectangular button, not a giant
+                 screaming pill — the 72dp full-width pill is what made the
+                 screen look like a scam ad. -->
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/recordButton"
                 android:layout_width="match_parent"
-                android:layout_height="72dp"
-                android:layout_marginTop="18dp"
+                android:layout_height="56dp"
+                android:layout_marginTop="20dp"
                 android:text="@string/record"
-                android:textSize="20sp"
+                android:textSize="17sp"
                 app:backgroundTint="@color/accent_blue"
-                app:cornerRadius="36dp" />
+                app:cornerRadius="14dp" />
 
             <LinearLayout
                 android:layout_width="match_parent"

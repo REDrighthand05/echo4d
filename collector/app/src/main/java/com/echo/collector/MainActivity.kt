@@ -61,9 +61,10 @@ class MainActivity : AppCompatActivity() {
                     val frames = intent.getLongExtra(RecorderService.EXTRA_FRAMES, 0)
                     val poses = intent.getLongExtra(RecorderService.EXTRA_POSES, 0)
                     val tracking = intent.getStringExtra(RecorderService.EXTRA_TRACKING) ?: "—"
+                    val backend = intent.getStringExtra(RecorderService.EXTRA_BACKEND) ?: "—"
                     val stale = intent.getStringArrayListExtra(RecorderService.EXTRA_STALE)
                         ?: arrayListOf()
-                    updateStatus(elapsed, frames, poses, tracking, stale)
+                    updateStatus(elapsed, frames, poses, tracking, backend, stale)
                     updatePreview()
                 }
                 RecorderService.ACTION_WARNING -> {
@@ -393,12 +394,13 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun updateStatus(
-        elapsed: Double, frames: Long, poses: Long, tracking: String, stale: List<String>
+        elapsed: Double, frames: Long, poses: Long, tracking: String, backend: String,
+        stale: List<String>
     ) {
         val mm = (elapsed.toInt() / 60)
         val ss = (elapsed.toInt() % 60)
         binding.statusText.text = getString(
-            R.string.status_line, mm, ss, poses, frames, tracking
+            R.string.status_line, mm, ss, poses, frames, tracking, backend
         )
         if (stale.isNotEmpty()) {
             showWarning(getString(R.string.stale_warning, stale.joinToString(", ")))

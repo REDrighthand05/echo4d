@@ -53,6 +53,7 @@ class RecorderService : Service() {
         const val EXTRA_FRAMES = "frames"
         const val EXTRA_POSES = "poses"
         const val EXTRA_TRACKING = "tracking"
+        const val EXTRA_BACKEND = "backend"
         const val EXTRA_ARCORE_ACTIVE = "arcore_active"
         const val EXTRA_STALE = "stale"
         const val EXTRA_WARNING = "warning"
@@ -164,6 +165,7 @@ class RecorderService : Service() {
                     putExtra(EXTRA_FRAMES, status.frameCount)
                     putExtra(EXTRA_POSES, status.poseCount)
                     putExtra(EXTRA_TRACKING, status.tracking)
+                    putExtra(EXTRA_BACKEND, status.backend)
                     putExtra(EXTRA_LENS, status.lens.name)
                     putExtra(EXTRA_ARCORE_ACTIVE, status.arcoreActive)
                     putExtra(EXTRA_CAPTURE_DIR, dir.absolutePath)

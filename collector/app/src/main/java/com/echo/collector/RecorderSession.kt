@@ -2,6 +2,7 @@ package com.echo.collector
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.ImageFormat
 import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
@@ -15,6 +16,7 @@ import android.hardware.camera2.CaptureRequest
 import android.hardware.camera2.CaptureResult
 import android.hardware.camera2.TotalCaptureResult
 import android.media.Image
+import android.media.ImageReader
 import android.media.MediaCodec
 import android.media.MediaCodecInfo
 import android.media.MediaCrypto
@@ -146,11 +148,20 @@ class RecorderSession(
         val lens: LensHelper.Lens,
         val arcoreActive: Boolean,
         val staleStreams: List<String>,
+        /** "ARCore" or "普通相机" — so the screen always says which
+         *  backend is actually running (the v2.1.0 screen never said). */
+        val backend: String,
     )
 
     // ---- threads -----------------------------------------------------------
+    // The status ticker runs on its OWN thread, so the UI always shows live
+    // numbers even if the recorder thread is busy bringing up ARCore. (In
+    // v2.1.0 the ticker shared the recorder thread, and the screen looked
+    // frozen while ARCore started.)
     private val recorderThread = HandlerThread("recorder").apply { start() }
     private val recorderHandler = Handler(recorderThread.looper)
+    private val statusThread = HandlerThread("status").apply { start() }
+    private val statusHandler = Handler(statusThread.looper)
     private val sensorThread = HandlerThread("sensors").apply { start() }
     private val sensorHandler = Handler(sensorThread.looper)
     private val writerThread = HandlerThread("writer").apply { start() }
@@ -191,6 +202,7 @@ class RecorderSession(
     private var cameraDevice: CameraDevice? = null
     private var captureSession: CameraCaptureSession? = null
     private var mediaRecorder: MediaRecorder? = null
+    private var previewReader: ImageReader? = null
     /** True once the Camera2 fallback has been tried (only once, pre-start). */
     private var fallbackDone = false
 
@@ -219,7 +231,7 @@ class RecorderSession(
         override fun run() {
             if (!running) return
             onStatus(currentStatus())
-            recorderHandler.postDelayed(this, STATUS_INTERVAL_MS)
+            statusHandler.postDelayed(this, STATUS_INTERVAL_MS)
         }
     }
 
@@ -270,7 +282,7 @@ class RecorderSession(
         recorderHandler.post { startRecordingBackend() }
 
         writerHandler.postDelayed(flushRunnable, FLUSH_INTERVAL_MS)
-        recorderHandler.postDelayed(statusRunnable, STATUS_INTERVAL_MS)
+        statusHandler.postDelayed(statusRunnable, STATUS_INTERVAL_MS)
         writeMeta(final = false)
     }
 
@@ -279,7 +291,7 @@ class RecorderSession(
     fun stop(): StreamWatchdog.SelfCheck {
         if (!running) return watchdog.snapshot(0.0)
         running = false
-        recorderHandler.removeCallbacks(statusRunnable)
+        statusHandler.removeCallbacks(statusRunnable)
         recorderHandler.removeCallbacks(bringupWatchdogRunnable)
         writerHandler.removeCallbacks(flushRunnable)
 
@@ -305,6 +317,11 @@ class RecorderSession(
         releaseEgl()
 
         // 2. If the Camera2 fallback ran, stop its video and close the camera.
+        try {
+            previewReader?.close()
+        } catch (ignored: Exception) {
+        }
+        previewReader = null
         try {
             mediaRecorder?.stop()
         } catch (e: Exception) {
@@ -348,6 +365,7 @@ class RecorderSession(
         writeMeta(final = true)
 
         recorderThread.quitSafely()
+        statusThread.quitSafely()
         sensorThread.quitSafely()
         writerThread.quitSafely()
         return check
@@ -362,27 +380,21 @@ class RecorderSession(
      */
     private fun startRecordingBackend() {
         if (lens == LensHelper.Lens.MAIN) {
-            try {
-                startArCoreBackend()
-                // Bring-up watchdog: ARCore must produce something soon,
-                // or it is silently dead (the shared-camera failure mode).
-                // Fires only before any pose exists, so it cannot kill a
-                // working pose stream.
-                recorderHandler.removeCallbacks(bringupWatchdogRunnable)
-                recorderHandler.postDelayed(bringupWatchdogRunnable, BRINGUP_TIMEOUT_MS)
-                return
-            } catch (e: Exception) {
-                Log.e(TAG, "ARCore backend failed, falling back to Camera2", e)
-                backendNote = "arcore bring-up failed (${e.javaClass.simpleName}: ${e.message}); Camera2 fallback"
-                onWarning("ARCore 启动失败，改用普通相机录制（只有视频，没有路线）")
-            }
-        } else {
-            backendNote = "ultrawide lens; Camera2 only (no ARCore poses)"
+            // ARCore owns the camera. startArCoreBackend only starts the
+            // loop thread; a bringup failure is reported asynchronously
+            // via onArCoreFailed, which falls back to Camera2 pre-start.
+            startArCoreBackend()
+            // Bring-up watchdog: ARCore must produce something soon, or it
+            // is silently dead. Fires only before any pose exists, so it
+            // cannot kill a working pose stream.
+            recorderHandler.removeCallbacks(bringupWatchdogRunnable)
+            recorderHandler.postDelayed(bringupWatchdogRunnable, BRINGUP_TIMEOUT_MS)
+            return
         }
+        backendNote = "ultrawide lens; Camera2 only (no ARCore poses)"
         if (!fallbackDone) {
             fallbackDone = true
             try {
-                teardownArCoreAttempt()
                 startCamera2Backend()
             } catch (e2: Exception) {
                 Log.e(TAG, "Camera2 fallback failed", e2)
@@ -404,9 +416,12 @@ class RecorderSession(
             fallbackDone = true
             backendNote = "arcore produced no frames in 4s; Camera2 fallback"
             try {
+                // Signal the loop thread to stop, then pause the session
+                // (that unblocks a session.update() stuck waiting for a
+                // frame). Do NOT join here — the recorder thread must not
+                // block. The loop thread cleans itself up.
                 arcoreRunning = false
-                try { arcoreThread?.join(2000) } catch (ignored: Exception) {}
-                arcoreThread = null
+                try { arSession?.pause() } catch (ignored: Exception) {}
                 teardownArCoreAttempt()
                 startCamera2Backend()
             } catch (e: Exception) {
@@ -433,34 +448,89 @@ class RecorderSession(
     }
 
     // ---------------------------------------------------------- ARCore backend
-    /** Bring up ARCore as the camera owner (reverse-engineered from the old
-     *  app). Throws on failure so the caller can fall back to Camera2. */
+    /**
+     * Start ARCore as the camera owner. This only starts the loop thread;
+     * the thread itself does EGL + Session + configure + resume + the loop
+     * (reverse-engineered from the old app). EGL MUST be created on the
+     * same thread that calls session.update() — in v2.1.0 EGL was created
+     * on the recorder thread while update() ran on the loop thread, so
+     * ARCore produced nothing and the preview stayed black.
+     * A bringup failure is reported back to the recorder thread, which
+     * falls back to Camera2 (pre-start only).
+     */
     private fun startArCoreBackend() {
-        initEglTexture()
-        val session = Session(context)
-        session.setCameraTextureName(cameraTexId)
-        val config = Config(session)
-        config.updateMode = Config.UpdateMode.BLOCKING
-        config.focusMode = Config.FocusMode.AUTO
-        config.planeFindingMode = Config.PlaneFindingMode.DISABLED
-        config.lightEstimationMode = Config.LightEstimationMode.DISABLED
-        config.depthMode = Config.DepthMode.DISABLED
-        // Camera config: 30 fps, capped at 720p. The old app took the
-        // largest config (1080p) and its software encoder fell below 8 fps.
-        val depthSupported = session.isDepthModeSupported(Config.DepthMode.AUTOMATIC)
-        val chosen = pickCameraConfig(session, depthSupported)
-            ?: throw IllegalStateException("no ARCore camera config")
-        session.cameraConfig = chosen
-        session.configure(config)
-        session.resume()
-        arSession = session
-        videoSize = chosen.imageSize
-        cameraId = chosen.cameraId
-        arcoreActive = true
-        trackingState = "PAUSED"
-        backendNote = "arcore (owns camera), ${videoSize.width}x${videoSize.height} 30fps"
-        Log.i(TAG, "ARCore up: ${videoSize.width}x${videoSize.height}, camera=$cameraId")
-        startArCoreLoop()
+        arcoreRunning = true
+        arcoreThread = Thread({ arcoreLoopEntry() }, "arcore-loop").apply { start() }
+    }
+
+    /** ARCore loop thread entry: bring up EGL + Session, then run the loop.
+     *  Owns the session and EGL; cleans them up when it exits. */
+    private fun arcoreLoopEntry() {
+        var session: Session? = null
+        try {
+            initEglTexture()
+            session = Session(context)
+            session.setCameraTextureName(cameraTexId)
+            val config = Config(session)
+            config.updateMode = Config.UpdateMode.BLOCKING
+            config.focusMode = Config.FocusMode.AUTO
+            config.planeFindingMode = Config.PlaneFindingMode.DISABLED
+            config.lightEstimationMode = Config.LightEstimationMode.DISABLED
+            config.depthMode = Config.DepthMode.DISABLED
+            // Camera config: 30 fps, capped at 720p. The old app took the
+            // largest config (1080p) and its software encoder fell below 8 fps.
+            val depthSupported = session.isDepthModeSupported(Config.DepthMode.AUTOMATIC)
+            val chosen = pickCameraConfig(session, depthSupported)
+                ?: throw IllegalStateException("no ARCore camera config")
+            session.cameraConfig = chosen
+            session.configure(config)
+            session.resume()
+            arSession = session
+            videoSize = chosen.imageSize
+            cameraId = chosen.cameraId
+            arcoreActive = true
+            trackingState = "PAUSED"
+            backendNote = "arcore (owns camera), ${videoSize.width}x${videoSize.height} 30fps"
+            Log.i(TAG, "ARCore up: ${videoSize.width}x${videoSize.height}, camera=$cameraId")
+            runArCoreLoop(session)
+        } catch (e: Exception) {
+            Log.e(TAG, "ARCore backend failed", e)
+            // Report on the recorder thread (it owns the fallback).
+            recorderHandler.post { onArCoreFailed(e) }
+        } finally {
+            // The loop releases codec/muxer itself; here we release the
+            // session + EGL. stop() also tries these (guarded), so a
+            // double release is harmless.
+            try { session?.pause() } catch (ignored: Exception) {}
+            try { session?.close() } catch (ignored: Exception) {}
+            if (arSession === session) arSession = null
+            releaseEgl()
+            arcoreActive = false
+            arcoreRunning = false
+        }
+    }
+
+    /** ARCore failed. Pre-start (no poses yet): fall back to Camera2.
+     *  Mid-capture (poses exist): NEVER swap — that was the old bug.
+     *  Just report it and keep the poses we have. */
+    private fun onArCoreFailed(e: Exception) {
+        if (!running) return
+        if (fallbackDone) return
+        if (poseCount > 0 || frameCount > 0) {
+            backendNote = "arcore failed mid-capture (${e.javaClass.simpleName}); kept $poseCount poses"
+            onWarning("ARCore 中途停止，已保留 $poseCount 个路线点")
+            return
+        }
+        fallbackDone = true
+        backendNote = "arcore bring-up failed (${e.javaClass.simpleName}: ${e.message}); Camera2 fallback"
+        onWarning("ARCore 启动失败，改用普通相机录制（只有视频，没有路线）")
+        try {
+            teardownArCoreAttempt()
+            startCamera2Backend()
+        } catch (e2: Exception) {
+            Log.e(TAG, "Camera2 fallback failed", e2)
+            onWarning("camera setup failed: ${e2.javaClass.simpleName}: ${e2.message}")
+        }
     }
 
     /** Pick the best ARCore camera config: 30 fps preferred, size capped at
@@ -556,33 +626,32 @@ class RecorderSession(
         cameraTexId = 0
     }
 
-    /** The ARCore loop. One dedicated thread. Per frame:
+    /** The ARCore loop body. Runs on the arcore-loop thread (which also did
+     *  the EGL + Session bringup, so the GL context is current here). Per
+     *  frame:
      *  1. pose — written UNCONDITIONALLY, before the encoder is touched
      *     (the old app gated poses on the encoder; that is the bug);
      *  2. video — acquire the camera image, bulk-convert YUV->NV12, feed
      *     MediaCodec; if the encoder is busy the video frame is skipped
      *     but the pose is already written;
      *  3. preview thumbnail every 6th encoded frame. */
-    private fun startArCoreLoop() {
-        val session = arSession ?: return
+    private fun runArCoreLoop(session: Session) {
         val w = videoSize.width
         val h = videoSize.height
-        arcoreRunning = true
-        arcoreThread = Thread({
-            var codec: MediaCodec? = null
-            var muxer: MediaMuxer? = null
-            val muxerState = MuxerState()
-            val bufferInfo = MediaCodec.BufferInfo()
-            // Reusable NV12 buffer + row scratch, so the loop allocates
-            // nothing per frame.
-            val nv12 = ByteArray(w * h * 3 / 2)
-            val yRow = ByteArray(w)
-            val uvRowU = ByteArray(w / 2)
-            val uvRowV = ByteArray(w / 2)
-            val thumbPixels = IntArray((PREVIEW_MAX_DIM * PREVIEW_MAX_DIM * 9) / 16 + 1024)
-            var encodedFrames = 0
-            var t0Ns: Long? = null
-            try {
+        var codec: MediaCodec? = null
+        var muxer: MediaMuxer? = null
+        val muxerState = MuxerState()
+        val bufferInfo = MediaCodec.BufferInfo()
+        // Reusable NV12 buffer + row scratch, so the loop allocates
+        // nothing per frame.
+        val nv12 = ByteArray(w * h * 3 / 2)
+        val yRow = ByteArray(w)
+        val uvRowU = ByteArray(w / 2)
+        val uvRowV = ByteArray(w / 2)
+        val thumbPixels = IntArray((PREVIEW_MAX_DIM * PREVIEW_MAX_DIM * 9) / 16 + 1024)
+        var encodedFrames = 0
+        var t0Ns: Long? = null
+        try {
                 codec = MediaCodec.createEncoderByType("video/avc")
                 val format = MediaFormat.createVideoFormat("video/avc", w, h)
                 format.setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420Flexible)
@@ -716,7 +785,7 @@ class RecorderSession(
                 }
                 mediaMuxer = null
             }
-        }, "arcore-loop").apply { start() }
+        }
     }
 
     /** Small muxer state holder for drain(). */
@@ -946,6 +1015,43 @@ class RecorderSession(
         val device = cameraDevice ?: return
         val surfaces = mutableListOf<Surface>()
         surfaces.add(mediaRecorder!!.surface)
+        // Preview ImageReader (small, YUV) so the preview works in Camera2
+        // mode too. Without it the preview stays black whenever the app
+        // falls back to Camera2 — that is what v2.1.0 showed.
+        try {
+            previewReader?.close()
+        } catch (ignored: Exception) {
+        }
+        previewReader = null
+        try {
+            val reader = ImageReader.newInstance(640, 360, ImageFormat.YUV_420_888, 2)
+            val previewPixels = IntArray(640 * 360)
+            var previewCounter = 0
+            reader.setOnImageAvailableListener({ r ->
+                val image = try {
+                    r.acquireLatestImage()
+                } catch (ignored: Exception) {
+                    null
+                } ?: return@setOnImageAvailableListener
+                try {
+                    // Throttle: one thumbnail every ~6th preview frame.
+                    previewCounter++
+                    if (previewCounter % 6 == 0) {
+                        yuvThumbnail(image, previewPixels)?.let { onPreview(it) }
+                    }
+                } catch (ignored: Exception) {
+                } finally {
+                    try {
+                        image.close()
+                    } catch (ignored: Exception) {
+                    }
+                }
+            }, recorderHandler)
+            surfaces.add(reader.surface)
+            previewReader = reader
+        } catch (e: Exception) {
+            Log.w(TAG, "preview ImageReader failed (recording continues)", e)
+        }
         val builder: CaptureRequest.Builder
         try {
             builder = device.createCaptureRequest(CameraDevice.TEMPLATE_RECORD)
@@ -1130,6 +1236,7 @@ class RecorderSession(
             lens = lens,
             arcoreActive = arcoreActive,
             staleStreams = staleStreams.toList(),
+            backend = if (arcoreActive) "ARCore" else "普通相机",
         )
     }
 
@@ -1161,7 +1268,7 @@ class RecorderSession(
             root.put("device_model", android.os.Build.MODEL ?: "unknown")
             root.put("manufacturer", android.os.Build.MANUFACTURER ?: "unknown")
             root.put("android_version", android.os.Build.VERSION.RELEASE ?: "unknown")
-            root.put("app_version", "2.1.0")
+            root.put("app_version", "2.1.1")
             root.put("lens", lens.name.lowercase())
             root.put("lens_camera_id", cameraId)
             root.put("lens_focal_length_mm", info?.focalLengthMm?.toDouble() ?: JSONObject.NULL)
