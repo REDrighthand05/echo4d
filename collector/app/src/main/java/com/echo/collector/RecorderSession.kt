@@ -298,6 +298,18 @@ class RecorderSession(
 
     // ------------------------------------------------------------ camera+ARCore
     private fun startCameraAndArCore() {
+        try {
+            startCameraAndArCoreInner()
+        } catch (e: Exception) {
+            // Never let a camera/ARCore setup failure kill the app. The
+            // user gets a named warning instead of a crash, and the
+            // watchdog + crash log carry the details.
+            Log.e(TAG, "camera/ARCore setup failed", e)
+            onWarning("camera setup failed: ${e.javaClass.simpleName}: ${e.message}")
+        }
+    }
+
+    private fun startCameraAndArCoreInner() {
         cameraManager = context.getSystemService(Context.CAMERA_SERVICE) as CameraManager
         val lenses = LensHelper.enumerateBackCameras(context)
         lensInfo = lenses.firstOrNull { it.lens == lens }
@@ -416,6 +428,9 @@ class RecorderSession(
         } catch (e: SecurityException) {
             Log.e(TAG, "openCamera failed", e)
             onWarning("camera permission missing")
+        } catch (e: Exception) {
+            Log.e(TAG, "openCamera failed", e)
+            onWarning("camera open failed: ${e.javaClass.simpleName}: ${e.message}")
         }
     }
 
@@ -501,6 +516,9 @@ class RecorderSession(
         } catch (e: CameraAccessException) {
             Log.e(TAG, "createCaptureSession failed", e)
             onWarning("capture session failed: ${e.message}")
+        } catch (e: Exception) {
+            Log.e(TAG, "createCaptureSession failed", e)
+            onWarning("capture session failed: ${e.javaClass.simpleName}: ${e.message}")
         }
     }
 
@@ -705,7 +723,7 @@ class RecorderSession(
             root.put("device_model", android.os.Build.MODEL ?: "unknown")
             root.put("manufacturer", android.os.Build.MANUFACTURER ?: "unknown")
             root.put("android_version", android.os.Build.VERSION.RELEASE ?: "unknown")
-            root.put("app_version", "2.0.0")
+            root.put("app_version", "2.0.1")
             root.put("lens", lens.name.lowercase())
             root.put("lens_camera_id", cameraId)
             root.put("lens_focal_length_mm", info?.focalLengthMm?.toDouble() ?: JSONObject.NULL)

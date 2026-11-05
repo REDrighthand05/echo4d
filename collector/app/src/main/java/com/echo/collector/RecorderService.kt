@@ -109,10 +109,11 @@ class RecorderService : Service() {
 
         startForeground(NOTIFICATION_ID, buildNotification("Starting…", 0, 0, "—"))
 
-        session = RecorderSession(
-            context = this,
-            captureDir = dir,
-            lens = lens,
+        try {
+            session = RecorderSession(
+                context = this,
+                captureDir = dir,
+                lens = lens,
             onStatus = { status ->
                 val notification = buildNotification(
                     "Recording ${formatElapsed(status.elapsedS)}",
@@ -140,8 +141,26 @@ class RecorderService : Service() {
                 }
                 sendBroadcast(b)
             }
-        )
-        session?.start()
+            )
+            session?.start()
+        } catch (e: Exception) {
+            // Recording setup must never crash the app. Log it, tell the
+            // user, and shut the service down cleanly.
+            Log.e(TAG, "failed to start recording session", e)
+            session = null
+            try {
+                wakeLock?.release()
+            } catch (ignored: Exception) {
+            }
+            wakeLock = null
+            val b = Intent(ACTION_WARNING).apply {
+                putExtra(EXTRA_WARNING, "Could not start recording: ${e.javaClass.simpleName}: ${e.message}")
+                putExtra(EXTRA_CAPTURE_DIR, dir.absolutePath)
+            }
+            sendBroadcast(b)
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            stopSelf()
+        }
     }
 
     private fun stopRecording() {

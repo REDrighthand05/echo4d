@@ -12,6 +12,7 @@
     <string name="lens_ultrawide">Ultrawide</string>
     <string name="lens_main_note">Main lens (24 mm) — video + ARCore poses + sensors.</string>
     <string name="lens_ultrawide_note">Ultrawide lens (16 mm) — video + sensors only. ARCore poses need the main lens.</string>
+    <string name="lens_no_ultrawide">Ultrawide is not exposed on this phone — only the main lens is available.</string>
     <string name="sensors_title">Sensors recording</string>
     <string name="status_idle">Ready. Pick a lens, then press Record.</string>
     <string name="status_line">%1$02d:%2$02d · poses %3$d · frames %4$d · %5$s</string>

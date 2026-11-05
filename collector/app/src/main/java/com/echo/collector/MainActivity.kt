@@ -48,6 +48,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
     private var recording = false
     private var selectedLens = LensHelper.Lens.MAIN
+    private var hasUltrawide = false
     private var pulseAnimator: ObjectAnimator? = null
     private var pulseAnimatorY: ObjectAnimator? = null
 
@@ -162,6 +163,24 @@ class MainActivity : AppCompatActivity() {
             updateSensorChecklist(json)
         } catch (ignored: Exception) {
         }
+        // Probe already ran in an earlier launch: re-check whether an
+        // ultrawide rear camera is exposed, off the UI thread.
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
+            == PackageManager.PERMISSION_GRANTED
+        ) {
+            Thread({
+                val ultrawide = try {
+                    LensHelper.enumerateBackCameras(this)
+                        .any { it.lens == LensHelper.Lens.ULTRAWIDE }
+                } catch (e: Exception) {
+                    false
+                }
+                runOnUiThread {
+                    hasUltrawide = ultrawide
+                    updateLensButtons()
+                }
+            }, "lens-check").start()
+        }
     }
 
     private fun maybeRunProbe() {
@@ -174,14 +193,36 @@ class MainActivity : AppCompatActivity() {
         Thread({
             val manifest = CapabilityProbe.run(this)
             CapabilityProbe.writeToFile(manifest, File(filesDir, "capability.json"))
+            // The probe also tells us whether an ultrawide rear camera is
+            // actually exposed. This phone exposes only one rear camera,
+            // so the Ultrawide button must not pretend otherwise.
+            val ultrawide = try {
+                LensHelper.enumerateBackCameras(this)
+                    .any { it.lens == LensHelper.Lens.ULTRAWIDE }
+            } catch (e: Exception) {
+                false
+            }
             runOnUiThread {
                 getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
                     .putBoolean(KEY_PROBED, true).apply()
                 binding.probeStatusText.text = probeSummary(manifest.toJson())
                 updateSensorChecklist(manifest.toJson())
+                hasUltrawide = ultrawide
+                updateLensButtons()
                 Toast.makeText(this, R.string.probe_done, Toast.LENGTH_SHORT).show()
             }
         }, "capability-probe").start()
+    }
+
+    private fun updateLensButtons() {
+        binding.lensUltrawideButton.isEnabled = hasUltrawide
+        binding.lensUltrawideButton.alpha = if (hasUltrawide) 1.0f else 0.35f
+        if (!hasUltrawide) {
+            binding.lensNoteText.text = getString(R.string.lens_no_ultrawide)
+            if (selectedLens == LensHelper.Lens.ULTRAWIDE) {
+                selectLens(LensHelper.Lens.MAIN)
+            }
+        }
     }
 
     private fun probeSummary(json: JSONObject): String {
