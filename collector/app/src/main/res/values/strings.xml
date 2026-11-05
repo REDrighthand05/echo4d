@@ -22,6 +22,7 @@
     <string name="preview_hint">录制时这里会显示相机画面</string>
     <string name="stop_timeout">停止超时，已强制结束，文件可能不完整</string>
     <string name="record_start_failed">录制启动失败：%1$s</string>
+    <string name="last_result_line">上次录制 %1$s · 路线 %2$d 个点 · 覆盖 %3$.0f%% · %4$s</string>
 
     <!-- 能力自检 -->
     <string name="probe_running">正在检测这台手机的相机、传感器和 ARCore…</string>

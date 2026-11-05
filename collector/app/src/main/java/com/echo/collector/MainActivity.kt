@@ -46,6 +46,7 @@ class MainActivity : AppCompatActivity() {
         private const val REQUEST_PERMISSIONS = 1
         private const val PREFS = "echo_collector"
         private const val KEY_PROBED = "capability_probed"
+        private const val KEY_LAST_RESULT = "last_result"
     }
 
     private lateinit var binding: ActivityMainBinding
@@ -79,6 +80,7 @@ class MainActivity : AppCompatActivity() {
                     val selfcheck = intent.getStringExtra(RecorderService.EXTRA_SELFCHECK)
                     val dir = intent.getStringExtra(RecorderService.EXTRA_CAPTURE_DIR)
                     showSelfCheck(selfcheck, dir)
+                    saveLastResult(selfcheck, dir, warning)
                 }
             }
         }
@@ -104,10 +106,42 @@ class MainActivity : AppCompatActivity() {
         selectLens(LensHelper.Lens.MAIN)
         updateRecordButton()
         setupPreview()
+        loadLastResult()
 
         ensurePermissions()
         loadManifest()
         maybeRunProbe()
+    }
+
+    /** One-line summary of the last recording, kept on screen so a failed
+     *  recording is visible instead of silently vanishing. */
+    private fun loadLastResult() {
+        val saved = getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .getString(KEY_LAST_RESULT, null)
+        if (!saved.isNullOrEmpty()) {
+            binding.lastResultText.text = saved
+        }
+    }
+
+    private fun saveLastResult(selfcheckJson: String?, dir: String?, warning: String?) {
+        val summary = try {
+            val json = JSONObject(selfcheckJson ?: "{}")
+            val streams = json.optJSONObject("streams") ?: JSONObject()
+            val poses = streams.optJSONObject("poses")
+            val poseCount = poses?.optLong("count", 0) ?: 0
+            val poseCov = poses?.optDouble("coverage_pct", 0.0) ?: 0.0
+            val overall = json.optString("overall", "?")
+            val name = dir?.substringAfterLast('/') ?: ""
+            val base = getString(
+                R.string.last_result_line, name, poseCount, poseCov, overall
+            )
+            if (warning != null) "$base\n$warning" else base
+        } catch (e: Exception) {
+            getString(R.string.last_result_line, dir?.substringAfterLast('/') ?: "", 0, 0.0, "?")
+        }
+        getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+            .putString(KEY_LAST_RESULT, summary).apply()
+        binding.lastResultText.text = summary
     }
 
     /** Live camera preview. The TextureView publishes its Surface so the

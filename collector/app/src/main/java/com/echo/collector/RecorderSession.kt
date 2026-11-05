@@ -222,6 +222,7 @@ class RecorderSession(
         if (!running) return watchdog.snapshot(0.0)
         running = false
         recorderHandler.removeCallbacks(statusRunnable)
+        recorderHandler.removeCallbacks(cameraWatchdogRunnable)
         writerHandler.removeCallbacks(flushRunnable)
 
         // 1. Stop the ARCore update loop first, so no new poses arrive
@@ -299,17 +300,72 @@ class RecorderSession(
     // ------------------------------------------------------------ camera+ARCore
     private fun startCameraAndArCore() {
         try {
-            startCameraAndArCoreInner()
+            startCameraAndArCoreInner(useArCore = (lens == LensHelper.Lens.MAIN))
         } catch (e: Exception) {
             // Never let a camera/ARCore setup failure kill the app. The
             // user gets a named warning instead of a crash, and the
             // watchdog + crash log carry the details.
             Log.e(TAG, "camera/ARCore setup failed", e)
             onWarning("camera setup failed: ${e.javaClass.simpleName}: ${e.message}")
+            // One retry without ARCore: a video + sensors recording is
+            // always better than an empty capture.
+            if (!fallbackDone) {
+                fallbackDone = true
+                try {
+                    teardownCameraAttempt()
+                    startCameraAndArCoreInner(useArCore = false)
+                } catch (e2: Exception) {
+                    Log.e(TAG, "Camera2 fallback failed", e2)
+                    onWarning("camera setup failed: ${e2.javaClass.simpleName}: ${e2.message}")
+                }
+            }
         }
     }
 
-    private fun startCameraAndArCoreInner() {
+    /** True once the Camera2-only fallback has been tried (only once). */
+    private var fallbackDone = false
+
+    /** Close everything a camera attempt opened, so a retry starts clean. */
+    private fun teardownCameraAttempt() {
+        try { captureSession?.close() } catch (ignored: Exception) {}
+        captureSession = null
+        try { cameraDevice?.close() } catch (ignored: Exception) {}
+        cameraDevice = null
+        try { mediaRecorder?.release() } catch (ignored: Exception) {}
+        mediaRecorder = null
+        try { arSession?.close() } catch (ignored: Exception) {}
+        arSession = null
+        sharedCamera = null
+        arcoreActive = false
+        updateRunning = false
+    }
+
+    /**
+     * If the camera opened but no video frames arrive within a few seconds,
+     * the shared-camera path is silently dead. Tear it down and retry with
+     * plain Camera2 (video + sensors). A recording with no route is far
+     * better than an empty capture.
+     */
+    private val cameraWatchdogRunnable = object : Runnable {
+        override fun run() {
+            if (!running) return
+            if (frameCount > 0) return
+            if (fallbackDone) return
+            if (!arcoreActive) return
+            Log.w(TAG, "no frames after 4s with ARCore — falling back to Camera2")
+            onWarning("ARCore 未出画面，改用普通相机录制（只有视频，没有路线）")
+            fallbackDone = true
+            try {
+                teardownCameraAttempt()
+                startCameraAndArCoreInner(useArCore = false)
+            } catch (e: Exception) {
+                Log.e(TAG, "Camera2 fallback failed", e)
+                onWarning("camera setup failed: ${e.javaClass.simpleName}: ${e.message}")
+            }
+        }
+    }
+
+    private fun startCameraAndArCoreInner(useArCore: Boolean) {
         cameraManager = context.getSystemService(Context.CAMERA_SERVICE) as CameraManager
         val lenses = LensHelper.enumerateBackCameras(context)
         lensInfo = lenses.firstOrNull { it.lens == lens }
@@ -325,12 +381,17 @@ class RecorderSession(
             ?: sizes.maxByOrNull { it.width * it.height }
             ?: Size(VIDEO_WIDTH, VIDEO_HEIGHT)
 
-        if (lens == LensHelper.Lens.MAIN) {
+        if (useArCore) {
             startArCoreSession()
         } else {
-            // Ultrawide: Camera2 only. ARCore cannot track on this lens.
+            // Camera2 only. ARCore cannot track on this lens, or the
+            // shared-camera path failed and we fell back.
             arcoreActive = false
-            trackingState = "N/A (ultrawide)"
+            trackingState = if (lens == LensHelper.Lens.ULTRAWIDE) {
+                "N/A (ultrawide)"
+            } else {
+                "N/A (Camera2 only)"
+            }
             cameraId = info.cameraId
         }
 
@@ -352,6 +413,9 @@ class RecorderSession(
             }
         }
         openCamera()
+        // Watchdog: if no frames flow, fall back to plain Camera2.
+        recorderHandler.removeCallbacks(cameraWatchdogRunnable)
+        recorderHandler.postDelayed(cameraWatchdogRunnable, 4000)
     }
 
     /** Create + configure the ARCore session (shared camera). Never throws. */
@@ -509,7 +573,20 @@ class RecorderSession(
             }
 
             override fun onConfigureFailed(session: CameraCaptureSession) {
+                Log.e(TAG, "camera capture session configuration failed")
                 onWarning("camera capture session configuration failed")
+                // The shared-camera path failed to configure. Retry once
+                // with plain Camera2 instead of recording nothing.
+                if (arcoreActive && !fallbackDone) {
+                    fallbackDone = true
+                    try {
+                        teardownCameraAttempt()
+                        startCameraAndArCoreInner(useArCore = false)
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Camera2 fallback failed", e)
+                        onWarning("camera setup failed: ${e.javaClass.simpleName}: ${e.message}")
+                    }
+                }
             }
         }
         try {
@@ -729,7 +806,7 @@ class RecorderSession(
             root.put("device_model", android.os.Build.MODEL ?: "unknown")
             root.put("manufacturer", android.os.Build.MANUFACTURER ?: "unknown")
             root.put("android_version", android.os.Build.VERSION.RELEASE ?: "unknown")
-            root.put("app_version", "2.0.2")
+            root.put("app_version", "2.0.3")
             root.put("lens", lens.name.lowercase())
             root.put("lens_camera_id", cameraId)
             root.put("lens_focal_length_mm", info?.focalLengthMm?.toDouble() ?: JSONObject.NULL)

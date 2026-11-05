@@ -53,6 +53,13 @@
                 android:text="@string/status_idle"
                 android:textAppearance="@style/EchoStatus" />
 
+            <TextView
+                android:id="@+id/lastResultText"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:textAppearance="@style/EchoBody" />
+
             <!-- Live camera preview while recording. -->
             <FrameLayout
                 android:layout_width="match_parent"
