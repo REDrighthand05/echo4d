@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">EchoCollector</string>
+    <string name="title_captures">Captures</string>
+    <string name="title_diagnostics">Diagnostics</string>
+
+    <!-- Record screen -->
+    <string name="record">●  Record</string>
+    <string name="stop">■  Stop</string>
+    <string name="stopping">Stopping…</string>
+    <string name="lens_main">Main</string>
+    <string name="lens_ultrawide">Ultrawide</string>
+    <string name="lens_main_note">Main lens (24 mm) — video + ARCore poses + sensors.</string>
+    <string name="lens_ultrawide_note">Ultrawide lens (16 mm) — video + sensors only. ARCore poses need the main lens.</string>
+    <string name="sensors_title">Sensors recording</string>
+    <string name="status_idle">Ready. Pick a lens, then press Record.</string>
+    <string name="status_line">%1$02d:%2$02d · poses %3$d · frames %4$d · %5$s</string>
+    <string name="stale_warning">Stream stalled: %1$s</string>
+    <string name="dismiss">Dismiss</string>
+    <string name="camera_permission_needed">Camera permission is needed to record.</string>
+
+    <!-- Capability probe -->
+    <string name="probe_running">Probing this phone’s cameras, sensors and ARCore…</string>
+    <string name="probe_done">Capability probe done</string>
+    <string name="probe_summary">%1$d cameras, %2$d open · %3$d sensors · ARCore %4$s</string>
+    <string name="ok">OK</string>
+    <string name="not_ok">NOT OK</string>
+
+    <!-- Self-check -->
+    <string name="selfcheck_title">Capture finished — self-check</string>
+    <string name="selfcheck_summary">Capture %1$s\nPoses: %2$d · coverage %3$.1f%%\nOverall: %4$s</string>
+
+    <!-- Captures list -->
+    <string name="captures_empty">No captures yet. Press Record to make one.</string>
+    <string name="capture_stats">%1$s · %2$s · %3$d poses</string>
+    <string name="coverage_pct">%.0f%% pose coverage</string>
+    <string name="delete_title">Delete capture?</string>
+    <string name="delete_message">Delete %1$s and all its files? This cannot be undone.</string>
+    <string name="delete">Delete</string>
+    <string name="deleted">Capture deleted</string>
+    <string name="delete_failed">Delete failed</string>
+
+    <!-- Diagnostics -->
+    <string name="rerun_probe">Re-run probe</string>
+    <string name="no_manifest">No capability probe has been run yet. Tap “Re-run probe”.</string>
+    <string name="diag_device">Device: %1$s (%2$s) · Android %3$s (SDK %4$d)</string>
+    <string name="diag_cameras">Cameras</string>
+    <string name="diag_sensors">Sensors</string>
+    <string name="diag_arcore">ARCore</string>
+</resources>

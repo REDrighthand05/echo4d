@@ -1,0 +1,30 @@
+#!/bin/sh
+# Minimal Gradle wrapper bootstrap for EchoCollector v2.
+#
+# If gradle/wrapper/gradle-wrapper.jar is present (Android Studio creates
+# it on first sync), it is used. Otherwise the Gradle distribution named
+# in gradle/wrapper/gradle-wrapper.properties is downloaded once into
+# ~/.gradle/wrapper/dists and run directly. No Gradle install needed.
+set -e
+APP_HOME=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+WRAPPER_JAR="$APP_HOME/gradle/wrapper/gradle-wrapper.jar"
+if [ -f "$WRAPPER_JAR" ]; then
+    exec java -jar "$WRAPPER_JAR" "$@"
+fi
+DIST_URL=$(grep '^distributionUrl=' "$APP_HOME/gradle/wrapper/gradle-wrapper.properties" | cut -d= -f2- | sed 's/\\:/:/')
+GRADLE_VERSION=$(echo "$DIST_URL" | sed -E 's/.*gradle-([0-9.]+)-bin\.zip/\1/')
+DIST_DIR="$HOME/.gradle/wrapper/dists/gradle-$GRADLE_VERSION-bin"
+GRADLE_BIN="$DIST_DIR/gradle-$GRADLE_VERSION/bin/gradle"
+if [ ! -x "$GRADLE_BIN" ]; then
+    echo "Downloading Gradle $GRADLE_VERSION ..."
+    TMP=$(mktemp -d)
+    if command -v curl >/dev/null 2>&1; then
+        curl -L -o "$TMP/gradle.zip" "$DIST_URL"
+    else
+        wget -O "$TMP/gradle.zip" "$DIST_URL"
+    fi
+    mkdir -p "$DIST_DIR"
+    unzip -q "$TMP/gradle.zip" -d "$DIST_DIR"
+    rm -rf "$TMP"
+fi
+exec "$GRADLE_BIN" "$@"

@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Blue graffiti: a few loose brush strokes in the accent blue, drawn
+     behind the frosted-glass sheet (EchoScene desktop frontend). Kept
+     deliberately simple: three strokes, two opacities. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="360dp"
+    android:height="160dp"
+    android:viewportWidth="360"
+    android:viewportHeight="160">
+    <path
+        android:fillColor="@android:color/transparent"
+        android:strokeColor="@color/graffiti_blue"
+        android:strokeWidth="14"
+        android:strokeLineCap="round"
+        android:pathData="M20,120 C80,40 160,140 240,60 S330,100 350,50" />
+    <path
+        android:fillColor="@android:color/transparent"
+        android:strokeColor="@color/graffiti_blue_soft"
+        android:strokeWidth="9"
+        android:strokeLineCap="round"
+        android:pathData="M40,140 C120,90 200,150 300,90" />
+    <path
+        android:fillColor="@android:color/transparent"
+        android:strokeColor="@color/graffiti_blue"
+        android:strokeWidth="6"
+        android:strokeLineCap="round"
+        android:pathData="M260,30 C280,70 300,20 330,55" />
+</vector>

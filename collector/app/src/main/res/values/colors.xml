@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- EchoScene desktop frontend, translated to Android: a dark sheet,
+         one frosted-glass panel, and a single vivid blue (the graffiti). -->
+    <color name="background_dark">#0B0E14</color>
+    <color name="background_dark_2">#101828</color>
+    <color name="glass_fill">#1AFFFFFF</color>
+    <color name="glass_border">#33FFFFFF</color>
+    <color name="accent_blue">#3B82F6</color>
+    <color name="graffiti_blue">#2563EB</color>
+    <color name="graffiti_blue_soft">#803B82F6</color>
+    <color name="text_primary">#F5F7FA</color>
+    <color name="text_secondary">#9AA3B2</color>
+    <color name="warning_amber">#FFC107</color>
+    <color name="danger_red">#F44336</color>
+    <color name="success_green">#4CAF50</color>
+    <color name="record_red">#E53935</color>
+</resources>
