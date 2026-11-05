@@ -53,6 +53,27 @@
                 android:text="@string/status_idle"
                 android:textAppearance="@style/EchoStatus" />
 
+            <!-- Live camera preview while recording. -->
+            <FrameLayout
+                android:layout_width="match_parent"
+                android:layout_height="200dp"
+                android:layout_marginTop="14dp"
+                android:background="#FF0B0E14">
+
+                <TextureView
+                    android:id="@+id/previewView"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent" />
+
+                <TextView
+                    android:id="@+id/previewHintText"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center"
+                    android:text="@string/preview_hint"
+                    android:textAppearance="@style/EchoBody" />
+            </FrameLayout>
+
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/recordButton"
                 android:layout_width="match_parent"

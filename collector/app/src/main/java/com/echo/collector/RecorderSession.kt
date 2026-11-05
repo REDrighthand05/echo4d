@@ -446,6 +446,12 @@ class RecorderSession(
             }
         }
         surfaces.add(mediaRecorder!!.surface)
+        // Live preview (the TextureView on the record screen). Optional:
+        // if the preview surface is gone, recording still works.
+        val preview = PreviewSurface.surface
+        if (preview != null && preview.isValid) {
+            surfaces.add(preview)
+        }
 
         val builder: CaptureRequest.Builder
         try {
@@ -723,7 +729,7 @@ class RecorderSession(
             root.put("device_model", android.os.Build.MODEL ?: "unknown")
             root.put("manufacturer", android.os.Build.MANUFACTURER ?: "unknown")
             root.put("android_version", android.os.Build.VERSION.RELEASE ?: "unknown")
-            root.put("app_version", "2.0.1")
+            root.put("app_version", "2.0.2")
             root.put("lens", lens.name.lowercase())
             root.put("lens_camera_id", cameraId)
             root.put("lens_focal_length_mm", info?.focalLengthMm?.toDouble() ?: JSONObject.NULL)

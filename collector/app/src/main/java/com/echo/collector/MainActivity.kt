@@ -8,8 +8,11 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
+import android.graphics.SurfaceTexture
 import android.os.Build
 import android.os.Bundle
+import android.view.Surface
+import android.view.TextureView
 import android.view.View
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
@@ -71,6 +74,8 @@ class MainActivity : AppCompatActivity() {
                 RecorderService.ACTION_FINISHED -> {
                     recording = false
                     updateRecordButton()
+                    val warning = intent.getStringExtra(RecorderService.EXTRA_WARNING)
+                    if (warning != null) showWarning(warning)
                     val selfcheck = intent.getStringExtra(RecorderService.EXTRA_SELFCHECK)
                     val dir = intent.getStringExtra(RecorderService.EXTRA_CAPTURE_DIR)
                     showSelfCheck(selfcheck, dir)
@@ -98,14 +103,59 @@ class MainActivity : AppCompatActivity() {
         }
         selectLens(LensHelper.Lens.MAIN)
         updateRecordButton()
+        setupPreview()
 
         ensurePermissions()
         loadManifest()
         maybeRunProbe()
     }
 
+    /** Live camera preview. The TextureView publishes its Surface so the
+     *  recording session (in the service) can feed it as a third camera
+     *  output. The hint text hides once the surface exists. */
+    private fun setupPreview() {
+        binding.previewView.surfaceTextureListener = object : TextureView.SurfaceTextureListener {
+            override fun onSurfaceTextureAvailable(
+                surfaceTexture: SurfaceTexture, width: Int, height: Int
+            ) {
+                // 1920x1080 is a size the main camera can output; it is
+                // also the video size, so the preview matches the recording.
+                surfaceTexture.setDefaultBufferSize(1920, 1080)
+                PreviewSurface.publish(Surface(surfaceTexture), width, height)
+                binding.previewHintText.visibility = View.GONE
+            }
+
+            override fun onSurfaceTextureSizeChanged(
+                surfaceTexture: SurfaceTexture, width: Int, height: Int
+            ) {
+            }
+
+            override fun onSurfaceTextureDestroyed(surfaceTexture: SurfaceTexture): Boolean {
+                PreviewSurface.clear()
+                binding.previewHintText.visibility = View.VISIBLE
+                return true
+            }
+
+            override fun onSurfaceTextureUpdated(surfaceTexture: SurfaceTexture) {}
+        }
+        // If the surface is already available (e.g. after rotation), the
+        // listener above still fires; nothing else to do here.
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        PreviewSurface.clear()
+    }
+
     override fun onResume() {
         super.onResume()
+        // If we missed the FINISHED broadcast (the Activity was paused
+        // when the recording stopped), the button would stick on
+        // "Stopping…". Re-sync with the service's real state.
+        if (recording && !RecorderService.isRecording) {
+            recording = false
+            updateRecordButton()
+        }
         val filter = IntentFilter().apply {
             addAction(RecorderService.ACTION_STATUS)
             addAction(RecorderService.ACTION_WARNING)
@@ -245,15 +295,29 @@ class MainActivity : AppCompatActivity() {
         for (i in 0 until sensors.length()) {
             val s = sensors.optJSONObject(i) ?: continue
             if (!s.optBoolean("will_record")) continue
-            val name = s.optString("type_name")
+            val name = sensorNameZh(s.optString("type_name"))
             lines.append("● ").append(name).append('\n')
         }
         // Barometer is the one that may be absent; say so plainly.
         val hasBaro = (0 until sensors.length()).any { i ->
             sensors.optJSONObject(i)?.optString("type_name") == "barometer"
         }
-        if (!hasBaro) lines.append("○ barometer · not present on this phone\n")
+        if (!hasBaro) lines.append("○ 气压计 · 这台手机没有\n")
         binding.sensorChecklistText.text = lines.toString().trimEnd()
+    }
+
+    /** English sensor type name (from the probe) -> Chinese, for display. */
+    private fun sensorNameZh(typeName: String): String = when (typeName.lowercase()) {
+        "accelerometer" -> "加速度计"
+        "gyroscope" -> "陀螺仪"
+        "magnetometer", "magnetic_field" -> "磁力计"
+        "light" -> "光线"
+        "barometer", "pressure" -> "气压计"
+        "proximity" -> "距离"
+        "gravity" -> "重力"
+        "rotation_vector" -> "旋转向量"
+        "linear_acceleration" -> "线性加速度"
+        else -> typeName
     }
 
     // ------------------------------------------------------------ recording

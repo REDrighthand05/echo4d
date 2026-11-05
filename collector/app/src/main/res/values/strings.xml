@@ -1,51 +1,54 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">EchoCollector</string>
-    <string name="title_captures">Captures</string>
-    <string name="title_diagnostics">Diagnostics</string>
+    <string name="title_captures">已录视频</string>
+    <string name="title_diagnostics">诊断</string>
 
-    <!-- Record screen -->
-    <string name="record">●  Record</string>
-    <string name="stop">■  Stop</string>
-    <string name="stopping">Stopping…</string>
-    <string name="lens_main">Main</string>
-    <string name="lens_ultrawide">Ultrawide</string>
-    <string name="lens_main_note">Main lens (24 mm) — video + ARCore poses + sensors.</string>
-    <string name="lens_ultrawide_note">Ultrawide lens (16 mm) — video + sensors only. ARCore poses need the main lens.</string>
-    <string name="lens_no_ultrawide">Ultrawide is not exposed on this phone — only the main lens is available.</string>
-    <string name="sensors_title">Sensors recording</string>
-    <string name="status_idle">Ready. Pick a lens, then press Record.</string>
-    <string name="status_line">%1$02d:%2$02d · poses %3$d · frames %4$d · %5$s</string>
-    <string name="stale_warning">Stream stalled: %1$s</string>
-    <string name="dismiss">Dismiss</string>
-    <string name="camera_permission_needed">Camera permission is needed to record.</string>
+    <!-- 录制界面 -->
+    <string name="record">●  开始录制</string>
+    <string name="stop">■  停止</string>
+    <string name="stopping">正在停止…</string>
+    <string name="lens_main">主摄</string>
+    <string name="lens_ultrawide">超广角</string>
+    <string name="lens_main_note">主摄（24mm）——视频 + 位置路线 + 传感器。</string>
+    <string name="lens_ultrawide_note">超广角（16mm）——只有视频 + 传感器，没有位置路线，要路线请用主摄。</string>
+    <string name="lens_no_ultrawide">这台手机不开放超广角，只能用主摄。</string>
+    <string name="sensors_title">正在记录的传感器</string>
+    <string name="status_idle">就绪。选好镜头，按开始录制。</string>
+    <string name="status_line">%1$02d:%2$02d · 路线 %3$d 个点 · 视频 %4$d 帧 · %5$s</string>
+    <string name="stale_warning">数据流停了：%1$s</string>
+    <string name="dismiss">知道了</string>
+    <string name="camera_permission_needed">录制需要相机权限。</string>
+    <string name="preview_hint">录制时这里会显示相机画面</string>
+    <string name="stop_timeout">停止超时，已强制结束，文件可能不完整</string>
+    <string name="record_start_failed">录制启动失败：%1$s</string>
 
-    <!-- Capability probe -->
-    <string name="probe_running">Probing this phone’s cameras, sensors and ARCore…</string>
-    <string name="probe_done">Capability probe done</string>
-    <string name="probe_summary">%1$d cameras, %2$d open · %3$d sensors · ARCore %4$s</string>
-    <string name="ok">OK</string>
-    <string name="not_ok">NOT OK</string>
+    <!-- 能力自检 -->
+    <string name="probe_running">正在检测这台手机的相机、传感器和 ARCore…</string>
+    <string name="probe_done">检测完成</string>
+    <string name="probe_summary">%1$d 个相机，%2$d 个能打开 · %3$d 个传感器 · ARCore %4$s</string>
+    <string name="ok">正常</string>
+    <string name="not_ok">异常</string>
 
-    <!-- Self-check -->
-    <string name="selfcheck_title">Capture finished — self-check</string>
-    <string name="selfcheck_summary">Capture %1$s\nPoses: %2$d · coverage %3$.1f%%\nOverall: %4$s</string>
+    <!-- 录完自检 -->
+    <string name="selfcheck_title">录制完成——自检</string>
+    <string name="selfcheck_summary">%1$s\n路线点数：%2$d · 覆盖 %3$.1f%%\n总体：%4$s</string>
 
-    <!-- Captures list -->
-    <string name="captures_empty">No captures yet. Press Record to make one.</string>
-    <string name="capture_stats">%1$s · %2$s · %3$d poses</string>
-    <string name="coverage_pct">%.0f%% pose coverage</string>
-    <string name="delete_title">Delete capture?</string>
-    <string name="delete_message">Delete %1$s and all its files? This cannot be undone.</string>
-    <string name="delete">Delete</string>
-    <string name="deleted">Capture deleted</string>
-    <string name="delete_failed">Delete failed</string>
+    <!-- 已录列表 -->
+    <string name="captures_empty">还没有录过。按开始录制来录一段。</string>
+    <string name="capture_stats">%1$s · %2$s · %3$d 个路线点</string>
+    <string name="coverage_pct">路线覆盖 %.0f%%</string>
+    <string name="delete_title">删除这段录制？</string>
+    <string name="delete_message">删除 %1$s 和它的全部文件？删了就没了。</string>
+    <string name="delete">删除</string>
+    <string name="deleted">已删除</string>
+    <string name="delete_failed">删除失败</string>
 
-    <!-- Diagnostics -->
-    <string name="rerun_probe">Re-run probe</string>
-    <string name="no_manifest">No capability probe has been run yet. Tap “Re-run probe”.</string>
-    <string name="diag_device">Device: %1$s (%2$s) · Android %3$s (SDK %4$d)</string>
-    <string name="diag_cameras">Cameras</string>
-    <string name="diag_sensors">Sensors</string>
+    <!-- 诊断 -->
+    <string name="rerun_probe">重新检测</string>
+    <string name="no_manifest">还没有做过能力检测。点“重新检测”。</string>
+    <string name="diag_device">设备：%1$s（%2$s）· Android %3$s（SDK %4$d）</string>
+    <string name="diag_cameras">相机</string>
+    <string name="diag_sensors">传感器</string>
     <string name="diag_arcore">ARCore</string>
 </resources>

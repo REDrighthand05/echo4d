@@ -62,6 +62,14 @@ class RecorderService : Service() {
         private const val TAG = "RecorderService"
         private const val NOTIFICATION_ID = 1
         private const val CHANNEL_ID = "echo_capture"
+        /** How long stop() may take before we force-finish anyway. */
+        private const val STOP_TIMEOUT_MS = 10_000L
+
+        /** True while a recording session is live. Read by the Activity to
+         *  recover if it missed the FINISHED broadcast. */
+        @Volatile
+        var isRecording = false
+            private set
     }
 
     private var session: RecorderSession? = null
@@ -109,6 +117,7 @@ class RecorderService : Service() {
 
         startForeground(NOTIFICATION_ID, buildNotification("Starting…", 0, 0, "—"))
 
+        isRecording = true
         try {
             session = RecorderSession(
                 context = this,
@@ -165,28 +174,53 @@ class RecorderService : Service() {
 
     private fun stopRecording() {
         val s = session ?: run {
+            isRecording = false
             stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf()
             return
         }
         session = null
         // stop() is blocking (it tears down camera/ARCore and writes the
-        // self-check). Run it off the main thread.
-        Thread({
-            val check = s.stop()
+        // self-check). Run it off the main thread. If it hangs, a watchdog
+        // finishes anyway after STOP_TIMEOUT_MS so the UI never sticks on
+        // "Stopping…" — a stuck teardown must not trap the user.
+        val finished = java.util.concurrent.atomic.AtomicBoolean(false)
+        fun finish(check: StreamWatchdog.SelfCheck?, timedOut: Boolean) {
+            if (!finished.compareAndSet(false, true)) return
+            isRecording = false
             try {
                 wakeLock?.release()
             } catch (ignored: Exception) {
             }
             wakeLock = null
             val b = Intent(ACTION_FINISHED).apply {
-                putExtra(EXTRA_SELFCHECK, check.toJson().toString())
+                val json = check?.toJson()?.toString()
+                putExtra(EXTRA_SELFCHECK, json)
                 putExtra(EXTRA_CAPTURE_DIR, captureDir?.absolutePath)
+                if (timedOut) {
+                    putExtra(EXTRA_WARNING, getString(R.string.stop_timeout))
+                }
             }
             sendBroadcast(b)
             stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf()
+        }
+        Thread({
+            val check = try {
+                s.stop()
+            } catch (e: Exception) {
+                Log.e(TAG, "session stop failed", e)
+                null
+            }
+            finish(check, timedOut = false)
         }, "recorder-stop").start()
+        Thread({
+            try {
+                Thread.sleep(STOP_TIMEOUT_MS)
+            } catch (ignored: InterruptedException) {
+            }
+            finish(null, timedOut = true)
+        }, "recorder-stop-watchdog").start()
     }
 
     private fun buildNotification(
