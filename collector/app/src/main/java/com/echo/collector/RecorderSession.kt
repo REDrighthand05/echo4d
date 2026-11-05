@@ -785,7 +785,6 @@ class RecorderSession(
                 }
                 mediaMuxer = null
             }
-        }
     }
 
     /** Small muxer state holder for drain(). */
