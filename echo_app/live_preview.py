@@ -295,6 +295,7 @@ class LiveSequencer:
         self._poses: dict | None = None
         self._scene_centre: np.ndarray | None = None
         self._scene_distance: float = 1.0
+        self._fused_framing: tuple[np.ndarray, float] | None = None
 
     # -- product loaders -------------------------------------------------
     def _load_poses(self):
@@ -333,6 +334,10 @@ class LiveSequencer:
 
     def _load_fused(self):
         pts, rgb = read_points_ply(self.job_dir / "scene_points.ply")
+        self._fused_framing = None
+        if len(pts):
+            diagonal = np.linalg.norm(pts.max(axis=0) - pts.min(axis=0))
+            self._fused_framing = (pts.mean(axis=0), float(diagonal) * 0.9)
         self.state.settled = (pts, rgb)
         self.state.reliefs = {}
         self.state.phase = "fused"
@@ -374,13 +379,18 @@ class LiveSequencer:
         else:
             points = np.zeros((0, 3))
             colors = np.zeros((0, 3), dtype=np.uint8)
+        lines, line_rgb = self._route_lines()
+        return points, colors, lines, line_rgb
+
+    def _route_lines(self):
+        st = self.state
         lines = np.zeros((0, 2, 3))
         line_rgb = np.zeros((0, 3), dtype=np.uint8)
         if len(st.route) >= 2:
             lines = np.stack([st.route[:-1], st.route[1:]], axis=1)
             line_rgb = np.tile(np.array([[90, 160, 255]], dtype=np.uint8),
                                (len(lines), 1))
-        return points, colors, lines, line_rgb
+        return lines, line_rgb
 
     def camera(self, width: int = 1280, height: int = 720) -> dict:
         """The shared ViewState as a render camera. Untouched for a
@@ -389,11 +399,9 @@ class LiveSequencer:
         centre = self._scene_centre if self._scene_centre is not None \
             else np.zeros(3)
         base4 = max(self._scene_distance * 4.0, 1.0)   # radius at dist=4
-        if self.state.settled is not None:
-            pts = self.state.settled[0]
-            centre = pts.mean(axis=0)
-            base4 = max(float(np.linalg.norm(
-                pts.max(axis=0) - pts.min(axis=0))) * 0.9, base4)
+        if self._fused_framing is not None:
+            centre, fused_radius = self._fused_framing
+            base4 = max(fused_radius, base4)
         view = self.view
         now = time.monotonic()
         if self._cam_t is not None:
@@ -436,11 +444,15 @@ def render_snapshot(seq: LiveSequencer, t_s: float | None = None,
     """Render the sequencer's current state with the Echo Render
     operator. Returns (image uint8 (H,W,3), seconds_taken)."""
     from echo_super.kernels.echo_render import render_frame
-    points, colors, lines, line_rgb = seq.snapshot()
+    if seq.state.settled is None:
+        points, colors, lines, line_rgb = seq.snapshot()
+    else:
+        # The renderer only reads the fused arrays; snapshot() owns copies.
+        points, colors = seq.state.settled
+        lines, line_rgb = seq._route_lines()
     cam = seq.camera(width, height)
     t0 = time.perf_counter()
-    img = render_frame(points.astype(np.float32), colors,
-                       lines.astype(np.float32), line_rgb,
+    img = render_frame(points, colors, lines, line_rgb,
                        camera=cam, width=width, height=height,
                        point_radius_px=2.0, glow_strength=0.5,
                        glow_radius_factor=2.0, background_rgb=(3, 6, 11))
