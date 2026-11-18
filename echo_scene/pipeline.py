@@ -111,7 +111,7 @@ _MATCH_MIN_CORR = 0.9
 
 
 def _gray_thumbs_from_video(video: Path) -> np.ndarray | None:
-    """Every container frame of the video as a 96x54 gray thumbnail
+    """Every container frame of the video as a 96x54 uint8 gray thumbnail
     (one ffmpeg decode, raw bytes). None when the decode fails."""
     try:
         out = subprocess.run(
@@ -126,7 +126,7 @@ def _gray_thumbs_from_video(video: Path) -> np.ndarray | None:
         return None
     return np.frombuffer(out[: n * _MATCH_W * _MATCH_H],
                          dtype=np.uint8).reshape(
-                             n, _MATCH_H, _MATCH_W).astype(np.float64)
+                             n, _MATCH_H, _MATCH_W)
 
 
 def _gray_thumb_of_image(path: Path) -> np.ndarray | None:
@@ -146,7 +146,8 @@ def _gray_thumb_of_image(path: Path) -> np.ndarray | None:
 
 
 def _write_frame_capture_times(video: Path, frames: list,
-                               job_dir: Path) -> int:
+                               job_dir: Path,
+                               video_thumbs: np.ndarray | None = None) -> int:
     """Pair each extracted frame with its capture-clock time and
     write frame_capture_times.json; returns the number paired.
 
@@ -168,10 +169,11 @@ def _write_frame_capture_times(video: Path, frames: list,
     cap = sr.read_job_capture(job_dir)
     if cap is None or len(frames) == 0:
         return 0
-    vid = _gray_thumbs_from_video(video)
-    if vid is None:
-        return 0
-    flat = vid.reshape(len(vid), -1)
+    if video_thumbs is None:
+        video_thumbs = _gray_thumbs_from_video(video)
+        if video_thumbs is None:
+            return 0
+    flat = video_thumbs.reshape(len(video_thumbs), -1)
     flat = flat - flat.mean(axis=1, keepdims=True)
     norms = np.linalg.norm(flat, axis=1)
     mapping = {}
@@ -464,7 +466,7 @@ def stage_extract(video: Path, job_dir: Path) -> dict:
             manifest = {p.name: i for p, i in zip(frames, indices)}
             (job_dir / "frames_manifest.json").write_text(
                 json.dumps(manifest, ensure_ascii=False, indent=2))
-            paired = _write_frame_capture_times(video, frames, job_dir)
+            paired = _write_frame_capture_times(video, frames, job_dir, thumbs)
             info = {
                 "stage": "extract",
                 "video": str(video),
@@ -501,7 +503,7 @@ def stage_extract(video: Path, job_dir: Path) -> dict:
         _run([_tool_path("ffmpeg"), "-y", "-v", "error",
               "-i", video, *tail])
     frames = sorted(frames_dir.glob("frame_*.jpg"))
-    paired = _write_frame_capture_times(video, frames, job_dir)
+    paired = _write_frame_capture_times(video, frames, job_dir, thumbs)
     info = {
         "stage": "extract",
         "video": str(video),
