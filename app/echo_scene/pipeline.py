@@ -31,10 +31,14 @@ Usage:
 import base64
 import json
 import math
+import os
+import re
 import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
+from time import perf_counter
 
 import numpy as np
 
@@ -509,6 +513,7 @@ def stage_extract(video: Path, job_dir: Path) -> dict:
                                                   thumbs=thumbs)
             info = {
                 "stage": "extract",
+                "device": "CPU (software decode, resize and JPEG)",
                 "video": str(video),
                 "duration_seconds": round(duration, 2),
                 "frame_count": len(frames),
@@ -540,6 +545,7 @@ def stage_extract(video: Path, job_dir: Path) -> dict:
         if not accel:
             raise
         globals()["_HWACCEL_CACHE"] = []
+        accel = []
         _run([_tool_path("ffmpeg"), "-y", "-v", "error",
               "-i", video, *tail])
     frames = sorted(frames_dir.glob("frame_*.jpg"))
@@ -549,6 +555,8 @@ def stage_extract(video: Path, job_dir: Path) -> dict:
         "stage": "extract",
         "video": str(video),
         "duration_seconds": round(duration, 2),
+        "device": (f"FFmpeg {accel[-1]} decode requested; CPU frame output"
+                   if accel else "CPU (software decode and JPEG)"),
         "frame_interval_seconds": round(interval, 3),
         "frame_count": len(frames),
         "frames_dir": str(frames_dir),
@@ -1005,6 +1013,8 @@ def stage_poses(job_dir: Path) -> dict:
     info = {
         "stage": "poses",
         "ok": True,
+        "device": ("COLMAP automatic device selection; check COLMAP SIFT/BA log"
+                   if getattr(pycolmap, "has_cuda", False) else "CPU (COLMAP)"),
         "registered_images": rec.num_reg_images(),
         "relocalized_images": len(relocalized),
         "match_pairs": match_pairs,
@@ -1030,7 +1040,10 @@ def stage_select(job_dir: Path, max_frames: int = 120, min_sharpness: float = 20
 
 
 def stage_depth(job_dir: Path) -> dict:
-    from .depth import estimate_depth, save_depth_preview
+    from .depth import (_GPU_PROVIDERS, _get_session, _provider_chain,
+                        end_provider_profile, estimate_depth, save_depth_preview)
+    from .depth_batch import (_pixel_batch_dimension, iter_depth_estimates,
+                              iter_depth_estimates_parallel, parallel_workers)
 
     # The Base model gives visibly smoother, more continuous surfaces
     # than Small (verified on the room job); fall back to Small when the
@@ -1050,56 +1063,90 @@ def stage_depth(job_dir: Path) -> dict:
     preview_dir = job_dir / "depth_preview"
     depth_dir.mkdir(exist_ok=True)
     preview_dir.mkdir(exist_ok=True)
-    # Batched inference (DS kernel, merge-gated in
-    # tests/test_depth_batch.py), streamed chunk by chunk so peak
-    # memory stays bounded no matter how many frames registered:
-    # the pre-streaming batch call held every depth map in RAM
-    # (~6.4GB at 773 full-res frames) and was OOM-killed with zero
-    # output. Falls back to per-frame on any batch-level failure
-    # (from wherever streaming stopped), per frame on a batch miss.
-    existing = [n for n in names if (frames_dir / n).exists()]
-    done = []
+    existing = [name for name in names if (frames_dir / name).exists()]
+    paths = [frames_dir / name for name in existing]
+    runtime = {"requested_providers": _provider_chain(), "cpu_write_seconds": 0.0}
+    done = set()
+    profile_all = os.environ.get("ECHO_DEPTH_PROFILE") == "1"
+    profile_prefix = None
+    if paths and (profile_all or _GPU_PROVIDERS.intersection(runtime["requested_providers"])):
+        profile_prefix = (job_dir / "ort-depth").resolve()
+    tick = perf_counter()
+    session = _get_session(model, profile_prefix=profile_prefix)
+    runtime["session_init_seconds"] = perf_counter() - tick
+    initial_providers = session.get_providers()
+    runtime["session_providers_at_start"] = initial_providers
+    runtime["model_batch_dimension"] = _pixel_batch_dimension(session)
+    has_gpu = bool(_GPU_PROVIDERS.intersection(initial_providers))
+    workers = 0 if profile_all else parallel_workers(model, session, len(paths))
+    runtime["cpu_worker_sessions"] = workers
+    # Keep the existing maximum batch on dynamic models. Smaller cards
+    # can select one frame, and a rejected dynamic batch downgrades once.
+    max_batch = os.environ.get("ECHO_DEPTH_BATCH_SIZE", "4")
+    batch_size = int(max_batch) if max_batch in {"1", "2", "3", "4"} else 4
+    runtime["requested_batch_size"] = batch_size
+    runtime["cpu_prefetch"] = has_gpu and os.environ.get("ECHO_DEPTH_PREFETCH") != "0"
+    runtime["cpu_fallback_frames"] = 0
+    providers_seen = {}
+    profile_open = profile_prefix is not None
+    cpu_session = None
 
     def _save_depth(name, depth):
+        tick = perf_counter()
         stem = Path(name).stem
         np.save(depth_dir / f"{stem}.npy", depth)
         save_depth_preview(depth, preview_dir / f"{stem}.png")
-        done.append(name)
+        runtime["cpu_write_seconds"] += perf_counter() - tick
+        done.add(name)
 
-    streamed = True
+    def _retry(path):
+        nonlocal cpu_session
+        if not has_gpu:
+            return estimate_depth(path, model, session=session)
+        if cpu_session is None:
+            cpu_session = _get_session(model, providers=["CPUExecutionProvider"])
+        runtime["cpu_fallback_frames"] += 1
+        return estimate_depth(path, model, session=cpu_session)
+
+    estimates = (iter_depth_estimates_parallel(paths, model, workers) if workers
+                 else iter_depth_estimates(paths, session, batch_size=batch_size,
+                                           prefetch=runtime["cpu_prefetch"], timings=runtime))
     try:
-        from .depth import _get_session
-        from .depth_batch import (iter_depth_estimates,
-                                  iter_depth_estimates_parallel,
-                                  parallel_workers)
+        try:
+            for index, depth in estimates:
+                if profile_open and not profile_all and depth is not None:
+                    providers_seen = end_provider_profile(session)
+                    profile_open = False
+                if depth is None:
+                    depth = _retry(paths[index])
+                _save_depth(existing[index], depth)
+        except Exception as exc:
+            # Retry only unfinished frames. Saving and error reporting
+            # still fail the job if a frame cannot be produced.
+            estimates.close()
+            runtime["stream_error"] = str(exc)
+            for path in paths:
+                if path.name not in done:
+                    _save_depth(path.name, _retry(path))
+    finally:
+        estimates.close()
+        if profile_open:
+            providers_seen = end_provider_profile(session, keep_file=profile_all)
 
-        session = _get_session(model)
-        # Thread-parallel depth when it pays (CPU session, enough
-        # frames, enough cores): one 1-thread session per worker
-        # thread, ~1.3x on the real 40-frame check, outputs
-        # bit-identical to serial single-frame. Any failure here --
-        # including one mid-stream -- falls through to the serial
-        # per-frame loop below, which re-runs only the frames not
-        # yet saved.
-        workers = parallel_workers(model, session, len(existing))
-        if workers:
-            estimates = iter_depth_estimates_parallel(
-                [frames_dir / n for n in existing], model, workers)
-        else:
-            estimates = iter_depth_estimates(
-                [frames_dir / n for n in existing], session, batch_size=4)
-        for i, depth in estimates:
-            if depth is None:
-                depth = estimate_depth(frames_dir / existing[i], model)
-            _save_depth(existing[i], depth)
-    except Exception:
-        streamed = False
-    if not streamed:
-        have = set(done)
-        for name in existing:
-            if name not in have:
-                _save_depth(name, estimate_depth(frames_dir / name, model))
-    info = {"stage": "depth", "ok": True, "depth_frames": len(done), "model": model.name}
+    runtime["session_providers_at_end"] = session.get_providers()
+    runtime["profiled_model_node_providers"] = providers_seen
+    runtime["provider_profile_scope"] = ("full inference session" if profile_all else
+                                         "first successful group" if profile_prefix else "off")
+    if providers_seen.get("CUDAExecutionProvider"):
+        runtime["cuda_execution"] = "observed"
+    elif ("CUDAExecutionProvider" not in initial_providers
+            or (profile_all and providers_seen)):
+        runtime["cuda_execution"] = "not_used"
+    else:
+        runtime["cuda_execution"] = "unverified"
+    info = {"stage": "depth", "ok": True, "depth_frames": len(done), "model": model.name,
+            "device": "ONNX inference; CPU preprocessing, resize and file output",
+            "depth_runtime": runtime}
     (job_dir / "job.json").write_text(json.dumps(info, ensure_ascii=False, indent=2))
     return info
 
@@ -1206,6 +1253,13 @@ def stage_scale(job_dir: Path) -> dict:
     return info
 
 
+def _write_embedded_buffer(output, path):
+    # Keep full 3-byte groups across reads so padding only appears at EOF.
+    with path.open("rb") as source:
+        while block := source.read(3 * 256 * 1024):
+            output.write(base64.b64encode(block).decode("ascii"))
+
+
 def stage_present(job_dir: Path) -> dict:
     """Write the standalone scene page into the job folder.
 
@@ -1244,34 +1298,35 @@ def stage_present(job_dir: Path) -> dict:
                 "reason": "viewer template not found (looked in app/ and install root)"}
         (job_dir / "job.json").write_text(json.dumps(info, ensure_ascii=False, indent=2))
         return info
-    html = template
-    points_b64 = base64.b64encode(points_bin.read_bytes()).decode()
-    html = html.replace(
-        "<script>\n",
-        f'<script>window.POINTS_B64 = "{points_b64}";</script>\n<script>\n',
-        1,
-    )
-    # (v0.6.81) Check for the injected assignment, not the bare
-    # name: the viewer template's own loader mentions
-    # window.POINTS_B64 (viewer.html:293-294), so the old check
-    # could never fire -- a template without the <script> seam
-    # wrote a scene.html with no points in it and still reported
-    # present_applied=True (measured v0.6.81, exp/). The
-    # assignment string only exists when the replace above
-    # actually ran.
-    if 'window.POINTS_B64 = "' not in html:
+    before, script, after = template.partition("<script>\n")
+    if not script:
         info = {"stage": "present", "ok": True, "present_applied": False,
                 "reason": "viewer template seam not found"}
         (job_dir / "job.json").write_text(json.dumps(info, ensure_ascii=False, indent=2))
         return info
-    for name in ("mesh_vertices.bin", "mesh_indices.bin"):
-        buf = job_dir / name
-        if buf.exists():
-            uri = ("data:application/octet-stream;base64,"
-                   + base64.b64encode(buf.read_bytes()).decode())
-            html = html.replace(f"fetch('{name}')", f"fetch('{uri}')")
+
     scene_path = job_dir / "scene.html"
-    scene_path.write_text(html, encoding="utf-8")
+    temp_path = None
+    try:
+        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=job_dir,
+                                         delete=False) as output:
+            temp_path = Path(output.name)
+            output.write(before + '<script>window.POINTS_B64 = "')
+            _write_embedded_buffer(output, points_bin)
+            output.write('";</script>\n' + script)
+            cursor = 0
+            for match in re.finditer(r"fetch\('(mesh_vertices\.bin|mesh_indices\.bin)'\)", after):
+                buffer_path = job_dir / match[1]
+                if buffer_path.is_file():
+                    output.write(after[cursor:match.start()] + "fetch('data:application/octet-stream;base64,")
+                    _write_embedded_buffer(output, buffer_path)
+                    output.write("')")
+                    cursor = match.end()
+            output.write(after[cursor:])
+        temp_path.replace(scene_path)
+    finally:
+        if temp_path is not None:
+            temp_path.unlink(missing_ok=True)
     files = {"scene_html": str(scene_path)}
     for key, name in (("voxel_glb", "voxel_model.glb"),
                       ("voxel_ply", "voxel_model.ply"),

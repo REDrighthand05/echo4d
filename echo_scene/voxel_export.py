@@ -590,6 +590,57 @@ def _sample_vertex_colors(verts, best_view, best_u, best_v,
     return colors
 
 
+_DEDUP_CHUNK = 1_000_000
+
+
+def _chunked_unique_packed(key):
+    """(uniq, first, inv) identical to np.unique(key,
+    return_index=True, return_inverse=True), but no single unique
+    call ever sees more than _DEDUP_CHUNK keys.
+
+    Measured (v0.6.73, exp/chunkuniq73.py, real 120-frame task,
+    6,788,892 corners, 1,313,755 uniques): the single np.unique
+    over the packed keys is the function's peak -- argsort perm +
+    sorted copy + cumsum + inv, ~360 MB in a forked child vs
+    ~270 MB for this form, wall time unchanged (~0.79 s both).
+    Per chunk: unique (small transient), then ONE unique over the
+    concatenation of the chunk unique sets (~1.5M keys at 120
+    frames, not 6.8M); first is the min over chunks via
+    np.minimum.at on searchsorted ranks, inv is rank[chunk_inv]
+    per chunk. The chunk inverses are kept until consumed (54 MB
+    at 120 frames, the same order as the final inv).
+    """
+    n = len(key)
+    if n == 0:
+        empty = np.empty(0, dtype=np.int64)
+        return empty, empty.copy(), empty.copy()
+    uniq_parts = []
+    first_parts = []
+    inv_parts = []
+    for start in range(0, n, _DEDUP_CHUNK):
+        stop = min(start + _DEDUP_CHUNK, n)
+        uq, first_c, inv_c = np.unique(
+            key[start:stop], return_index=True, return_inverse=True)
+        uniq_parts.append(uq)
+        first_parts.append(first_c.astype(np.int64) + start)
+        inv_parts.append(inv_c)
+    if len(uniq_parts) == 1:
+        uniq = uniq_parts[0]
+    else:
+        uniq = np.unique(np.concatenate(uniq_parts))
+    first = np.full(len(uniq), np.iinfo(np.int64).max, dtype=np.int64)
+    inv = np.empty(n, dtype=np.int64)
+    for uq, first_c, inv_c, start in zip(
+            uniq_parts, first_parts, inv_parts,
+            range(0, n, _DEDUP_CHUNK)):
+        stop = min(start + _DEDUP_CHUNK, n)
+        rank = np.searchsorted(uniq, uq)
+        np.minimum.at(first, rank, first_c)
+        inv[start:stop] = rank[inv_c]
+        del rank
+    return uniq, first, inv
+
+
 def write_textured_glb(path, verts, normals, tris, uvs, png_bytes,
                        extras=None):
     """Minimal self-contained textured GLB (glTF 2.0 binary).
@@ -635,8 +686,11 @@ def write_textured_glb(path, verts, normals, tris, uvs, png_bytes,
                 (_uq.astype(np.int64) << 20) |
                 _vq.astype(np.int64))
         del _uq, _vq
-        _uniq_key, first, inv = np.unique(
-            _key, return_index=True, return_inverse=True)
+        # (v0.6.73) Chunked unique: identical (uniq, first, inv),
+        # peak ~90 MB lower at 120 frames, wall time unchanged --
+        # see _chunked_unique_packed above. The single np.unique
+        # was the function's peak (v0.6.72 REPORT section 1).
+        _uniq_key, first, inv = _chunked_unique_packed(_key)
         _uniq_vi = _uniq_key >> 40
         pos = np.ascontiguousarray(
             np.asarray(verts, dtype=np.float32)[_uniq_vi])

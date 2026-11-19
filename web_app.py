@@ -282,6 +282,7 @@ class Bridge:
         # maximise, so restore can put it back where it was
         self._inbox_sig = None
         self._cli_cursor = cli_events.load_cursor()
+        self._preview_lock = threading.Lock()
         self._preview_seq = 0
         self._preview_data = None
         self._preview_stop = threading.Event()
@@ -564,7 +565,7 @@ class Bridge:
             "cliEvents": self._drain_cli_events(recent_only=True),
         }
 
-    def poll(self):
+    def poll(self, known_preview_seq=None, include_preview=True):
         out = {
             "status": self.status,
             "frac": self.frac,
@@ -573,7 +574,6 @@ class Bridge:
             "hasJob": self.job is not None,
             "depthReady": self.depth_out is not None,
             "logs": self._pending_log[:],
-            "previewSeq": self._preview_seq,
             "update": self.update,
         }
         self._pending_log = []
@@ -594,12 +594,11 @@ class Bridge:
             if isig != self._inbox_sig:
                 self._inbox_sig = isig
                 out["inbox"] = inbox
-        # v0.6.29: the preview frame used to ride every poll as a
-        # full base64 PNG, twice a second for the whole depth job --
-        # while the page never reads it (it watches previewSeq and
-        # fetches the frame through get_preview_frame). That is the
-        # main jank during a depth job; nothing is sent here any
-        # more (get_preview_frame still serves the latest frame).
+        frame = self.get_preview_frame()
+        out["previewSeq"] = frame["seq"]
+        if (include_preview and known_preview_seq is not None
+                and known_preview_seq != frame["seq"] and frame["data"]):
+            out["preview"] = frame["data"]
         if self._manual_check_result is not None:
             out["manualCheck"] = dict(self._manual_check_result)
         if self._update_phase is not None:
@@ -625,7 +624,14 @@ class Bridge:
 
     def get_preview_frame(self):
         """The latest preview frame (data URL) + its sequence."""
-        return {"seq": self._preview_seq, "data": self._preview_data}
+        with self._preview_lock:
+            return {"seq": self._preview_seq, "data": self._preview_data}
+
+    def _publish_preview_png(self, data):
+        url = "data:image/png;base64," + base64.b64encode(data).decode("ascii")
+        with self._preview_lock:
+            self._preview_data = url
+            self._preview_seq += 1
 
     def get_toolbox(self):
         """The toolbox page's payload: every registered echo_super
@@ -694,6 +700,10 @@ class Bridge:
         with self._busy_lock:
             if self.busy or self.video is None:
                 return {"ok": False}
+            if self._update_in_flight():
+                self.status = "正在更新，等更新完再开始。"
+                return {"ok": False,
+                        "message": "正在更新，等更新完再开始。"}
             err = self._check_video(self.video)
             if err:
                 self.status = err
@@ -731,6 +741,10 @@ class Bridge:
         with self._busy_lock:
             if self.busy or self.video is None:
                 return {"ok": False}
+            if self._update_in_flight():
+                self.status = "正在更新，等更新完再开始。"
+                return {"ok": False,
+                        "message": "正在更新，等更新完再开始。"}
             err = self._check_video(self.video)
             if err:
                 self.status = err
@@ -776,10 +790,7 @@ class Bridge:
                         # (seen is only updated on publish).
                         if _png_complete(data):
                             seen = (newest.name, size)
-                            self._preview_data = (
-                                "data:image/png;base64,"
-                                + base64.b64encode(data).decode())
-                            self._preview_seq += 1
+                            self._publish_preview_png(data)
             except Exception:
                 pass
             stop.wait(0.8)
@@ -913,7 +924,8 @@ class Bridge:
             self._log("导出通用格式：已取消。")
             return {"ok": False}
         dest_dir = Path(paths[0])
-        self._spawn_export(self._run_export, job_dir, dest_dir, fmt)
+        if not self._spawn_export(self._run_export, job_dir, dest_dir, fmt):
+            return {"ok": False}
         return {"ok": True}
 
     def _run_export(self, job_dir, dest_dir, fmt="glb"):
@@ -980,7 +992,8 @@ class Bridge:
         route JSON + GLB) runs on a worker thread; it is quick --
         no reconstruction -- but the thread keeps the UI honest
         all the same. Nothing fails silently."""
-        self._spawn_export(self._run_route_export, job_dir)
+        if not self._spawn_export(self._run_route_export, job_dir):
+            return {"ok": False}
         return {"ok": True}
 
     def _run_route_export(self, job_dir):
@@ -1038,7 +1051,8 @@ class Bridge:
                 self._log("批量导出：已取消。")
                 return {"ok": False}
             dest_dir = Path(paths[0])
-        self._spawn_export(self._run_batch_export, jobs, dest_dir)
+        if not self._spawn_export(self._run_batch_export, jobs, dest_dir):
+            return {"ok": False}
         return {"ok": True}
 
     def _run_batch_export(self, job_dirs, dest_dir):
@@ -1112,10 +1126,7 @@ class Bridge:
                     frame = Image.fromarray(img)
                     buf = io.BytesIO()
                     frame.save(buf, format="PNG")
-                    self._preview_data = (
-                        "data:image/png;base64,"
-                        + base64.b64encode(buf.getvalue()).decode())
-                    self._preview_seq += 1
+                    self._publish_preview_png(buf.getvalue())
                     last_render, last_signature = now, signature
                 stop.wait(0.7)
         except Exception:
@@ -1140,6 +1151,34 @@ class Bridge:
         return {"ok": True}
 
     # -- auto-update gate + export bookkeeping (v0.6.30) --------------
+    def _update_in_flight(self):
+        """True while an update is downloading/staging/applying/
+        restarting (v0.6.76): the job-start guard reads this, so
+        no new job or export can start mid-update. The apply-time
+        re-check in _hot is the other half -- refusing up front
+        tells the user at once, instead of the update dying
+        silently at apply time."""
+        if getattr(self, "_update_running", False):
+            return True
+        phase = self._update_phase
+        return phase is not None and phase.get("phase") in (
+            "downloading", "staging", "applying", "restarting")
+
+    def _work_running(self):
+        """True while a scene/depth job (busy) or an export is
+        running (v0.6.76) -- the work half of _is_idle, without
+        the update's own in-flight state. The _hot apply-time
+        re-check reads this: _is_idle is False for the whole
+        update by design, so it cannot tell work from the update
+        itself."""
+        if self.busy:
+            return True
+        lock = getattr(self, "_export_lock", None)
+        if lock is not None:
+            with lock:
+                return self._export_busy > 0
+        return getattr(self, "_export_busy", 0) > 0
+
     def _is_idle(self):
         """True when nothing is running: no scene/depth job (busy),
         no export (exports run on worker threads without setting
@@ -1169,7 +1208,17 @@ class Bridge:
     def _spawn_export(self, target, *args):
         """Run an export worker and count it, so the auto-update
         gate knows an export is running. The counter drops in a
-        finally -- an export that raises still clears it."""
+        finally -- an export that raises still clears it.
+        v0.6.76: no new export while an update is in flight --
+        the apply-time re-check in _hot is the other half, but
+        refusing up front keeps the export from starting in the
+        half-second between the re-check and the restart.
+        Returns False when refused, True when spawned; callers
+        answer the page from that."""
+        if self._update_in_flight():
+            self.status = "正在更新，等更新完再导出。"
+            self._log("导出先等等：正在更新，等更新完再导出。")
+            return False
         def _run():
             # v0.6.38 (U-10): += / -= across threads is not
             # atomic -- a lost update could leave the auto-update
@@ -1183,6 +1232,7 @@ class Bridge:
                 with self._export_lock:
                     self._export_busy -= 1
         threading.Thread(target=_run, daemon=True).start()
+        return True
 
     # -- settings + updates ----------------------------------------------
     @staticmethod
@@ -1464,6 +1514,27 @@ class Bridge:
                             f"{round(done / 1e6, 1)} MB"
                             + (f" / 约 {round(total / 1e6, 1)} MB"
                                if total else "")))
+                    # v0.6.76: re-check work right before
+                    # apply -- a job (or export) may have started
+                    # during the download+stage window, after
+                    # download_update's entry check passed.
+                    # Restarting now would kill it mid-run, exactly
+                    # what v0.6.37 fixed at the entry. Abort this
+                    # attempt instead: the staged pack stays,
+                    # _hot_info stays, the next check (or a manual
+                    # click) retries. Never interrupt running work
+                    # for an update. Reads _work_running, not
+                    # _is_idle: _is_idle is False for the whole
+                    # update by design.
+                    if self._work_running():
+                        self._update_running = False
+                        self._set_update_progress(
+                            "failed", None, "有任务在跑，这次先不更新。")
+                        self.status = ("有任务在跑，这次先不更新，"
+                                       "等做完再更新。")
+                        self._log("更新先等等：下载时开始了新任务，"
+                                  "这次先不重启，等下次检查。")
+                        return
                     self._set_update_progress(
                         "applying", None, "正在应用更新…")
                     cmd = hotupdate.request_apply(root, hot)
@@ -3217,17 +3288,16 @@ def main():
             pass
 
     bridge = Bridge()
-    try:  # say once, in the log, where depth compute will run
-        import onnxruntime as _ort
+    def report_depth_runtime():
+        try:
+            from echo_scene.depth import depth_runtime_inventory
 
-        _provs = _ort.get_available_providers()
-        if ("DmlExecutionProvider" in _provs
-                or "CUDAExecutionProvider" in _provs):
-            bridge._log("显卡加速可用，深度计算会走显卡。")
-        else:
-            bridge._log("深度计算使用 CPU（未检测到显卡运行时）。")
-    except Exception:
-        pass
+            for line in depth_runtime_inventory():
+                bridge._log(line)
+        except ImportError:
+            bridge._log("深度运行时无法导入。")
+
+    threading.Thread(target=report_depth_runtime, daemon=True).start()
     # The page ships in the loose payload: resolve it next to this
     # file first (that is the copy hot updates replace), and only
     # fall back to the frozen resource path in a source tree.

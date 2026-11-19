@@ -3,10 +3,14 @@
 import os
 import threading
 from concurrent.futures import ThreadPoolExecutor
+from time import perf_counter
 
 import numpy as np
 import onnxruntime as ort
 from PIL import Image
+
+_MEAN = np.array([0.485, 0.456, 0.406], dtype=np.float32).reshape(3, 1, 1)
+_STD = np.array([0.229, 0.224, 0.225], dtype=np.float32).reshape(3, 1, 1)
 
 
 def _preprocess_image(path):
@@ -14,13 +18,13 @@ def _preprocess_image(path):
         img = img.convert("RGB")
         width, height = img.size
         resized = img.resize((518, 518), Image.BILINEAR)
-        pixels = np.asarray(resized, dtype=np.float32) / 255.0
+        pixels = np.asarray(resized)
 
-    tensor = pixels.transpose(2, 0, 1)
-    mean = np.array([0.485, 0.456, 0.406], dtype=np.float32).reshape(3, 1, 1)
-    std = np.array([0.229, 0.224, 0.225], dtype=np.float32).reshape(3, 1, 1)
-    tensor = (tensor - mean) / std
-    return np.ascontiguousarray(tensor, dtype=np.float32), width, height
+    tensor = np.array(pixels.transpose(2, 0, 1), dtype=np.float32, order="C")
+    tensor /= 255.0
+    tensor -= _MEAN
+    tensor /= _STD
+    return tensor, width, height
 
 
 def _postprocess_frame(raw_frame, width, height):
@@ -45,15 +49,21 @@ def _extract_frame_output(output, index, batch_len):
     raise ValueError("unexpected batch output shape")
 
 
-def _infer_single(path, session):
+def _infer_prepared(tensor, width, height, session, timings=None):
     try:
-        tensor, width, height = _preprocess_image(path)
-        input_array = np.ascontiguousarray(tensor[np.newaxis, :, :, :], dtype=np.float32)
-        outputs = session.run(["predicted_depth"], {"pixel_values": input_array})
+        outputs = _run_ort(session, tensor[None], timings)
         frame = _extract_frame_output(outputs[0], 0, 1)
         return _postprocess_frame(frame, width, height)
     except Exception:
         return None
+
+
+def _infer_single(path, session):
+    try:
+        prepared = _preprocess_image(path)
+    except Exception:
+        return None
+    return _infer_prepared(*prepared, session)
 
 
 def make_session(model_path, providers=None):
@@ -106,7 +116,10 @@ def parallel_workers(model_path, session, n_frames):
         big = os.path.getsize(model_path) >= _LARGE_MODEL_BYTES
     except Exception:
         big = False
-    return 2 if big else min(4, cores)
+    # Base's replica and activation workspace make the default two
+    # one-thread sessions slower on the desktop reconstruction A/B.
+    # An explicit override can still opt into multiple CPU sessions.
+    return 0 if big else min(4, cores)
 
 
 def _worker_session(model_path):
@@ -153,83 +166,116 @@ def iter_depth_estimates_parallel(image_paths, model_path, workers,
                 yield start + offset, depth
 
 
-def iter_depth_estimates(image_paths, session, batch_size: int = 4,
-                         chunk_size: int = 16):
-    """Yield (index, depth_or_None) streaming over bounded chunks.
+def _pixel_batch_dimension(session):
+    for model_input in session.get_inputs():
+        if model_input.name == "pixel_values" and model_input.shape:
+            return model_input.shape[0]
+    return None
 
-    estimate_depth_batch holds every result until it returns; at full
-    frame resolution one depth map is ~8MB, so a job with several
-    hundred registered frames kept ~6.4GB resident and was OOM-killed
-    before writing anything (room2 recheck, 2026-11-04). This walks
-    the list in chunks and yields each frame as its chunk finishes,
-    so the caller can save it and let it go. chunk_size is rounded
-    down to a whole number of batches, so the batch groupings -- and
-    therefore every result -- are exactly the ones a single
-    estimate_depth_batch call over the whole list would produce.
+
+def _prepare_group(paths):
+    prepared = []
+    for path in paths:
+        try:
+            prepared.append(_preprocess_image(path))
+        except Exception:
+            prepared.append(None)
+    return prepared
+
+
+def _run_ort(session, batch, timings):
+    started = perf_counter()
+    try:
+        return session.run(["predicted_depth"], {"pixel_values": batch})
+    finally:
+        if timings is not None:
+            timings["ort_run_calls"] = timings.get("ort_run_calls", 0) + 1
+            timings["ort_run_seconds"] = timings.get("ort_run_seconds", 0) + perf_counter() - started
+
+
+def _infer_group(prepared, session, dimension, batch_failed, timings):
+    valid = [(i, item) for i, item in enumerate(prepared) if item is not None]
+    fixed = isinstance(dimension, int) and dimension > 1
+    if valid and (fixed or (not batch_failed and len(valid) == len(prepared) > 1)):
+        tensors = [item[0] for _, item in valid]
+        if fixed:
+            tensors.extend([tensors[-1]] * (dimension - len(tensors)))
+        try:
+            batch = np.stack(tensors)
+            outputs = _run_ort(session, batch, timings)
+            raw = [_extract_frame_output(outputs[0], i, len(batch)) for i in range(len(valid))]
+        except Exception:
+            if fixed:
+                raise
+            # Retry with the already prepared inputs, and avoid hitting the
+            # same batch error (for example GPU memory pressure) next time.
+            batch_failed = True
+        else:
+            results = [None] * len(prepared)
+            for frame, (index, (_, width, height)) in zip(raw, valid):
+                try:
+                    results[index] = _postprocess_frame(frame, width, height)
+                except Exception:
+                    pass
+            return results, batch_failed
+    results = [_infer_prepared(*item, session, timings) if item is not None else None
+               for item in prepared]
+    return results, batch_failed
+
+
+def iter_depth_estimates(image_paths, session, batch_size: int = 4,
+                         chunk_size: int = 16, *, prefetch: bool = False, timings=None):
+    """Stream ordered depth maps with at most one prepared group ahead.
+
+    chunk_size is retained for callers of the previous chunked iterator.
+    A group now yields as soon as its own depths are ready, with no change
+    to frame grouping. Prefetch only overlaps CPU preparation with the
+    caller and ORT; it never runs two inferences or uploads at once.
     """
     paths = list(image_paths)
-    if batch_size > 1:
-        chunk_size = max(batch_size,
-                         chunk_size // batch_size * batch_size)
-    for start in range(0, len(paths), chunk_size):
-        chunk = paths[start:start + chunk_size]
-        depths = estimate_depth_batch(chunk, session,
-                                      batch_size=batch_size)
-        for offset, depth in enumerate(depths):
-            yield start + offset, depth
-        del depths
+    if not paths:
+        return
+    dimension = _pixel_batch_dimension(session)
+    size = max(1, batch_size)
+    if dimension == 1:
+        size = 1
+    elif isinstance(dimension, int) and dimension > 1:
+        size = dimension
+    groups = iter(range(0, len(paths), size))
+    start = next(groups)
+    executor = ThreadPoolExecutor(max_workers=1) if prefetch else None
+    batch_failed = False
+    pending = None
+    try:
+        prep_start = perf_counter()
+        prepared = _prepare_group(paths[start:start + size])
+        if timings is not None:
+            timings["cpu_input_wait_seconds"] = perf_counter() - prep_start
+        while True:
+            next_start = next(groups, None)
+            if executor is not None and next_start is not None:
+                pending = executor.submit(_prepare_group, paths[next_start:next_start + size])
+            infer_started = perf_counter()
+            depths, batch_failed = _infer_group(prepared, session, dimension, batch_failed, timings)
+            if timings is not None:
+                elapsed = perf_counter() - infer_started
+                timings["group_inference_and_postprocess_seconds"] = (
+                    timings.get("group_inference_and_postprocess_seconds", 0.0) + elapsed)
+                timings["dynamic_batch_fell_back"] = batch_failed
+            for offset, depth in enumerate(depths):
+                yield start + offset, depth
+            if next_start is None:
+                return
+            start = next_start
+            prep_start = perf_counter()
+            prepared = (pending.result() if pending is not None
+                        else _prepare_group(paths[start:start + size]))
+            if timings is not None:
+                timings["cpu_input_wait_seconds"] += perf_counter() - prep_start
+    finally:
+        if executor is not None:
+            executor.shutdown(wait=True, cancel_futures=True)
 
 
 def estimate_depth_batch(image_paths, session, batch_size: int = 4) -> list:
-    paths = list(image_paths)
-    if not paths:
-        return []
-
-    if batch_size <= 1:
-        return [_infer_single(path, session) for path in paths]
-
-    results = [None] * len(paths)
-
-    for start in range(0, len(paths), batch_size):
-        chunk_paths = paths[start:start + batch_size]
-        chunk_tensors = []
-        chunk_meta = []
-        chunk_indices = []
-        preprocess_ok = True
-
-        for offset, path in enumerate(chunk_paths):
-            try:
-                tensor, width, height = _preprocess_image(path)
-            except Exception:
-                preprocess_ok = False
-                break
-            chunk_tensors.append(tensor)
-            chunk_meta.append((width, height))
-            chunk_indices.append(start + offset)
-
-        if not preprocess_ok:
-            for offset, path in enumerate(chunk_paths):
-                results[start + offset] = _infer_single(path, session)
-            continue
-
-        try:
-            batch = np.ascontiguousarray(np.stack(chunk_tensors, axis=0), dtype=np.float32)
-            outputs = session.run(["predicted_depth"], {"pixel_values": batch})
-            batch_output = outputs[0]
-            raw_frames = [
-                _extract_frame_output(batch_output, i, len(chunk_tensors))
-                for i in range(len(chunk_tensors))
-            ]
-        except Exception:
-            for offset, path in enumerate(chunk_paths):
-                results[start + offset] = _infer_single(path, session)
-            continue
-
-        for i, (width, height) in enumerate(chunk_meta):
-            idx = chunk_indices[i]
-            try:
-                results[idx] = _postprocess_frame(raw_frames[i], width, height)
-            except Exception:
-                results[idx] = None
-
-    return results
+    return [depth for _, depth in iter_depth_estimates(image_paths, session, batch_size)]

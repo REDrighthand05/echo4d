@@ -1,8 +1,12 @@
 """Monocular depth estimation with an ONNX Depth Anything V2 model."""
 
+import json
 import os
+import shutil
+import subprocess
+from collections import Counter
 from pathlib import Path
-from typing import Dict, Union
+from typing import Union
 
 import numpy as np
 import onnxruntime as ort
@@ -15,7 +19,7 @@ _INPUT_SIZE = 518
 _MEAN = np.array([0.485, 0.456, 0.406], dtype=np.float32).reshape(1, 3, 1, 1)
 _STD = np.array([0.229, 0.224, 0.225], dtype=np.float32).reshape(1, 3, 1, 1)
 
-_SESSIONS: Dict[str, ort.InferenceSession] = {}
+_SESSIONS: dict[tuple[str, tuple[str, ...]], ort.InferenceSession] = {}
 
 # The active execution provider, recorded on first session creation
 # ("CPUExecutionProvider" until a GPU runtime is installed).
@@ -25,11 +29,9 @@ ACTIVE_PROVIDER: str | None = None
 def _provider_chain() -> list:
     """Best-first providers the installed onnxruntime actually has.
 
-    CUDA first, then DirectML (any DX12 GPU on Windows, no toolkit
-    needed), then CPU. The bundled runtime is CPU-only today, so this
-    resolves to CPU there and lights up by itself the day the GPU
-    runtime ships in the installer. ECHO_DEPTH_PROVIDER pins a choice
-    (benchmarking / debugging)."""
+    CUDA first when installed, then DirectML, then CPU.
+    ECHO_DEPTH_PROVIDER selects an available provider for comparison runs.
+    """
     available = list(ort.get_available_providers())
     forced = os.environ.get("ECHO_DEPTH_PROVIDER")
     if forced and forced in available:
@@ -40,22 +42,90 @@ def _provider_chain() -> list:
     return chain
 
 
-def _get_session(model_path: Union[str, os.PathLike]) -> ort.InferenceSession:
+_GPU_PROVIDERS = {"CUDAExecutionProvider", "DmlExecutionProvider"}
+
+
+def depth_runtime_inventory():
+    tool = shutil.which("nvidia-smi")
+    names = []
+    if tool:
+        try:
+            result = subprocess.run(
+                [tool, "--query-gpu=name", "--format=csv,noheader"],
+                capture_output=True, text=True, errors="replace", timeout=3,
+                check=True, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            )
+            names = [line.strip() for line in result.stdout.splitlines() if line.strip()]
+        except (OSError, subprocess.SubprocessError):
+            pass
+    cards = ", ".join(names) if names else "未由 nvidia-smi 确认"
+    providers = ", ".join(ort.get_available_providers())
+    return [f"NVIDIA 显卡检测：{cards}。", f"已安装的深度运行时 provider：{providers}。"]
+
+
+def _get_session(model_path: Union[str, os.PathLike], *, providers=None,
+                 profile_prefix=None) -> ort.InferenceSession:
     global ACTIVE_PROVIDER
-    key = os.fspath(model_path)
-    session = _SESSIONS.get(key)
+    model = os.fspath(model_path)
+    chain = _provider_chain() if providers is None else providers
+    key = (model, tuple(chain))
+    session = _SESSIONS.get(key) if profile_prefix is None else None
     if session is None:
-        if not os.path.isfile(key):
-            raise FileNotFoundError(f"ONNX model file not found: {key}")
-        session = ort.InferenceSession(key, providers=_provider_chain())
+        if not os.path.isfile(model):
+            raise FileNotFoundError(f"ONNX model file not found: {model}")
+        options = ort.SessionOptions()
+        if "DmlExecutionProvider" in chain:
+            options.enable_mem_pattern = False
+            options.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL
+        if profile_prefix is not None:
+            options.enable_profiling = True
+            options.profile_file_prefix = os.fspath(profile_prefix)
+        try:
+            session = ort.InferenceSession(model, options, providers=chain)
+        except (RuntimeError, ValueError):
+            if not _GPU_PROVIDERS.intersection(chain):
+                raise
+            return _get_session(model, providers=["CPUExecutionProvider"],
+                                profile_prefix=profile_prefix)
         ACTIVE_PROVIDER = session.get_providers()[0]
-        _SESSIONS[key] = session
+        if profile_prefix is None:
+            _SESSIONS[key] = session
     return session
+
+
+def end_provider_profile(session, *, keep_file=False):
+    """Read operator execution events, excluding data transfers."""
+    path = None
+    try:
+        filename = session.end_profiling()
+        if not filename:
+            return {}
+        path = Path(filename)
+        events = json.loads(path.read_text(encoding="utf-8"))
+        counts = Counter()
+        for event in events:
+            args = event.get("args", {})
+            if (event.get("cat") == "Node"
+                    and event.get("name", "").endswith("_kernel_time")
+                    and args.get("op_name")
+                    and not str(args["op_name"]).lower().startswith("memcpy")
+                    and args.get("provider")):
+                counts[args["provider"]] += 1
+        return dict(counts)
+    except (OSError, ValueError, RuntimeError):
+        return {}
+    finally:
+        if path is not None and not keep_file:
+            try:
+                path.unlink(missing_ok=True)
+            except OSError:
+                pass
 
 
 def estimate_depth(
     image_path: Union[str, os.PathLike],
     model_path: Union[str, os.PathLike],
+    *, session=None,
 ) -> np.ndarray:
     """Estimate relative inverse depth for an image using an ONNX model.
 
@@ -79,7 +149,8 @@ def estimate_depth(
     tensor = (tensor - _MEAN) / _STD
     tensor = np.ascontiguousarray(tensor, dtype=np.float32)
 
-    session = _get_session(model_path)
+    if session is None:
+        session = _get_session(model_path)
     outputs = session.run([_OUTPUT_NAME], {_INPUT_NAME: tensor})
     depth = np.asarray(outputs[0], dtype=np.float32)
 
