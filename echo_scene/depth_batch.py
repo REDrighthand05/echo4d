@@ -1,7 +1,6 @@
 """Batch depth estimation utilities for a single-frame ONNX depth model."""
 
 import numpy as np
-import onnxruntime as ort
 from PIL import Image
 
 
@@ -41,9 +40,8 @@ def _extract_frame_output(output, index, batch_len):
     raise ValueError("unexpected batch output shape")
 
 
-def _infer_single(path, session):
+def _infer_prepared(tensor, width, height, session):
     try:
-        tensor, width, height = _preprocess_image(path)
         input_array = np.ascontiguousarray(tensor[np.newaxis, :, :, :], dtype=np.float32)
         outputs = session.run(["predicted_depth"], {"pixel_values": input_array})
         frame = _extract_frame_output(outputs[0], 0, 1)
@@ -52,10 +50,27 @@ def _infer_single(path, session):
         return None
 
 
+def _infer_single(path, session):
+    try:
+        tensor, width, height = _preprocess_image(path)
+    except Exception:
+        return None
+    return _infer_prepared(tensor, width, height, session)
+
+
 def make_session(model_path, providers=None):
+    import onnxruntime as ort
+
     if providers is not None:
         return ort.InferenceSession(str(model_path), providers=providers)
     return ort.InferenceSession(str(model_path))
+
+
+def _pixel_batch_dimension(session):
+    for model_input in session.get_inputs():
+        if model_input.name == "pixel_values" and model_input.shape:
+            return model_input.shape[0]
+    return None
 
 
 def iter_depth_estimates(image_paths, session, batch_size: int = 4,
@@ -73,6 +88,10 @@ def iter_depth_estimates(image_paths, session, batch_size: int = 4,
     estimate_depth_batch call over the whole list would produce.
     """
     paths = list(image_paths)
+    if paths:
+        print(f"Depth runtime: providers={session.get_providers()}, "
+              f"model batch dimension={_pixel_batch_dimension(session)}, "
+              f"requested batch={batch_size}", flush=True)
     if batch_size > 1:
         chunk_size = max(batch_size,
                          chunk_size // batch_size * batch_size)
@@ -90,7 +109,9 @@ def estimate_depth_batch(image_paths, session, batch_size: int = 4) -> list:
     if not paths:
         return []
 
-    if batch_size <= 1:
+    # ONNX models exported with batch dimension 1 cannot accept a stack.
+    # A symbolic/unknown dimension keeps the existing batched path.
+    if batch_size <= 1 or _pixel_batch_dimension(session) == 1:
         return [_infer_single(path, session) for path in paths]
 
     results = [None] * len(paths)
@@ -100,21 +121,19 @@ def estimate_depth_batch(image_paths, session, batch_size: int = 4) -> list:
         chunk_tensors = []
         chunk_meta = []
         chunk_indices = []
-        preprocess_ok = True
 
         for offset, path in enumerate(chunk_paths):
             try:
                 tensor, width, height = _preprocess_image(path)
             except Exception:
-                preprocess_ok = False
-                break
+                continue
             chunk_tensors.append(tensor)
             chunk_meta.append((width, height))
             chunk_indices.append(start + offset)
 
-        if not preprocess_ok:
-            for offset, path in enumerate(chunk_paths):
-                results[start + offset] = _infer_single(path, session)
+        if len(chunk_tensors) != len(chunk_paths):
+            for idx, tensor, (width, height) in zip(chunk_indices, chunk_tensors, chunk_meta):
+                results[idx] = _infer_prepared(tensor, width, height, session)
             continue
 
         try:
@@ -126,8 +145,8 @@ def estimate_depth_batch(image_paths, session, batch_size: int = 4) -> list:
                 for i in range(len(chunk_tensors))
             ]
         except Exception:
-            for offset, path in enumerate(chunk_paths):
-                results[start + offset] = _infer_single(path, session)
+            for idx, tensor, (width, height) in zip(chunk_indices, chunk_tensors, chunk_meta):
+                results[idx] = _infer_prepared(tensor, width, height, session)
             continue
 
         for i, (width, height) in enumerate(chunk_meta):

@@ -95,6 +95,7 @@ class Bridge:
         self._hist_sig = None
         self._inbox_sig = None
         self._cli_cursor = cli_events.load_cursor()
+        self._preview_lock = threading.Lock()
         self._preview_seq = 0
         self._preview_data = None
         self._preview_stop = threading.Event()
@@ -305,7 +306,9 @@ class Bridge:
             "cliEvents": self._drain_cli_events(recent_only=True),
         }
 
-    def poll(self):
+    def poll(self, known_preview_seq=None, include_preview=True):
+        with self._preview_lock:
+            seq, preview = self._preview_seq, self._preview_data
         out = {
             "status": self.status,
             "frac": self.frac,
@@ -314,7 +317,7 @@ class Bridge:
             "hasJob": self.job is not None,
             "depthReady": self.depth_out is not None,
             "logs": self._pending_log[:],
-            "previewSeq": self._preview_seq,
+            "previewSeq": seq,
             "update": self.update,
         }
         self._pending_log = []
@@ -331,8 +334,8 @@ class Bridge:
         if isig != self._inbox_sig:
             self._inbox_sig = isig
             out["inbox"] = inbox
-        if self._preview_data is not None:
-            out["preview"] = self._preview_data
+        if include_preview and known_preview_seq != seq and preview is not None:
+            out["preview"] = preview
         if self.depth_out is not None:
             out["depthUrl"] = Path(self.depth_out).as_uri()
         if self.job is not None:
@@ -351,7 +354,14 @@ class Bridge:
 
     def get_preview_frame(self):
         """The latest preview frame (data URL) + its sequence."""
-        return {"seq": self._preview_seq, "data": self._preview_data}
+        with self._preview_lock:
+            return {"seq": self._preview_seq, "data": self._preview_data}
+
+    def _publish_preview(self, png):
+        data = "data:image/png;base64," + base64.b64encode(png).decode("ascii")
+        with self._preview_lock:
+            self._preview_data = data
+            self._preview_seq += 1
 
     def get_toolbox(self):
         """The toolbox page's payload: every registered echo_super
@@ -469,10 +479,7 @@ class Bridge:
                     if size and (newest.name, size) != seen:
                         seen = (newest.name, size)
                         data = newest.read_bytes()
-                        self._preview_data = (
-                            "data:image/png;base64,"
-                            + base64.b64encode(data).decode())
-                        self._preview_seq += 1
+                        self._publish_preview(data)
             except Exception:
                 pass
             stop.wait(0.8)
@@ -609,10 +616,7 @@ class Bridge:
                     frame = Image.fromarray(img)
                     buf = io.BytesIO()
                     frame.save(buf, format="PNG")
-                    self._preview_data = (
-                        "data:image/png;base64,"
-                        + base64.b64encode(buf.getvalue()).decode())
-                    self._preview_seq += 1
+                    self._publish_preview(buf.getvalue())
                     last_render, last_signature = now, signature
                 stop.wait(0.7)
         except Exception:

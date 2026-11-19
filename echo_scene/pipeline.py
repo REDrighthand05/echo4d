@@ -31,9 +31,11 @@ Usage:
 import base64
 import json
 import math
+import re
 import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 import numpy as np
@@ -1150,6 +1152,13 @@ def stage_scale(job_dir: Path) -> dict:
     return info
 
 
+def _write_embedded_buffer(output, path):
+    # Every non-final block must encode without Base64 padding.
+    with path.open("rb") as source:
+        while block := source.read(3 * 256 * 1024):
+            output.write(base64.b64encode(block).decode("ascii"))
+
+
 def stage_present(job_dir: Path) -> dict:
     """Write the standalone scene page into the job folder.
 
@@ -1168,25 +1177,36 @@ def stage_present(job_dir: Path) -> dict:
         return info
     template = Path(__file__).resolve().parent.parent / "viewer.html"
     html = template.read_text(encoding="utf-8")
-    points_b64 = base64.b64encode(points_bin.read_bytes()).decode()
-    html = html.replace(
-        "<script>\n",
-        f'<script>window.POINTS_B64 = "{points_b64}";</script>\n<script>\n',
-        1,
-    )
-    if "window.POINTS_B64" not in html:
+    before, script, after = html.partition("<script>\n")
+    if not script:
         info = {"stage": "present", "ok": False,
                 "reason": "viewer template seam not found"}
         (job_dir / "job.json").write_text(json.dumps(info, ensure_ascii=False, indent=2))
         return info
-    for name in ("mesh_vertices.bin", "mesh_indices.bin"):
-        buf = job_dir / name
-        if buf.exists():
-            uri = ("data:application/octet-stream;base64,"
-                   + base64.b64encode(buf.read_bytes()).decode())
-            html = html.replace(f"fetch('{name}')", f"fetch('{uri}')")
+
     scene_path = job_dir / "scene.html"
-    scene_path.write_text(html, encoding="utf-8")
+    # Publish only a complete HTML file, including when re-exporting a job.
+    temp_path = None
+    try:
+        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8",
+                                         dir=job_dir, delete=False) as output:
+            temp_path = Path(output.name)
+            output.write(before + '<script>window.POINTS_B64 = "')
+            _write_embedded_buffer(output, points_bin)
+            output.write('";</script>\n' + script)
+            cursor = 0
+            for match in re.finditer(r"fetch\('(mesh_vertices\.bin|mesh_indices\.bin)'\)", after):
+                buf = job_dir / match[1]
+                if buf.exists():
+                    output.write(after[cursor:match.start()] + "fetch('data:application/octet-stream;base64,")
+                    _write_embedded_buffer(output, buf)
+                    output.write("')")
+                    cursor = match.end()
+            output.write(after[cursor:])
+        temp_path.replace(scene_path)
+    finally:
+        if temp_path is not None:
+            temp_path.unlink(missing_ok=True)
     files = {"scene_html": str(scene_path)}
     for key, name in (("voxel_glb", "voxel_model.glb"),
                       ("voxel_ply", "voxel_model.ply"),
