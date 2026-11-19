@@ -93,6 +93,7 @@ def run_pipeline(video: Path, jobs_root: Path, log, job_sink=None) -> Path:
     """Run every stage in order. log(str) receives human progress
     lines; job_sink(job_dir), when given, is called once the job
     folder exists (the live preview watches it from there)."""
+    started = time.perf_counter()
     from echo_scene.pipeline import stage_depth, stage_extract, stage_present, stage_select
     from echo_scene.pipeline import stage_clean, stage_mesh, stage_poses, stage_preview, stage_replay, stage_scale, stage_voxel
     from echo_scene.fuse import stage_fuse
@@ -144,11 +145,40 @@ def run_pipeline(video: Path, jobs_root: Path, log, job_sink=None) -> Path:
         ("正在生成过程回放", lambda: stage_preview(job)),
         ("正在生成路线回放", lambda: stage_replay(job)),
     ]
+    timings = []
+    cpu_stages = {"select", "fuse", "clean", "scale", "mesh",
+                  "voxel", "present", "preview", "replay"}
     for label, fn in steps:
         log(label + "…")
+        tick = time.perf_counter()
         info = fn()
-        if isinstance(info, dict) and info.get("ok") is False:
+        entry = {"stage": info.get("stage"), "seconds": round(time.perf_counter() - tick, 4)}
+        for key in ("device", "depth_runtime", "frame_count", "registered_images", "depth_frames"):
+            if key in info:
+                entry[key] = info[key]
+        if entry["stage"] in cpu_stages:
+            entry.setdefault("device", "CPU")
+        if isinstance(info.get("depth_runtime"), dict):
+            runtime = info["depth_runtime"]
+            observed = runtime["profiled_model_node_providers"]
+            configured = runtime["session_providers_at_end"]
+            providers = ", ".join(observed)
+            if not providers and configured == ["CPUExecutionProvider"]:
+                providers = "CPU"
+            log(f"深度推理：{providers or '执行节点未验证'}，CUDA 执行证据：{runtime['cuda_execution']}。")
+        if info.get("scene_html") and entry["stage"] == "present":
+            entry["scene_written_at_seconds"] = round(time.perf_counter() - started, 4)
+        timings.append(entry)
+        if info.get("ok") is False:
             raise RuntimeError(f"{label}失败：{info.get('reason', '未知原因')}")
+    total = round(time.perf_counter() - started, 4)
+    try:
+        (job / "reconstruction-timing.json").write_text(
+            json.dumps({"total_seconds": total, "stages": timings}, ensure_ascii=False, indent=2),
+            encoding="utf-8")
+    except OSError as exc:
+        log(f"无法保存重建计时：{exc}")
+    log(f"重建耗时 {total:.2f} 秒。")
     log("完成。")
     return job
 

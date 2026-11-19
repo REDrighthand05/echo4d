@@ -282,6 +282,7 @@ class Bridge:
         # maximise, so restore can put it back where it was
         self._inbox_sig = None
         self._cli_cursor = cli_events.load_cursor()
+        self._preview_lock = threading.Lock()
         self._preview_seq = 0
         self._preview_data = None
         self._preview_stop = threading.Event()
@@ -564,7 +565,7 @@ class Bridge:
             "cliEvents": self._drain_cli_events(recent_only=True),
         }
 
-    def poll(self):
+    def poll(self, known_preview_seq=None, include_preview=True):
         out = {
             "status": self.status,
             "frac": self.frac,
@@ -573,7 +574,6 @@ class Bridge:
             "hasJob": self.job is not None,
             "depthReady": self.depth_out is not None,
             "logs": self._pending_log[:],
-            "previewSeq": self._preview_seq,
             "update": self.update,
         }
         self._pending_log = []
@@ -594,12 +594,11 @@ class Bridge:
             if isig != self._inbox_sig:
                 self._inbox_sig = isig
                 out["inbox"] = inbox
-        # v0.6.29: the preview frame used to ride every poll as a
-        # full base64 PNG, twice a second for the whole depth job --
-        # while the page never reads it (it watches previewSeq and
-        # fetches the frame through get_preview_frame). That is the
-        # main jank during a depth job; nothing is sent here any
-        # more (get_preview_frame still serves the latest frame).
+        frame = self.get_preview_frame()
+        out["previewSeq"] = frame["seq"]
+        if (include_preview and known_preview_seq is not None
+                and known_preview_seq != frame["seq"] and frame["data"]):
+            out["preview"] = frame["data"]
         if self._manual_check_result is not None:
             out["manualCheck"] = dict(self._manual_check_result)
         if self._update_phase is not None:
@@ -625,7 +624,14 @@ class Bridge:
 
     def get_preview_frame(self):
         """The latest preview frame (data URL) + its sequence."""
-        return {"seq": self._preview_seq, "data": self._preview_data}
+        with self._preview_lock:
+            return {"seq": self._preview_seq, "data": self._preview_data}
+
+    def _publish_preview_png(self, data):
+        url = "data:image/png;base64," + base64.b64encode(data).decode("ascii")
+        with self._preview_lock:
+            self._preview_data = url
+            self._preview_seq += 1
 
     def get_toolbox(self):
         """The toolbox page's payload: every registered echo_super
@@ -784,10 +790,7 @@ class Bridge:
                         # (seen is only updated on publish).
                         if _png_complete(data):
                             seen = (newest.name, size)
-                            self._preview_data = (
-                                "data:image/png;base64,"
-                                + base64.b64encode(data).decode())
-                            self._preview_seq += 1
+                            self._publish_preview_png(data)
             except Exception:
                 pass
             stop.wait(0.8)
@@ -1123,10 +1126,7 @@ class Bridge:
                     frame = Image.fromarray(img)
                     buf = io.BytesIO()
                     frame.save(buf, format="PNG")
-                    self._preview_data = (
-                        "data:image/png;base64,"
-                        + base64.b64encode(buf.getvalue()).decode())
-                    self._preview_seq += 1
+                    self._publish_preview_png(buf.getvalue())
                     last_render, last_signature = now, signature
                 stop.wait(0.7)
         except Exception:
@@ -3288,17 +3288,16 @@ def main():
             pass
 
     bridge = Bridge()
-    try:  # say once, in the log, where depth compute will run
-        import onnxruntime as _ort
+    def report_depth_runtime():
+        try:
+            from echo_scene.depth import depth_runtime_inventory
 
-        _provs = _ort.get_available_providers()
-        if ("DmlExecutionProvider" in _provs
-                or "CUDAExecutionProvider" in _provs):
-            bridge._log("显卡加速可用，深度计算会走显卡。")
-        else:
-            bridge._log("深度计算使用 CPU（未检测到显卡运行时）。")
-    except Exception:
-        pass
+            for line in depth_runtime_inventory():
+                bridge._log(line)
+        except ImportError:
+            bridge._log("深度运行时无法导入。")
+
+    threading.Thread(target=report_depth_runtime, daemon=True).start()
     # The page ships in the loose payload: resolve it next to this
     # file first (that is the copy hot updates replace), and only
     # fall back to the frozen resource path in a source tree.
