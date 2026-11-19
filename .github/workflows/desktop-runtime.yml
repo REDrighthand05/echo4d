@@ -6,8 +6,11 @@ on:
       - 'web_ui/**'
       - 'web_app.py'
       - 'echo_scene/depth_batch.py'
+      - 'echo_scene/pipeline.py'
+      - 'tests/test_scene_export_stream.py'
       - 'tests/test_web_bridge.py'
       - 'tests/test_window_resize.py'
+      - 'tests/test_native_window.py'
       - 'tests/test_depth_dispatch.py'
       - '.github/workflows/desktop-runtime.yml'
 permissions:
@@ -23,7 +26,9 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - run: python -m pip install numpy pillow onnxruntime-directml playwright
+      - run: python -m pip install numpy pillow onnxruntime-directml playwright pywebview
       - run: python tests/test_web_bridge.py
       - run: python tests/test_depth_dispatch.py
+      - run: python tests/test_scene_export_stream.py
       - run: python tests/test_window_resize.py
+      - run: python tests/test_native_window.py
