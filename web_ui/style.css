@@ -1,0 +1,1080 @@
+/* ECHO web shell -- Meta-style real glass, Chrome skeleton.
+   One continuous sheet: a living bead-graffiti wall behind,
+   translucent panels frosted by real backdrop blur, text with
+   no background at all (HTML text never had one). The window's
+   frame follows Chrome: a tab strip on top (views as tabs), one
+   toolbar row under it (nav cluster, omnibox capsule, overflow
+   menu), then the content. All colours come from the graffiti
+   blue plus Chrome's restrained greys -- no third palette.
+
+   v3 (user, 2026-11-04): the sheet is LIGHT glass, always -- it
+   never flips dark. There is no black preview stage: while a
+   job runs, its frames ghost through the whole window's light
+   frost. The graffiti is giant -- window-filling sweeps cropped
+   by the edges -- and the idle sheet is never still: the great
+   strokes breathe and wander, the mist drifts, a pale sheen
+   crosses now and then. Calm, slow, seamless; no gloss.
+
+   v4 (user, 2026-11-04): three point fixes, nothing else moves.
+   The sheet is switchable glass (his words: hotel-bathroom
+   电控玻璃) -- frosted at rest; in the running state the haze
+   drops to nearly transparent and the scene behind shows
+   through untouched, so the content sheet's ink flips light
+   in that state only. The settings veil goes one notch
+   deeper, its blur unchanged, and the wall behind it comes
+   through more saturated (v3 washed it out). */
+
+:root {
+  --ink: #14171a;
+  --subink: #454f5a;
+  --accent: #0064d1;
+  --accent-hover: #0053ad;
+  --glass-bg: rgba(255, 255, 255, 0.47);
+  --glass-edge: rgba(255, 255, 255, 0.45);
+  --glass-shadow: 0 10px 34px rgba(30, 50, 100, 0.10),
+                  inset 0 1px 0 rgba(255, 255, 255, 0.65),
+                  inset 0 -1px 0 rgba(255, 255, 255, 0.25);
+  --radius: 26px;
+  /* Chrome rhythm: one radius ladder, one grey ladder */
+  --r-card: 12px;
+  --r-row: 8px;
+  --r-pill: 999px;
+  --grey-hover: rgba(32, 33, 36, 0.07);
+  --grey-press: rgba(32, 33, 36, 0.12);
+  --grey-icon: #5f6368;
+  --frame-bg: rgba(255, 255, 255, 0.55);
+  --frame-shadow: 0 1px 3px rgba(30, 50, 100, 0.10);
+  /* hairlines: the only separators the content area may use --
+     its text sits on the one shared sheet of glass, never on
+     a filled block of its own */
+  --hairline: rgba(20, 40, 90, 0.10);
+  --hairline-soft: rgba(20, 40, 90, 0.06);
+  /* appearance （设置 → 显示）: the user's own hand on the glass,
+     the graffiti and the ambient motion. The values here are
+     v0.6.4's shipped numbers; app.js rewrites them live from
+     the saved settings, and the -w set is the running state's
+     pane, interpolated from the haze slider. */
+  --frost-blur: 2.5px;
+  --frost-veil: 0.26;
+  --frost-sat: 155%;
+  --frost-blur-w: 0.5px;
+  --frost-veil-w: 0.05;
+  --frost-sat-w: 108%;
+  --set-blur: 24px;
+  --set-veil: 0.72;
+  --set-sat: 200%;
+  --graf-opacity: 1;
+  --graf-sat: 115%;
+  --sheen-dur: 34s;
+}
+/* while a job runs, the switchable glass clears (v4): the
+   frame keeps its own light surfaces and dark ink, but the
+   content sheet now sits on near-transparent glass over the
+   scene itself -- so ITS ink flips light, with a soft shadow,
+   in this state only */
+body.working {
+  --frame-bg: rgba(255, 255, 255, 0.62);
+  --frame-shadow: 0 1px 3px rgba(30, 50, 100, 0.10);
+}
+body.working.echo-live #center {
+  --ink: #f4f7fc;
+  --subink: rgba(224, 232, 245, 0.82);
+  --accent: #6db3ff;
+  --accent-hover: #93c5ff;
+  --hairline: rgba(255, 255, 255, 0.22);
+  --hairline-soft: rgba(255, 255, 255, 0.13);
+  --grey-hover: rgba(255, 255, 255, 0.12);
+  --grey-press: rgba(255, 255, 255, 0.20);
+  color: #f4f7fc;
+  text-shadow: 0 1px 10px rgba(5, 10, 25, 0.55),
+               0 0 3px rgba(5, 10, 25, 0.40);
+}
+/* the log tab and panel ride the same cleared glass */
+body.working.echo-live #logtab {
+  color: rgba(232, 238, 248, 0.85);
+  text-shadow: 0 1px 6px rgba(5, 10, 25, 0.40);
+}
+body.working.echo-live #logtab:hover {
+  color: #fff; background: rgba(255, 255, 255, 0.12);
+}
+body.working.echo-live .log-head { color: #f4f7fc; }
+body.working.echo-live #logbody { color: rgba(230, 236, 246, 0.85); }
+body.working.echo-live #logpanel { border-left-color: rgba(255, 255, 255, 0.18); }
+body.working.echo-live #track { background: rgba(255, 255, 255, 0.20); }
+/* the tab strip has no surface of its own either, so its
+   resting labels clear with the sheet; the active tab keeps
+   the frame's light surface and its dark ink */
+body.working.echo-live .tab {
+  color: rgba(232, 238, 248, 0.88);
+  text-shadow: 0 1px 6px rgba(5, 10, 25, 0.40);
+}
+body.working.echo-live .tab.active { color: var(--ink); text-shadow: none; }
+body.working.echo-live .tb-btns button { color: rgba(232, 238, 248, 0.88); }
+body.working.echo-live .tb-btns button:hover {
+  background: rgba(255, 255, 255, 0.14); color: #fff;
+}
+body.working.echo-live #win-close:hover { background: #d93025; color: #fff; }
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body { height: 100%; }
+
+body {
+  font-family: "Segoe UI", "Microsoft YaHei UI",
+               "PingFang SC", "Noto Sans CJK SC", sans-serif;
+  font-weight: 400;
+  letter-spacing: 0.01em;
+  color: var(--ink);
+  overflow: hidden;
+  background:
+    radial-gradient(600px 380px at 16% 8%, rgba(120, 165, 255, 0.17), transparent 70%),
+    radial-gradient(560px 420px at 86% 20%, rgba(160, 190, 255, 0.13), transparent 70%),
+    radial-gradient(700px 500px at 55% 95%, rgba(190, 205, 245, 0.15), transparent 70%),
+    linear-gradient(180deg, #f7f9fc 0%, #e7edf4 100%);
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+}
+
+#beads {
+  position: fixed; inset: 0;
+  width: 100%; height: 100%;
+  filter: saturate(var(--graf-sat));
+  opacity: var(--graf-opacity);
+  pointer-events: none;
+  transition: opacity 1.4s ease;
+}
+#echo {
+  position: fixed; inset: 0;
+  width: 100%; height: 100%;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 1.4s ease, filter 1.2s ease;
+}
+#frost {
+  position: fixed; inset: 0;
+  z-index: 1;
+  /* the light sheet itself: a milk-white wash over the living
+     wall, just frosted enough that the giant strokes read as
+     art behind glass, never as noise behind text */
+  background: rgba(250, 251, 253, var(--frost-veil));
+  -webkit-backdrop-filter: blur(var(--frost-blur)) saturate(var(--frost-sat));
+  backdrop-filter: blur(var(--frost-blur)) saturate(var(--frost-sat));
+  pointer-events: none;
+  transition: background 1.2s ease, backdrop-filter 1.2s ease,
+              -webkit-backdrop-filter 1.2s ease;
+}
+/* while syncing, the switchable glass clears (v4): the haze
+   drops to nearly transparent -- a whisper of veil and half a
+   pixel of blur are all that say "glass" -- and the scene
+   shows through at full strength. The 1.2 s frost transition
+   is the switch flipping. No black anywhere; the sheet does
+   not darken, it clears */
+body.working #frost {
+  background: rgba(248, 250, 252, var(--frost-veil-w));
+  -webkit-backdrop-filter: blur(var(--frost-blur-w)) saturate(var(--frost-sat-w));
+  backdrop-filter: blur(var(--frost-blur-w)) saturate(var(--frost-sat-w));
+}
+body.working #beads { opacity: calc(var(--graf-opacity) * 0.1); }
+/* while a 显示 slider is mid-drag the state-change easing would
+   trail the user's hand -- freeze it until the drag lets go */
+body.tuning #frost, body.tuning #beads { transition: none; }
+/* the scene layer arrives untouched in the running state:
+   no lifted blacks, no squeezed contrast, full presence */
+body.working #echo {
+  opacity: 1;
+  filter: none;
+}
+
+/* ambient light: one very pale sheen crosses the sheet every
+   half minute or so, slow and quiet -- light moving on glass,
+   not a shine on a balloon. It retires while a job runs. */
+#sheen {
+  position: fixed; inset: 0; z-index: 1;
+  overflow: hidden; pointer-events: none;
+  transition: opacity 1.2s ease;
+}
+#sheen::before {
+  content: "";
+  position: absolute; top: -25%; bottom: -25%; left: 0; width: 34%;
+  background: linear-gradient(100deg,
+    transparent,
+    rgba(255, 255, 255, 0.13) 42%,
+    rgba(255, 255, 255, 0.24) 50%,
+    rgba(255, 255, 255, 0.13) 58%,
+    transparent);
+  transform: translateX(-170%) skewX(-8deg);
+  animation: sheen-pass var(--sheen-dur) ease-in-out infinite;
+}
+/* the sheen pass is a setting now （常态动效 → 光泽扫过）:
+   off -- or the whole ambient motion off -- and it never comes */
+body.no-sheen #sheen { display: none; }
+@keyframes sheen-pass {
+  0% { transform: translateX(-170%) skewX(-8deg); }
+  38% { transform: translateX(430%) skewX(-8deg); }
+  100% { transform: translateX(430%) skewX(-8deg); }
+}
+body.working #sheen { opacity: 0; }
+@media (prefers-reduced-motion: reduce) {
+  #sheen::before { animation: none; }
+}
+
+#app { position: relative; z-index: 2; height: 100%; }
+
+#center {
+  height: 100%;
+  height: 100dvh;
+  padding: 100px 40px 8px 20px;
+  display: flex; flex-direction: column; gap: 8px;
+}
+
+/* -- Chrome frame, row 1: the tab strip --------------------------
+   The frameless caption strip becomes Chrome's tab strip: it is
+   still the drag handle (pywebview drag region) and still carries
+   the window buttons at the right, but its left half now holds
+   view tabs. The active tab takes the toolbar's surface colour
+   and melts into it (rounded top corners, square bottom edge),
+   the way Chrome's current tab sits on its toolbar. */
+#titlebar {
+  position: fixed; top: 0; left: 0; right: 0; height: 40px;
+  z-index: 60; display: flex; align-items: flex-end;
+  justify-content: space-between; padding: 0 6px 0 10px;
+  -webkit-user-select: none; user-select: none; cursor: default;
+}
+#tabstrip { display: flex; align-items: flex-end; gap: 4px; height: 100%; }
+.tab {
+  font: inherit; display: flex; align-items: center; gap: 8px;
+  height: 34px; min-width: 148px; max-width: 200px;
+  padding: 0 14px; margin-bottom: 0;
+  border: none; background: transparent; cursor: pointer;
+  border-radius: 10px 10px 0 0;
+  color: var(--subink); font-size: 12.5px; font-weight: 500;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.tab:hover { background: rgba(255, 255, 255, 0.35); }
+.tab.active {
+  background: var(--frame-bg);
+  -webkit-backdrop-filter: blur(18px) saturate(150%);
+  backdrop-filter: blur(18px) saturate(150%);
+  color: var(--ink);
+  box-shadow: 0 1px 0 var(--frame-bg);
+}
+.tab-ic { width: 14px; height: 14px; flex: none; }
+.tab-title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tb-btns { display: flex; gap: 2px; align-items: center; padding-bottom: 4px; }
+.tb-btns button {
+  width: 44px; height: 30px; border: none; background: transparent;
+  color: var(--subink); font-size: 12px; cursor: pointer; border-radius: 6px;
+}
+.tb-btns button:hover { background: var(--grey-hover); color: var(--ink); }
+#win-close:hover { background: #d93025; color: #fff; }
+
+/* -- Chrome frame, row 2: the toolbar ---------------------------- */
+#toolbar {
+  position: fixed; top: 40px; left: 0; right: 0; height: 48px;
+  z-index: 55; display: flex; align-items: center; gap: 8px;
+  padding: 0 10px;
+  background: var(--frame-bg);
+  -webkit-backdrop-filter: blur(18px) saturate(150%);
+  backdrop-filter: blur(18px) saturate(150%);
+  box-shadow: var(--frame-shadow);
+  transition: background 1.2s ease;
+}
+.nav-cluster { display: flex; gap: 2px; flex: none; }
+.icon-btn {
+  width: 32px; height: 32px; flex: none;
+  display: flex; align-items: center; justify-content: center;
+  border: none; border-radius: 50%; background: transparent;
+  color: var(--grey-icon); cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.icon-btn svg { width: 18px; height: 18px; }
+.icon-btn:hover { background: var(--grey-hover); color: var(--ink); }
+.icon-btn:active { background: var(--grey-press); }
+.icon-btn.is-disabled { color: rgba(95, 99, 104, 0.38); cursor: default; }
+.icon-btn.is-disabled:hover { background: transparent; color: rgba(95, 99, 104, 0.38); }
+#nav-reload.spinning svg { animation: spin 0.7s ease; }
+@keyframes spin { from { transform: rotate(0); } to { transform: rotate(360deg); } }
+/* the omnibox: one full-round capsule, light fill, carrying the
+   current file/job; clicking it is the main entry (pick a video) */
+#omnibox {
+  flex: 1; min-width: 0; height: 36px;
+  display: flex; align-items: center; gap: 9px;
+  padding: 0 15px; border-radius: var(--r-pill);
+  background: rgba(255, 255, 255, 0.78);
+  box-shadow: inset 0 0 0 1px rgba(20, 40, 90, 0.05),
+              0 1px 2px rgba(30, 50, 100, 0.05);
+  color: var(--ink); font-size: 13px; font-weight: 500;
+  cursor: pointer; transition: background 0.15s ease, box-shadow 0.15s ease;
+}
+#omnibox:hover {
+  background: rgba(255, 255, 255, 0.95);
+  box-shadow: inset 0 0 0 1px rgba(20, 40, 90, 0.07),
+              0 1px 4px rgba(30, 50, 100, 0.10);
+}
+.omni-ic { width: 15px; height: 15px; flex: none; color: var(--grey-icon); }
+#omnibox-text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tb-right { position: relative; flex: none; }
+#menu {
+  position: absolute; top: calc(100% + 6px); right: 0;
+  min-width: 212px; padding: 6px; z-index: 70;
+  background: rgba(255, 255, 255, 0.94);
+  -webkit-backdrop-filter: blur(22px) saturate(150%);
+  backdrop-filter: blur(22px) saturate(150%);
+  border-radius: var(--r-card);
+  box-shadow: 0 4px 18px rgba(20, 30, 60, 0.20),
+              0 0 0 1px rgba(20, 40, 90, 0.06);
+}
+#menu[hidden] { display: none; }
+.menu-item {
+  font: inherit; display: block; width: 100%; text-align: left;
+  padding: 8px 10px; border: none; background: transparent;
+  border-radius: var(--r-row); cursor: pointer;
+  color: var(--ink); font-size: 13px; font-weight: 500;
+}
+.menu-item:hover { background: var(--grey-hover); }
+.menu-sep { height: 1px; margin: 5px 8px; background: rgba(20, 40, 90, 0.09); }
+
+/* -- the glass material ---------------------------------------- */
+/* No frames: no border, no shadow, no rounded corners. The frost
+   lives on a background layer whose mask feather melts the pane's
+   rim into the wall; content above it is never faded. */
+.glass {
+  position: relative;
+  isolation: isolate;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+}
+.glass::before {
+  content: none;
+}
+.glass-strong {
+  position: relative;
+  isolation: isolate;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+}
+.glass-strong::before {
+  content: none;
+}
+
+/* -- header: a slim title row now (the brand lives in the tab) --- */
+#header {
+  display: flex; align-items: center;
+  padding: 2px 6px 0;
+}
+.hdr-text { display: flex; align-items: baseline; gap: 10px; }
+#header h1 { font-size: 16.5px; font-weight: 600; letter-spacing: 0.04em; }
+#header .sub { font-size: 12.5px; font-weight: 500; color: var(--subink); }
+.hdr-actions { margin-left: auto; display: flex; gap: 10px; align-items: center; }
+#updatebox { text-align: right; }
+#updatebox p { font-size: 12.5px; font-weight: 500; margin-bottom: 4px; }
+
+/* -- status band -------------------------------------------------- */
+#band { padding: 4px 6px 8px; }
+#status { font-size: 13px; font-weight: 500; }
+#track {
+  position: relative; height: 6px; margin-top: 5px;
+  background: rgba(20, 40, 90, 0.08);
+  border-radius: 999px; overflow: visible;
+}
+#fill {
+  height: 100%; width: 0%;
+  background: linear-gradient(90deg, #2f7de1, var(--accent));
+  border-radius: 999px;
+  transition: width 0.45s cubic-bezier(0.22, 0.9, 0.3, 1);
+}
+#filldot {
+  position: absolute; top: 50%; left: 0%;
+  width: 9px; height: 9px; border-radius: 50%;
+  background: var(--accent);
+  transform: translate(-50%, -50%);
+  transition: left 0.45s cubic-bezier(0.22, 0.9, 0.3, 1);
+  opacity: 0;
+}
+#track.active #filldot { opacity: 1; }
+
+/* -- update progress (v0.6.29) ----------------------------------
+   The 下载并安装 button used to go dead for minutes while the
+   pack / installer dripped through the proxy -- no bar, no text.
+   Same glass language as the main #track: a hairline track, a
+   blue fill, a dot. When the download does not know its total
+   the dot slides back and forth (indeterminate), so there is
+   always visible motion while anything is happening. */
+#updateprog { margin-top: 6px; }
+#updateprog p { font-size: 12px; color: var(--subink); margin: 3px 0 0; }
+.up-track {
+  position: relative; height: 6px;
+  background: rgba(20, 40, 90, 0.08);
+  border-radius: 999px; overflow: visible;
+}
+#up-fill {
+  height: 100%; width: 0%;
+  background: linear-gradient(90deg, #2f7de1, var(--accent));
+  border-radius: 999px;
+  transition: width 0.45s cubic-bezier(0.22, 0.9, 0.3, 1);
+}
+#up-dot {
+  position: absolute; top: 50%; left: 0%;
+  width: 9px; height: 9px; border-radius: 50%;
+  background: var(--accent);
+  transform: translate(-50%, -50%);
+  transition: left 0.45s cubic-bezier(0.22, 0.9, 0.3, 1);
+  opacity: 0;
+}
+.up-track.active #up-dot { opacity: 1; }
+.up-track.indet #up-fill { width: 30%; }
+.up-track.indet #up-dot { opacity: 1; animation: updot 1.1s ease-in-out infinite alternate; }
+@keyframes updot { from { left: 0%; } to { left: 100%; } }
+
+/* -- content layout ---------------------------------------------
+   One flow on the one sheet of glass, no blocks anywhere: the
+   console of actions leads, the two lists share a row as pure
+   text columns, and the small utilities close the page in one
+   row. There is NO preview stage (v3): what a running job sees
+   lives behind the whole window's glass, not in a box here.
+   Sections are told apart by whitespace and hairlines only.
+   The deck scrolls inside its own area: at ANY window size
+   every section stays reachable, while header and status band
+   never move. */
+#tiles {
+  flex: 1; min-height: 0;
+  overflow-y: auto; overflow-x: hidden;
+  width: 100%; max-width: 1140px; margin: 0 auto;
+  padding: 10px 8px 30px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(20, 40, 90, 0.25) transparent;
+  display: grid; gap: 30px 38px;
+  align-content: start;
+  grid-template-columns: repeat(6, 1fr);
+  grid-template-areas:
+    "hero hero hero hero hero hero"
+    "inbox inbox inbox history history history"
+    "depth depth toolbox toolbox settings settings";
+}
+#tiles::-webkit-scrollbar { width: 8px; }
+#tiles::-webkit-scrollbar-thumb {
+  background: rgba(20, 40, 90, 0.20); border-radius: 99px;
+}
+#tiles::-webkit-scrollbar-track { background: transparent; }
+/* the retired preview section: out of the layout for good
+   (.tile sets display:flex, so say it plainly, like the inbox) */
+#preview[hidden] { display: none; }
+#hero { grid-area: hero; }
+#inbox { grid-area: inbox; }
+#history { grid-area: history; }
+#depth { grid-area: depth; }
+#toolbox-tile { grid-area: toolbox; }
+#settings-strip { grid-area: settings; }
+/* a column rule between neighbours sharing a row */
+#history, #settings-strip {
+  border-left: 1px solid var(--hairline-soft);
+  padding-left: 24px;
+}
+#history { max-height: 300px; }
+
+.tile { padding: 0; display: flex; flex-direction: column; }
+.tile-head {
+  display: flex; align-items: center; gap: 9px; flex-wrap: wrap;
+  padding: 0;
+}
+.tic { width: 18px; height: 18px; display: block; }
+.tile h2 { font-size: 14px; font-weight: 600; letter-spacing: 0.03em; }
+.tile .desc {
+  flex: 1 1 100%;
+  font-size: 12.5px; font-weight: 450; color: var(--subink);
+  line-height: 1.65; margin-top: 3px;
+}
+/* the console leads the sheet: two decks of ghost actions split
+   by a hairline -- make things on the first deck, open what the
+   job produced on the second */
+#hero { border-top: 1px solid var(--hairline); padding-top: 16px; }
+#hero .btnrow + .btnrow {
+  border-top: 1px solid var(--hairline-soft);
+  margin-top: 8px; padding-top: 10px;
+}
+
+/* -- buttons: ghosts. No fill, no border, no shadow -- the label
+   itself is the button. Weight and the accent colour rank them;
+   a faint grey wash on hover is the only surface they ever get. */
+.btnrow { display: flex; gap: 4px; padding: 8px 0 0; flex-wrap: wrap; }
+.btn {
+  font: inherit; font-size: 13px; font-weight: 500;
+  height: 36px; padding: 0 16px;
+  border-radius: 999px; border: 1px solid transparent;
+  background: transparent; box-shadow: none;
+  cursor: pointer; color: var(--ink);
+  transition: background 0.2s ease, opacity 0.2s ease;
+}
+.btn.small { height: 30px; font-size: 12px; padding: 0 12px; }
+.btn.primary {
+  background: transparent; box-shadow: none;
+  color: var(--accent); font-weight: 600;
+}
+.btn.primary:hover:not(:disabled) { background: var(--grey-hover); }
+.btn.glass-btn {
+  background: transparent; border-color: transparent; box-shadow: none;
+}
+.btn.glass-btn:hover:not(:disabled) { background: var(--grey-hover); }
+.btn.glass-btn:active:not(:disabled) { background: var(--grey-press); }
+.btn.dark-btn {
+  background: transparent; color: #e8ecf4;
+  border-color: transparent;
+}
+.btn.dark-btn:hover { background: rgba(255, 255, 255, 0.12); }
+.btn:not(:disabled):active { transform: scale(0.98); }
+.btn:disabled { opacity: 0.42; cursor: default; box-shadow: none; }
+
+/* -- hero drag state ------------------------------------------------ */
+#hero { transition: box-shadow 0.25s ease, background 0.25s ease; }
+#hero.drag {
+  background: rgba(0, 100, 209, 0.14);
+  box-shadow: 0 0 0 2px rgba(0, 100, 209, 0.45), var(--glass-shadow);
+}
+
+/* -- preview (RETIRED in v3: the section is hidden and out of
+   the layout; these rules only matter if it is ever revived,
+   e.g. as a fullscreen-only screen) ------------------------------ */
+#preview {
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  color: #e8ecf4; position: relative; overflow: hidden;
+  padding: 0;
+}
+#preview::before {
+  content: "";
+  position: absolute; inset: 0;
+  z-index: -1;
+  background: rgba(5, 7, 14, 0.94);
+  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(20px);
+  -webkit-mask-image:
+    linear-gradient(to right, transparent, black 18px, black calc(100% - 18px), transparent),
+    linear-gradient(to bottom, transparent, black 18px, black calc(100% - 18px), transparent);
+  -webkit-mask-composite: source-in;
+  mask-image:
+    linear-gradient(to right, transparent, black 18px, black calc(100% - 18px), transparent),
+    linear-gradient(to bottom, transparent, black 18px, black calc(100% - 18px), transparent);
+  mask-composite: intersect;
+}
+.pv-head {
+  position: relative; z-index: 2;
+  display: flex; align-items: center; gap: 7px;
+  padding: 12px 14px 6px;
+}
+.pv-head .tic { width: 17px; height: 17px; }
+.pv-head h2 { font-size: 13.5px; font-weight: 600; letter-spacing: 0.03em; margin: 0; }
+.pv-head .spacer { flex: 1; }
+#pvcanvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+#pvvideo {
+  position: absolute; inset: 0; z-index: 1; width: 100%; height: 100%;
+  object-fit: cover;
+}
+.pv-hint {
+  position: absolute; left: 16px; bottom: 14px; z-index: 2;
+  font-size: 12px; font-weight: 500; color: rgba(232, 236, 244, 0.72);
+}
+#breathdot {
+  width: 9px; height: 9px; border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #dcebff, #2f7de1 70%);
+  box-shadow: 0 0 8px rgba(80, 150, 255, 0.8);
+  animation: breathe 2.6s ease-in-out infinite;
+}
+#breathdot.busy { animation: none; background: #6fb2ff; }
+@keyframes breathe { 0%, 100% { opacity: 0.35; } 50% { opacity: 1; } }
+#preview:fullscreen::before { -webkit-mask-image: none; mask-image: none; }
+
+/* -- history / inbox lists -------------------------------------------- */
+#histlist { flex: 1; min-height: 0; overflow-y: auto; margin: 6px 0 0; }
+#inboxlist { margin: 6px 0 0; }
+/* .tile sets display:flex, which would defeat the hidden
+   attribute app.js toggles on the inbox: say it plainly */
+#inbox[hidden] { display: none; }
+.hist-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 10px; border-radius: var(--r-row); cursor: pointer;
+  font-size: 13px; font-weight: 500;
+  transition: background 0.12s ease;
+}
+.hist-item:hover { background: var(--grey-hover); }
+.hist-item:active { background: var(--grey-press); }
+.hist-item.sel {
+  background: transparent; color: var(--accent); font-weight: 600;
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+.hist-item .when { margin-left: auto; color: var(--subink); font-size: 11.5px; }
+
+/* -- log side panel ----------------------------------------------------- */
+#logpanel {
+  position: fixed; top: 88px; right: 0; bottom: 0; width: 308px;
+  transform: translateX(100%);
+  transition: transform 0.35s cubic-bezier(0.22, 0.9, 0.3, 1);
+  background: transparent;
+  -webkit-backdrop-filter: blur(22px) saturate(150%);
+  backdrop-filter: blur(22px) saturate(150%);
+  box-shadow: none;
+  border-left: 1px solid var(--hairline);
+  z-index: 30; display: flex; flex-direction: column;
+}
+#logpanel.open { transform: translateX(0); }
+.log-head { font-size: 13px; font-weight: 600; letter-spacing: 0.03em; padding: 14px 16px 8px; }
+#logbody {
+  flex: 1; overflow: auto; padding: 0 16px 14px;
+  font-family: Consolas, "Cascadia Mono", monospace;
+  font-size: 11px; line-height: 1.5; color: #3a3f46;
+  white-space: pre-wrap; user-select: text;
+}
+#logtab {
+  position: fixed; top: 102px; right: 6px; z-index: 31;
+  width: 22px; padding: 8px 0;
+  font: inherit; font-size: 11px; line-height: 1.5; color: var(--subink);
+  background: transparent;
+  border: none; border-radius: 0;
+  cursor: pointer;
+}
+#logtab:hover { color: var(--ink); background: var(--grey-hover); }
+
+/* -- CLI activity toasts --------------------------------------------------
+   One silent line per finished CLI command, stacked down the right
+   side in the sheet's own glass. Purely presentational: the column
+   takes no pointer events, steals no focus, and each toast fades
+   out on its own (app.js retires them after ~6 s, at most 3 live). */
+#cli-toasts {
+  position: fixed; top: 96px; right: 16px; z-index: 80;
+  display: flex; flex-direction: column; gap: 8px;
+  width: 308px; pointer-events: none;
+}
+.cli-toast {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 12px; border-radius: var(--r-row);
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-edge);
+  box-shadow: var(--glass-shadow);
+  -webkit-backdrop-filter: blur(var(--frost-blur)) saturate(var(--frost-sat));
+  backdrop-filter: blur(var(--frost-blur)) saturate(var(--frost-sat));
+  color: var(--ink); font-size: 12.5px; line-height: 1.35;
+  opacity: 0; transform: translateX(12px);
+  transition: opacity 0.35s ease, transform 0.35s ease;
+}
+.cli-toast.show { opacity: 1; transform: none; }
+.cli-toast .cli-dot {
+  flex: none; width: 8px; height: 8px; border-radius: 50%;
+  background: #2e9e5b;
+}
+.cli-toast.bad .cli-dot { background: #d64545; }
+.cli-toast .cli-tag {
+  flex: none; font-weight: 600; letter-spacing: 0.04em;
+  color: var(--subink);
+}
+.cli-toast .cli-text {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* -- settings page: browser layout ---------------------------------
+   Left category nav, a search pill in the header, and on the right
+   grouped cards whose rows are full-width entries (title + note on
+   the left, the control -- switch / button / field -- on the
+   right). Same glass, same grey/radius ladder as the main sheet. */
+#settings-page {
+  position: fixed; inset: 0; z-index: 40;
+  display: flex; align-items: flex-start; justify-content: center;
+  padding: 100px 22px 26px;
+  /* the veil is the same LIGHT sheet of glass, frosted enough
+     that the wall behind it softens to a breath -- the settings
+     text never sits on the smudge, and the veil never turns
+     into a solid slab: the graffiti still ghosts through.
+     v4: one notch deeper than v3's near-white wash, the blur
+     exactly as it was, and the wall's colour comes through
+     more saturated instead of washed pale. All three numbers
+     are the user's now （设置 → 显示）, dragged live while this
+     very veil sits in front of them */
+  background: rgba(216, 224, 238, var(--set-veil));
+  -webkit-backdrop-filter: blur(var(--set-blur)) saturate(var(--set-sat));
+  backdrop-filter: blur(var(--set-blur)) saturate(var(--set-sat));
+}
+#settings-page[hidden] { display: none; }
+.btn:active:not(:disabled) { transform: scale(0.96); }
+/* opening Settings should feel plump: the veil blooms, the card
+   springs up with a soft overshoot, the rows well up one by one */
+#settings-page.enter { animation: veil-in 0.3s ease both; }
+#settings-page.enter .set-card {
+  animation: card-in 0.62s cubic-bezier(0.22, 1.35, 0.36, 1) both;
+}
+#settings-page.enter .set-head,
+#settings-page.enter .set-nav-item,
+#settings-page.enter .set-group {
+  animation: row-in 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+#settings-page.enter .set-head { animation-delay: 0.06s; }
+#settings-page.enter .set-nav-item:nth-child(1) { animation-delay: 0.10s; }
+#settings-page.enter .set-nav-item:nth-child(2) { animation-delay: 0.14s; }
+#settings-page.enter .set-nav-item:nth-child(3) { animation-delay: 0.18s; }
+#settings-page.enter .set-nav-item:nth-child(4) { animation-delay: 0.22s; }
+#settings-page.enter .set-nav-item:nth-child(5) { animation-delay: 0.26s; }
+#settings-page.enter .set-group:nth-child(1) { animation-delay: 0.16s; }
+#settings-page.enter .set-group:nth-child(2) { animation-delay: 0.22s; }
+#settings-page.enter .set-group:nth-child(3) { animation-delay: 0.28s; }
+#settings-page.enter .set-group:nth-child(4) { animation-delay: 0.34s; }
+#settings-page.enter .set-group:nth-child(5) { animation-delay: 0.40s; }
+#settings-page.enter .set-group:nth-child(6) { animation-delay: 0.46s; }
+#settings-page.enter .set-group:nth-child(7) { animation-delay: 0.52s; }
+#settings-page.enter .set-group:nth-child(8) { animation-delay: 0.58s; }
+#settings-page.leave { animation: veil-in 0.23s ease reverse both; }
+#settings-page.leave .set-card { animation: card-out 0.23s ease-in both; }
+@keyframes veil-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes card-in {
+  from { opacity: 0; transform: translateY(34px) scale(0.92); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes card-out {
+  from { opacity: 1; transform: translateY(0) scale(1); }
+  to { opacity: 0; transform: translateY(18px) scale(0.95); }
+}
+@keyframes row-in {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  #settings-page.enter, #settings-page.leave,
+  #settings-page.enter .set-card, #settings-page.leave .set-card,
+  #settings-page.enter .set-head, #settings-page.enter .set-nav-item,
+  #settings-page.enter .set-group {
+    animation: none;
+  }
+}
+.set-card {
+  width: 1080px; max-width: 96vw; height: 100%;
+  display: flex; flex-direction: column; padding: 8px 4px 12px;
+}
+.set-card > .set-head { flex: none; }
+.set-head { display: flex; align-items: center; gap: 16px; margin-bottom: 14px; }
+.set-head h2 { font-size: 17px; font-weight: 600; letter-spacing: 0.03em; flex: none; }
+.set-head .btn { margin-left: auto; flex: none; }
+#set-search {
+  flex: 1; max-width: 360px; margin: 0 auto; height: 34px;
+  display: flex; align-items: center; gap: 8px;
+  padding: 0 14px; border-radius: var(--r-pill);
+  background: transparent;
+  box-shadow: inset 0 0 0 1px rgba(20, 40, 90, 0.16);
+}
+#set-search .omni-ic { width: 14px; height: 14px; }
+#set-search-input {
+  flex: 1; min-width: 0; border: none; background: transparent;
+  outline: none; font: inherit; font-size: 13px; font-weight: 500;
+  color: var(--ink);
+}
+.set-body { flex: 1; min-height: 0; display: flex; gap: 20px; align-items: stretch; }
+#set-nav {
+  width: 168px; flex: none; display: flex; flex-direction: column;
+  gap: 2px; padding-top: 2px;
+}
+.set-nav-item {
+  font: inherit; text-align: left; padding: 8px 12px;
+  border: none; background: transparent; cursor: pointer;
+  border-radius: var(--r-row);
+  color: var(--subink); font-size: 13px; font-weight: 500;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+.set-nav-item:hover { background: var(--grey-hover); color: var(--ink); }
+.set-nav-item.active {
+  background: transparent; color: var(--ink); font-weight: 600;
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+/* the groups column scrolls in its own area （显示 alone has
+   six groups): same thin scrollbar as the main sheet's deck,
+   so every row stays reachable at any window size */
+#set-groups {
+  flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 10px;
+  overflow-y: auto; overflow-x: hidden;
+  padding-right: 6px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(20, 40, 90, 0.25) transparent;
+}
+#set-groups::-webkit-scrollbar { width: 8px; }
+#set-groups::-webkit-scrollbar-thumb {
+  background: rgba(20, 40, 90, 0.20); border-radius: 99px;
+}
+#set-groups::-webkit-scrollbar-track { background: transparent; }
+.set-group {
+  background: transparent;
+  border-radius: 0;
+  box-shadow: none;
+  padding: 12px 2px 4px;
+}
+.set-group + .set-group { border-top: 1px solid var(--hairline-soft); }
+.set-group-title {
+  font-size: 12px; font-weight: 600; letter-spacing: 0.06em;
+  color: var(--subink); padding: 4px 4px 2px;
+}
+.set-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 13px 4px;
+  border-top: 1px solid rgba(20, 40, 90, 0.07);
+}
+.set-group-title + .set-row { border-top: none; }
+.set-row .tic { width: 22px; height: 22px; }
+.set-text { flex: 1; }
+.set-text h3 { font-size: 13.5px; font-weight: 600; letter-spacing: 0.02em; }
+.set-text p { font-size: 12.5px; font-weight: 450; color: var(--subink); margin-top: 2px; }
+#set-noresult {
+  font-size: 12.5px; font-weight: 500; color: var(--subink);
+  text-align: center; padding: 20px 6px;
+}
+.switch { display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px; font-weight: 500; cursor: pointer; }
+.switch input { display: none; }
+.switch span {
+  width: 36px; height: 21px; border-radius: 999px;
+  background: rgba(20, 40, 90, 0.16); position: relative;
+  transition: background 0.2s ease; flex: none;
+}
+.switch span::after {
+  content: ""; position: absolute; top: 2.5px; left: 3px;
+  width: 16px; height: 16px; border-radius: 50%;
+  background: #fff; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+  transition: left 0.2s ease;
+}
+.switch input:checked + span { background: var(--accent); }
+.switch input:checked + span::after { left: 17px; }
+
+/* -- adaptability: narrow windows stack to one column ------------- */
+@media (max-width: 800px) {
+  #tiles {
+    grid-template-columns: 1fr;
+    grid-template-rows: none;
+    gap: 24px;
+    grid-template-areas:
+      "hero"
+      "inbox"
+      "history"
+      "depth"
+      "toolbox"
+      "settings";
+  }
+  #history { max-height: 240px; }
+  #history, #settings-strip { border-left: none; padding-left: 0; }
+  #center { padding: 100px 30px 6px 12px; }
+  #header h1 { font-size: 15px; }
+  .tab { min-width: 0; }
+  .set-body { flex-direction: column; }
+  #set-nav { width: 100%; flex-direction: row; flex-wrap: wrap; }
+  .set-card { padding: 14px 14px 16px; }
+}
+
+/* -- settings: appearance sliders （显示） --------------------------
+   One slider grammar for every tunable number on the page: a
+   hairline track, a white thumb, the live value at the right.
+   The rows stay borderless text on the veil, like every other
+   settings row -- no cards, no fills. */
+.set-range {
+  -webkit-appearance: none; appearance: none;
+  width: 190px; flex: none; height: 4px; border-radius: 99px;
+  background: rgba(20, 40, 90, 0.18);
+  outline: none; cursor: pointer;
+}
+.set-range::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none;
+  width: 16px; height: 16px; border-radius: 50%;
+  background: #fff;
+  border: 1px solid rgba(20, 40, 90, 0.20);
+  box-shadow: 0 1px 4px rgba(20, 30, 60, 0.28);
+  cursor: pointer;
+}
+.set-range::-moz-range-thumb {
+  width: 16px; height: 16px; border-radius: 50%;
+  background: #fff;
+  border: 1px solid rgba(20, 40, 90, 0.20);
+  box-shadow: 0 1px 4px rgba(20, 30, 60, 0.28);
+  cursor: pointer;
+}
+.set-range:active::-webkit-slider-thumb { background: var(--accent); }
+.set-range:active::-moz-range-thumb { background: var(--accent); }
+.set-val {
+  min-width: 58px; flex: none; text-align: right;
+  font-size: 12.5px; font-weight: 600; color: var(--subink);
+  font-variant-numeric: tabular-nums;
+}
+
+/* -- settings: proxy input ----------------------------------------- */
+#set-proxy {
+  font: inherit; font-size: 12.5px; font-weight: 500;
+  color: var(--ink);
+  background: transparent;
+  border: 1px solid rgba(20, 40, 90, 0.14);
+  border-radius: 99px; padding: 7px 14px; width: 210px;
+  outline: none;
+}
+#set-proxy:focus { border-color: var(--accent); }
+#set-update-note { color: var(--accent); font-weight: 600; }
+
+/* demo badge: demo mode must never be silent again */
+#demobadge {
+  color: #a4123f; font-weight: 700; font-size: 12px;
+  border: 1.5px solid rgba(164, 18, 63, 0.55);
+  background: transparent;
+  padding: 3px 10px; border-radius: 999px; white-space: nowrap;
+}
+
+/* -- toolbox page: the kernel registry as a hand of cards ----------
+   Same light veil as the settings page (the user's own numbers via
+   the same appearance vars), then pure layout: one column per line
+   of kernels, cards stacked as a deck. Clicking the column head
+   fans the whole column open. The fan is transform/opacity only,
+   a one-shot transition per card with a small stagger -- no loop,
+   no per-frame work, nothing repainting at idle. */
+#toolbox-page {
+  position: fixed; inset: 0; z-index: 40;
+  display: flex; align-items: flex-start; justify-content: center;
+  padding: 100px 22px 26px;
+  background: rgba(216, 224, 238, var(--set-veil));
+  -webkit-backdrop-filter: blur(var(--set-blur)) saturate(var(--set-sat));
+  backdrop-filter: blur(var(--set-blur)) saturate(var(--set-sat));
+}
+#toolbox-page[hidden] { display: none; }
+#toolbox-page.enter { animation: veil-in 0.3s ease both; }
+#toolbox-page.enter .tbx-wrap { animation: card-in 0.62s cubic-bezier(0.22, 1.35, 0.36, 1) both; }
+#toolbox-page.enter .tbx-col {
+  animation: row-in 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+#toolbox-page.enter .tbx-col:nth-child(1) { animation-delay: 0.14s; }
+#toolbox-page.enter .tbx-col:nth-child(2) { animation-delay: 0.19s; }
+#toolbox-page.enter .tbx-col:nth-child(3) { animation-delay: 0.24s; }
+#toolbox-page.enter .tbx-col:nth-child(4) { animation-delay: 0.29s; }
+#toolbox-page.enter .tbx-col:nth-child(5) { animation-delay: 0.34s; }
+#toolbox-page.enter .tbx-col:nth-child(6) { animation-delay: 0.39s; }
+#toolbox-page.enter .tbx-col:nth-child(7) { animation-delay: 0.44s; }
+#toolbox-page.enter .tbx-col:nth-child(8) { animation-delay: 0.49s; }
+#toolbox-page.leave { animation: veil-in 0.23s ease reverse both; }
+#toolbox-page.leave .tbx-wrap { animation: card-out 0.23s ease-in both; }
+.tbx-wrap {
+  width: 1180px; max-width: 96vw; height: 100%;
+  display: flex; flex-direction: column; padding: 8px 4px 4px;
+}
+.tbx-sub { color: var(--subink); font-size: 12.5px; font-weight: 500; }
+#tbx-cols {
+  flex: 1; display: flex; gap: 20px; align-items: stretch;
+  overflow: auto; padding: 6px 2px 14px;
+}
+#tbx-note { color: var(--subink); font-size: 13px; padding: 10px 2px; }
+/* the fan step adapts to the column's height in JS, so the deck
+   only needs a sane floor; shorter windows scroll instead */
+.tbx-col {
+  width: 262px; flex: none; min-height: 600px;
+  display: flex; flex-direction: column;
+}
+.tbx-head {
+  font: inherit; text-align: left; cursor: pointer;
+  display: flex; align-items: center; gap: 8px;
+  padding: 9px 12px; border: 1px solid var(--glass-edge);
+  border-radius: var(--r-row);
+  background: rgba(255, 255, 255, 0.55); color: var(--ink);
+  box-shadow: var(--frame-shadow);
+}
+.tbx-head:hover { background: rgba(255, 255, 255, 0.75); }
+.tbx-head:active { transform: scale(0.98); }
+.tbx-title { font-size: 13.5px; font-weight: 600; letter-spacing: 0.02em; }
+.tbx-n { margin-left: auto; font-size: 11.5px; color: var(--subink); font-weight: 600; }
+.tbx-chev {
+  font-size: 11px; color: var(--subink); flex: none;
+  transition: transform 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.tbx-col.open .tbx-chev { transform: rotate(180deg); }
+.tbx-stack { position: relative; flex: 1; margin-top: 12px; }
+.tbx-card {
+  position: absolute; top: 0; left: calc(50% - 119px);
+  width: 238px; height: 148px; padding: 12px 14px;
+  display: flex; flex-direction: column;
+  /* near-solid on purpose: a deck only reads as a deck when the
+     cards below do not bleed their text through the top one */
+  background: rgba(255, 255, 255, 0.97);
+  border: 1px solid var(--glass-edge);
+  border-radius: var(--r-card);
+  box-shadow: 0 6px 22px rgba(30, 50, 100, 0.13),
+              inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  transform: translate(var(--txc, 0), var(--tyc, 0)) rotate(var(--rotc, 0));
+  opacity: 1;
+  transition: transform 0.62s cubic-bezier(0.22, 1, 0.36, 1),
+              opacity 0.45s ease;
+  transition-delay: calc(var(--i) * 45ms), calc(var(--i) * 30ms);
+}
+.tbx-col.open .tbx-card {
+  transform: translate(var(--txo, 0), var(--tyo, 0)) rotate(var(--roto, 0));
+}
+/* collapsed, a deck shows edges, not faces: every covered card's
+   content stays invisible, so the slivers peeking over the top card
+   read as clean blank card edges. Only the top card (last dealt,
+   highest z) shows its full face; fanning the column open fades
+   every face back in. */
+.tbx-card > * { transition: opacity 0.35s ease; }
+.tbx-col:not(.open) .tbx-card:not(:last-child) > * { opacity: 0; }
+.tbx-card-top { display: flex; align-items: baseline; gap: 8px; }
+.tbx-card-top h4 { font-size: 14px; font-weight: 600; letter-spacing: 0.02em; }
+.tbx-ver {
+  margin-left: auto; flex: none; font-size: 11px; font-weight: 700;
+  color: var(--accent); font-variant-numeric: tabular-nums;
+}
+.tbx-blurb { margin-top: 5px; font-size: 12px; line-height: 1.45; color: var(--ink); }
+.tbx-io {
+  margin-top: 4px; font-size: 11.5px; font-weight: 600; color: var(--subink);
+}
+.tbx-id {
+  margin-left: auto; align-self: center;
+  font-size: 10.5px; color: rgba(69, 79, 90, 0.75);
+  font-family: Consolas, "Cascadia Mono", monospace;
+}
+.tbx-chips { margin-top: 8px; display: flex; gap: 5px; flex-wrap: wrap; }
+.tbx-chip {
+  font-size: 10.5px; font-weight: 600; line-height: 1;
+  padding: 4px 8px; border-radius: var(--r-pill);
+  background: rgba(32, 33, 36, 0.08); color: var(--subink);
+}
+.tbx-chip.ev-a { background: rgba(0, 130, 70, 0.14); color: #0a6b3c; }
+.tbx-chip.ev-b { background: rgba(200, 130, 0, 0.16); color: #8a5a00; }
+.tbx-chip.ev-c { background: rgba(120, 60, 200, 0.14); color: #5f2ea6; }
+.tbx-chip.dep-on { background: rgba(0, 100, 209, 0.14); color: var(--accent); }
+.tbx-chip.dep-off { background: rgba(32, 33, 36, 0.08); color: var(--subink); }
+@media (prefers-reduced-motion: reduce) {
+  #toolbox-page.enter, #toolbox-page.leave,
+  #toolbox-page.enter .tbx-wrap, #toolbox-page.leave .tbx-wrap,
+  #toolbox-page.enter .tbx-col { animation: none; }
+  .tbx-card, .tbx-chev, .tbx-card > * { transition: none; }
+}
+
+.set-seg { display: inline-flex; gap: 2px; padding: 2px; flex: none;
+  border-radius: 999px; background: rgba(20, 40, 90, 0.10); }
+.set-seg button { border: 0; background: transparent; cursor: pointer;
+  height: 26px; padding: 0 11px; border-radius: 999px;
+  font-size: 12px; font-weight: 500; color: var(--ink-soft, #3c4350);
+  white-space: nowrap; }
+.set-seg button.on { background: rgba(255, 255, 255, 0.85);
+  color: var(--ink, #1c1e21); box-shadow: 0 1px 3px rgba(20, 40, 90, 0.18); }
+.set-seg button:not(.on):hover { background: rgba(255, 255, 255, 0.45); }
+
+/* 文字对比度 = 高 (v0.6.54): white text with a black outline on
+   every main text element, so text stays readable no matter how
+   deep the background is set. Only active when the body carries
+   .high-contrast (settings → 显示 → 文字对比度 → 高); the standard
+   look is untouched. */
+body.high-contrast #center,
+body.high-contrast .set-text h3,
+body.high-contrast .set-text p,
+body.high-contrast .desc,
+body.high-contrast #status,
+body.high-contrast #logbody,
+body.high-contrast .log-head,
+body.high-contrast .btn,
+body.high-contrast .tab,
+body.high-contrast .set-seg button,
+body.high-contrast h2,
+body.high-contrast h3 {
+  color: #fff;
+  text-shadow: -1px -1px 0 rgba(0, 0, 0, 0.9), 1px -1px 0 rgba(0, 0, 0, 0.9),
+    -1px 1px 0 rgba(0, 0, 0, 0.9), 1px 1px 0 rgba(0, 0, 0, 0.9),
+    0 0 8px rgba(0, 0, 0, 0.65);
+}
+body.high-contrast #center {
+  --ink: #fff;
+  --subink: rgba(255, 255, 255, 0.92);
+}

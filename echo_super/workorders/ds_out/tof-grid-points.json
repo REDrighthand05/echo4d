@@ -1,0 +1,32 @@
+{
+  "id": "9ec3b32d-9a28-4d57-b6da-a8c5deb0649c",
+  "object": "chat.completion",
+  "created": 1793537074,
+  "model": "deepseek-flash",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "```python\nimport numpy as np\n\ndef tof_grid_points(dist_mm, hfov_deg, vfov_deg, max_range_mm):\n    dist = np.asarray(dist_mm)\n    if dist.shape != (8, 8):\n        raise ValueError(\"dist_mm must have shape (8, 8)\")\n\n    hfov = np.deg2rad(float(hfov_deg))\n    vfov = np.deg2rad(float(vfov_deg))\n    tan_h = np.tan(hfov / 2.0)\n    tan_v = np.tan(vfov / 2.0)\n\n    valid = (dist > 0) & (dist <= max_range_mm)\n    zones = np.argwhere(valid).astype(np.int64)\n\n    if zones.shape[0] == 0:\n        return np.empty((0, 3), dtype=np.float64), np.empty((0, 2), dtype=np.int64)\n\n    r = zones[:, 0].astype(np.float64)\n    c = zones[:, 1].astype(np.float64)\n\n    u = (2.0 * (c + 0.5) / 8.0 - 1.0) * tan_h\n    v = (1.0 - 2.0 * (r + 0.5) / 8.0) * tan_v\n\n    d = np.stack([u, v, np.ones_like(u)], axis=1)\n    d /= np.linalg.norm(d, axis=1, keepdims=True)\n\n    dist_valid = dist[zones[:, 0], zones[:, 1]].astype(np.float64)\n    points = d * (dist_valid[:, None] / 1000.0)\n\n    return points, zones\n```",
+        "reasoning_content": "We need answer only python code block. Need implement tof_grid_points per spec. Need be careful. Need produce code only.\n\nWe need write pure function numpy. Input dist_mm shape (8,8) integer mm, <=0 or >max invalid. hfov_deg vfov_deg full FOV deg, max_range_mm. Return points (K,3) float64 m, zones (K,2) int (r,c), only valid cells row-major. Shape mismatch raise ValueError. Deterministic.\n\nNeed decide validation: \"形状不符抛 ValueError\" only shape mismatch? Could allow arrays convertible. Need be robust. Need imports numpy as np. Pure function. Use np.asarray(dist_mm). Check shape exactly (8,8). If not raise ValueError. Compute u = (2*(c+0.5)/8 -1)*tan(hfov/2). v = (1 - 2*(r+0.5)/8)*tan(vfov/2). r=0 top v positive. Direction d = (u,v,1) normalized, point=d*(dist_mm/1000.0). Need valid mask (dist_mm >0) & (dist_mm <= max_range_mm). Row-major: np.argwhere(mask) returns sorted row-major. Then zones = np.stack(args). points using u/v per zones.\n\nPotential nuance: \"含 -1 格时 K 相应减少且 zones 对位.\" Good.\n\nNeed output only code block. Ensure no explanation. Need include necessary import.\n\nLet's write:\n\n```python\nimport numpy as np\n\ndef tof_grid_points(dist_mm, hfov_deg, vfov_deg, max_range_mm):\n    dist = np.asarray(dist_mm)\n    if dist.shape != (8, 8):\n        raise ValueError(\"dist_mm must have shape (8, 8)\")\n    hfov = np.deg2rad(float(hfov_deg))\n    vfov = np.deg2rad(float(vfov_deg))\n    tan_h = np.tan(hfov / 2.0)\n    tan_v = np.tan(vfov / 2.0)\n    valid = (dist > 0) & (dist <= max_range_mm)\n    zones = np.argwhere(valid).astype(np.int64) # (K,2)\n    if zones.shape[0] == 0:\n        return np.empty((0,3), dtype=np.float64), np.empty((0,2), dtype=np.int64)\n    r = zones[:,0].astype(np.float64)\n    c = zones[:,1].astype(np.float64)\n    u = (2.0 * (c + 0.5) / 8.0 - 1.0) * tan_h\n    v = (1.0 - 2.0 * (r + 0.5) / 8.0) * tan_v\n    d = np.stack([u, v, np.ones_like(u)], axis=1)\n    d /= np.linalg.norm(d, axis=1, keepdims=True)\n    d_mm = dist[zones[:,0], zones[:,1]].astype(np.float64)\n    points = d * (d_mm[:, None] / 1000.0)\n    return points, zones\n```\n\nNeed dtype zones int? Spec says int (r,c). np.int64 okay or int. Could use np.intp. Points float64. Deterministic. Shape mismatch only. We convert hfov float. If max_range_mm maybe int. Fine.\n\nPotential edge case: max_range_mm could np scalar, fine. Should we cast max_range to float? Not necessary.\n\nNeed ensure points dtype float64 even if from operations. np.tan returns float64. Good. If hfov/vfov maybe int, np.deg2rad gives float64. Good.\n\nPotential ambiguity: \"dist_mm (8,8) 整数毫米\" if input not integer? Not specified exception. We can accept numeric. \"形状不符抛 ValueError\" only shape mismatch. Good.\n\nNeed only code block no extra."
+      },
+      "logprobs": null,
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 391,
+    "completion_tokens": 1282,
+    "total_tokens": 1673,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 891
+    },
+    "prompt_cache_hit_tokens": 0,
+    "prompt_cache_miss_tokens": 391
+  },
+  "system_fingerprint": "bc19ba97cbe016479903222bb1578db6"
+}

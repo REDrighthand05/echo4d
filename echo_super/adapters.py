@@ -1,0 +1,658 @@
+"""Real kernels — adapters wrapping verified implementations for the registry.
+
+Three kernels graduate here from "verified on the bench" to "registered",
+with the exact kind declarations of their CATALOG.md rows:
+
+    orient_normals       points + normals -> normals   实测 · 已验
+    fit_plane            points -> points (plane params in meta)  实测 · 已验
+    poisson_reconstruct  points + normals -> mesh      实测 · 已验候选
+
+Usage (registration is explicit, nothing happens at import time):
+
+    from echo_super.adapters import register_real_kernels
+    reg = register_real_kernels()            # fresh Registry, 3 real kernels
+    reg = register_real_kernels(other_reg)   # or add into an existing one
+
+Payload conventions (EchoObject.data):
+  points   : (N,3) float array. For orient_normals the per-point source
+             camera centers ride along, either as
+             points.data == {"points": arr, "cam_centers": arr} or as
+             points.meta["cam_centers"].
+             For poisson_reconstruct, vertex colors may ride as
+             points.data == {"points": arr, "colors": arr} ((N,3), float
+             in [0,1] or uint8 in [0,255]).
+  normals  : (N,3) float array (or {"normals": arr}).
+  mesh     : {"vertices": (V,3), "triangles": (F,3), "vertex_colors": (V,3)
+             or an empty (0,3) array when no colors were given}.
+
+Every kernel returns an EchoObject whose meta carries the evidence grade
+and review status (see KERNEL_META) next to its own outputs.
+"""
+from __future__ import annotations
+
+import importlib.util
+import sys
+from pathlib import Path
+
+import numpy as np
+
+from .core import EchoObject
+from .registry import Kernel, Registry
+
+# Evidence grade + review status per kernel, mirrored into the meta of
+# every EchoObject these kernels return.
+KERNEL_META = {
+    "orient_normals": {"evidence": "实测", "status": "已验"},
+    "fit_plane": {"evidence": "实测", "status": "已验"},
+    "poisson_reconstruct": {"evidence": "实测", "status": "已验候选"},
+}
+
+
+def _load_ds_module(name: str, filename: str):
+    """Load a DS-delivered file from workorders/ by path (not a package)."""
+    path = Path(__file__).resolve().parent / "workorders" / filename
+    spec = importlib.util.spec_from_file_location(f"_echo_super_ds_{name}", path)
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = mod
+    spec.loader.exec_module(mod)
+    return mod
+
+
+_orient_mod = _load_ds_module("orient_normals", "orient_normals_ds.py")
+_plane_mod = _load_ds_module("fit_plane", "fit_plane_ds.py")
+
+orient_normals = _orient_mod.orient_normals
+fit_plane = _plane_mod.fit_plane
+
+
+def poisson_reconstruct(points, normals, colors=None):
+    """Kazhdan Poisson surface reconstruction (Open3D), density-trimmed.
+
+    Inputs are plain numpy arrays, not EchoObjects:
+        points   (N,3) float
+        normals  (N,3) float, same N as points (orient them first,
+                 e.g. with orient_normals)
+        colors   optional (N,3): float in [0,1] or uint8 in [0,255]
+
+    Calls open3d's create_from_point_cloud_poisson(depth=9), then drops
+    every vertex whose density falls below the 15th percentile of the
+    returned densities (the low-density fringe is where the implicit
+    surface hallucinates), together with its triangles.
+
+    Returns (vertices, triangles, vertex_colors): (V,3) float,
+    (F,3) int, and (V,3) float in [0,1] — or an empty (0,3) array when
+    no input colors were given.
+
+    Raises ValueError on shape mismatch, empty input or non-finite data.
+    """
+    import open3d as o3d  # lazy: importing adapters must not require open3d
+
+    pts = np.asarray(points, dtype=float)
+    nrms = np.asarray(normals, dtype=float)
+    if pts.ndim != 2 or pts.shape[1] != 3:
+        raise ValueError("points must be an (N, 3) array")
+    if nrms.shape != pts.shape:
+        raise ValueError("normals must have the same (N, 3) shape as points")
+    if pts.shape[0] == 0:
+        raise ValueError("points must contain at least one point (N > 0)")
+    if not np.isfinite(pts).all() or not np.isfinite(nrms).all():
+        raise ValueError("points/normals contain non-finite values")
+
+    pcd = o3d.geometry.PointCloud()
+    pcd.points = o3d.utility.Vector3dVector(pts)
+    pcd.normals = o3d.utility.Vector3dVector(nrms)
+    if colors is not None:
+        cols = np.asarray(colors)
+        if cols.shape != pts.shape:
+            raise ValueError("colors must have the same (N, 3) shape as points")
+        if cols.dtype == np.uint8:
+            cols = cols.astype(float) / 255.0
+        pcd.colors = o3d.utility.Vector3dVector(np.asarray(cols, dtype=float))
+
+    mesh, densities = o3d.geometry.TriangleMesh.create_from_point_cloud_poisson(
+        pcd, depth=9)
+    densities = np.asarray(densities, dtype=float)
+    keep = densities >= np.percentile(densities, 15)
+    mesh.remove_vertices_by_mask(~keep)
+
+    vertices = np.asarray(mesh.vertices, dtype=float)
+    triangles = np.asarray(mesh.triangles, dtype=int)
+    vertex_colors = np.asarray(mesh.vertex_colors, dtype=float).reshape(-1, 3)
+    return vertices, triangles, vertex_colors
+
+
+# ---------------------------------------------------------------------------
+# EchoObject-level kernel functions (what the registry actually calls)
+
+def _points_array(obj: EchoObject):
+    """(points, colors-or-None, cam_centers-or-None) from a points object."""
+    data = obj.data
+    if isinstance(data, dict):
+        cams = data.get("cam_centers")
+        return (np.asarray(data["points"]),
+                data.get("colors"),
+                cams if cams is not None else obj.meta.get("cam_centers"))
+    return np.asarray(data), None, obj.meta.get("cam_centers")
+
+
+def _normals_array(obj: EchoObject):
+    data = obj.data
+    if isinstance(data, dict):
+        return np.asarray(data["normals"])
+    return np.asarray(data)
+
+
+def _orient_normals_kernel(points_obj: EchoObject, normals_obj: EchoObject):
+    pts, _colors, cams = _points_array(points_obj)
+    if cams is None:
+        raise ValueError(
+            "orient_normals needs per-point source camera centers: "
+            "points.data={'points': arr, 'cam_centers': arr} or "
+            "points.meta['cam_centers']")
+    oriented = orient_normals(pts, _normals_array(normals_obj), np.asarray(cams))
+    return normals_obj.derive("normals", oriented,
+                              source="kernel:orient_normals",
+                              **KERNEL_META["orient_normals"])
+
+
+def _fit_plane_kernel(points_obj: EchoObject):
+    pts, _colors, _cams = _points_array(points_obj)
+    normal, d, rms = fit_plane(pts)
+    return points_obj.derive(
+        "points", points_obj.data, source="kernel:fit_plane",
+        plane_normal=[float(v) for v in normal], plane_d=float(d),
+        plane_rms=float(rms), **KERNEL_META["fit_plane"])
+
+
+def _poisson_kernel(points_obj: EchoObject, normals_obj: EchoObject):
+    pts, colors, _cams = _points_array(points_obj)
+    vertices, triangles, vertex_colors = poisson_reconstruct(
+        pts, _normals_array(normals_obj), colors)
+    return points_obj.derive(
+        "mesh",
+        {"vertices": vertices, "triangles": triangles,
+         "vertex_colors": vertex_colors},
+        source="kernel:poisson_reconstruct",
+        **KERNEL_META["poisson_reconstruct"])
+
+
+def register_real_kernels(registry: Registry | None = None) -> Registry:
+    """Register the three verified real kernels; returns the registry.
+
+    With no argument a fresh Registry is created; pass an existing one
+    (e.g. the demo registry) to add the real kernels alongside it.
+    """
+    reg = registry if registry is not None else Registry()
+    reg.add(Kernel("orient_normals", ("points", "normals"), "normals",
+                   _orient_normals_kernel, cost=1.0))
+    reg.add(Kernel("fit_plane", ("points",), "points",
+                   _fit_plane_kernel, cost=1.0))
+    reg.add(Kernel("poisson_reconstruct", ("points", "normals"), "mesh",
+                   _poisson_kernel, cost=2.0))
+    return reg
+
+
+# ---------------------------------------------------------------------------
+# DS batch 1 (2026-10-31): three more verified kernels, registered after
+# Muse's bench verification (echo_super/ds_batch1.py holds the code;
+# specs in echo_super/workorders/WO-*.md):
+#   estimate_scale         points + known_size -> scale   估计 · 已验
+#   build_replay_path      poses -> path                  实测 · 已验
+#   surface_voxel_indices  points -> points               实测 · 已验
+# Bench results: scale exact on a synthetic box (0.255 vs 0.25 nominal);
+# replay path interpolates its knots exactly, unit look dirs; surface
+# filter exact on solid blocks (56/64) and 0.7 s on the 295k-point room
+# cloud — which also proved the fused cloud is a hollow shell (100% of
+# its cubes are surface), so this kernel cannot shrink that model.
+
+from .ds_batch1 import (  # noqa: E402
+    build_replay_path as _build_replay_path_fn,
+    estimate_scale as _estimate_scale_fn,
+    surface_voxel_indices as _surface_voxel_fn,
+)
+
+KERNEL_META.update({
+    "estimate_scale": {"evidence": "估计", "status": "已验"},
+    "build_replay_path": {"evidence": "实测", "status": "已验"},
+    "surface_voxel_indices": {"evidence": "实测", "status": "已验"},
+})
+
+
+def _estimate_scale_kernel(points_obj: EchoObject, known_size_obj: EchoObject):
+    pts, _colors, _cams = _points_array(points_obj)
+    scale, measured = _estimate_scale_fn(pts, float(known_size_obj.data))
+    return points_obj.derive(
+        "scale", {"scale": float(scale), "measured_size": float(measured)},
+        source="kernel:estimate_scale", **KERNEL_META["estimate_scale"])
+
+
+def _build_replay_path_kernel(poses_obj: EchoObject):
+    data = poses_obj.data
+    path, look_dirs = _build_replay_path_fn(
+        np.asarray(data["centers"]), np.asarray(data["look_targets"]),
+        int(poses_obj.meta.get("samples_per_segment", 10)))
+    return poses_obj.derive(
+        "path", {"path": path, "look_dirs": look_dirs},
+        source="kernel:build_replay_path", **KERNEL_META["build_replay_path"])
+
+
+def _surface_voxel_kernel(points_obj: EchoObject):
+    pts, _colors, _cams = _points_array(points_obj)
+    cube = points_obj.meta.get("cube")
+    if cube is None:
+        raise ValueError("surface_voxel_indices needs points.meta['cube']")
+    idx = _surface_voxel_fn(pts, float(cube))
+    return points_obj.derive(
+        "points", pts[idx], source="kernel:surface_voxel_indices",
+        surface_indices=idx, **KERNEL_META["surface_voxel_indices"])
+
+
+def register_ds_batch1(registry: Registry | None = None) -> Registry:
+    """Register the DS batch-1 kernels; returns the registry."""
+    reg = registry if registry is not None else Registry()
+    reg.add(Kernel("estimate_scale", ("points", "known_size"), "scale",
+                   _estimate_scale_kernel, cost=1.0))
+    reg.add(Kernel("build_replay_path", ("poses",), "path",
+                   _build_replay_path_kernel, cost=1.0))
+    reg.add(Kernel("surface_voxel_indices", ("points",), "points",
+                   _surface_voxel_kernel, cost=1.0))
+    return reg
+
+
+# ---------------------------------------------------------------------------
+# DS batch 2 (2026-10-31): five more verified kernels, registered after
+# Muse's bench verification (echo_super/ds_batch2.py holds the code,
+# echo_super/test_ds_batch2.py the benches; specs in workorders/WO-*.md):
+#   resample_path_even         path -> path     实测 · 已验
+#   catmull_rom_path           path -> path     实测 · 已验
+#   frustum_select_points      points -> points 实测 · 已验
+#   plane_fit_lsq              points -> points 实测 · 已验
+#   voxel_select_representative points -> points 实测 · 已验
+# Bench results: all 19 bench tests green on the first DS attempt for
+# every kernel (zero retries). Resample exact on the L-path (total
+# length 7 preserved to <1e-9); centripetal Catmull-Rom passes every
+# knot exactly (segment starts forced to the knots) and keeps collinear
+# knots collinear; frustum selection matches the hand-placed index set
+# exactly, incl. near/far/pixel-edge cases and a rotated camera; TLS
+# plane fit exact on noiseless planes and <1 deg under sigma=0.01 noise;
+# voxel representative matches the hand fixture and an independent
+# brute-force reimplementation, and is idempotent.
+
+from .ds_batch2 import (  # noqa: E402
+    catmull_rom_path as _catmull_rom_fn,
+    frustum_select_points as _frustum_select_fn,
+    plane_fit_lsq as _plane_fit_lsq_fn,
+    resample_path_even as _resample_path_fn,
+    voxel_select_representative as _voxel_representative_fn,
+)
+
+KERNEL_META.update({
+    "resample_path_even": {"evidence": "实测", "status": "已验"},
+    "catmull_rom_path": {"evidence": "实测", "status": "已验"},
+    "frustum_select_points": {"evidence": "实测", "status": "已验"},
+    "plane_fit_lsq": {"evidence": "实测", "status": "已验"},
+    "voxel_select_representative": {"evidence": "实测", "status": "已验"},
+})
+
+
+def _path_array(obj: EchoObject):
+    """(N,3) array from a path object: data dict's 'path' or bare array."""
+    data = obj.data
+    if isinstance(data, dict):
+        return np.asarray(data["path"])
+    return np.asarray(data)
+
+
+def _resample_path_kernel(path_obj: EchoObject):
+    spacing = path_obj.meta.get("spacing")
+    if spacing is None:
+        raise ValueError("resample_path_even needs path.meta['spacing']")
+    out = _resample_path_fn(_path_array(path_obj), float(spacing))
+    return path_obj.derive(
+        "path", {"path": out}, source="kernel:resample_path_even",
+        **KERNEL_META["resample_path_even"])
+
+
+def _catmull_rom_kernel(path_obj: EchoObject):
+    s = int(path_obj.meta.get("samples_per_segment", 10))
+    out = _catmull_rom_fn(_path_array(path_obj), s)
+    return path_obj.derive(
+        "path", {"path": out}, source="kernel:catmull_rom_path",
+        **KERNEL_META["catmull_rom_path"])
+
+
+_FRUSTUM_META_KEYS = ("cam_position", "cam_rotation", "fx", "fy", "cx",
+                      "cy", "image_width", "image_height", "near", "far")
+
+
+def _frustum_select_kernel(points_obj: EchoObject):
+    pts, _colors, _cams = _points_array(points_obj)
+    missing = [k for k in _FRUSTUM_META_KEYS if k not in points_obj.meta]
+    if missing:
+        raise ValueError(
+            f"frustum_select_points needs points.meta keys {missing}")
+    m = points_obj.meta
+    idx = _frustum_select_fn(
+        pts, np.asarray(m["cam_position"], dtype=float),
+        np.asarray(m["cam_rotation"], dtype=float),
+        float(m["fx"]), float(m["fy"]), float(m["cx"]), float(m["cy"]),
+        int(m["image_width"]), int(m["image_height"]),
+        float(m["near"]), float(m["far"]))
+    return points_obj.derive(
+        "points", pts[idx], source="kernel:frustum_select_points",
+        selected_indices=idx, **KERNEL_META["frustum_select_points"])
+
+
+def _plane_fit_lsq_kernel(points_obj: EchoObject):
+    pts, _colors, _cams = _points_array(points_obj)
+    normal, offset, distances = _plane_fit_lsq_fn(pts)
+    data = points_obj.data
+    out_data = dict(data) if isinstance(data, dict) else {"points": pts}
+    out_data["signed_distances"] = distances
+    return points_obj.derive(
+        "points", out_data, source="kernel:plane_fit_lsq",
+        plane_normal=[float(v) for v in normal], plane_offset=float(offset),
+        **KERNEL_META["plane_fit_lsq"])
+
+
+def _voxel_representative_kernel(points_obj: EchoObject):
+    pts, _colors, _cams = _points_array(points_obj)
+    cell = points_obj.meta.get("cell_size")
+    if cell is None:
+        raise ValueError(
+            "voxel_select_representative needs points.meta['cell_size']")
+    idx = _voxel_representative_fn(pts, float(cell))
+    return points_obj.derive(
+        "points", pts[idx], source="kernel:voxel_select_representative",
+        kept_indices=idx, **KERNEL_META["voxel_select_representative"])
+
+
+def register_ds_batch2(registry: Registry | None = None) -> Registry:
+    """Register the DS batch-2 kernels; returns the registry."""
+    reg = registry if registry is not None else Registry()
+    reg.add(Kernel("resample_path_even", ("path",), "path",
+                   _resample_path_kernel, cost=1.0))
+    reg.add(Kernel("catmull_rom_path", ("path",), "path",
+                   _catmull_rom_kernel, cost=1.0))
+    reg.add(Kernel("frustum_select_points", ("points",), "points",
+                   _frustum_select_kernel, cost=1.0))
+    reg.add(Kernel("plane_fit_lsq", ("points",), "points",
+                   _plane_fit_lsq_kernel, cost=1.0))
+    reg.add(Kernel("voxel_select_representative", ("points",), "points",
+                   _voxel_representative_kernel, cost=1.0))
+    return reg
+
+
+# ---------------------------------------------------------------------------
+# DS batch 3 (2026-11-01): six sensor-stream utilities for the
+# collection-head pre-development (specs echo_super/workorders/WO-*.md,
+# code echo_super/ds_batch3.py, benches echo_super/test_ds_batch3.py —
+# 29/29 green; heading needed one retry with the standard algorithm
+# recipe supplied after the first attempt burned its budget on
+# derivation and returned no code):
+#   tof_grid_points            tof_frame -> points  实测 · 已验
+#   tilt_compensated_heading   mag_accel -> heading 实测 · 已验
+#   pressure_altitude_m        env -> altitude      实测 · 已验
+#   speed_of_sound_mps         env -> sound_speed   实测 · 已验
+#   stream_sync_stats          streams -> sync_report 实测 · 已验
+#   spectral_ratios            spectrum -> spectrum 实测 · 已验
+
+from .ds_batch3 import (  # noqa: E402
+    pressure_altitude_m as _pressure_altitude_fn,
+    spectral_ratios as _spectral_ratios_fn,
+    speed_of_sound_mps as _sound_speed_fn,
+    stream_sync_stats as _sync_stats_fn,
+    tilt_compensated_heading as _heading_fn,
+    tof_grid_points as _tof_grid_fn,
+)
+
+KERNEL_META.update({
+    "tof_grid_points": {"evidence": "实测", "status": "已验"},
+    "tilt_compensated_heading": {"evidence": "实测", "status": "已验"},
+    "pressure_altitude_m": {"evidence": "实测", "status": "已验"},
+    "speed_of_sound_mps": {"evidence": "实测", "status": "已验"},
+    "stream_sync_stats": {"evidence": "实测", "status": "已验"},
+    "spectral_ratios": {"evidence": "实测", "status": "已验"},
+})
+
+
+def _tof_grid_kernel(tof_obj: EchoObject):
+    dist = np.asarray(tof_obj.data["dist_mm"] if isinstance(tof_obj.data, dict)
+                      else tof_obj.data)
+    pts, zones = _tof_grid_fn(dist,
+                              float(tof_obj.meta.get("hfov_deg", 45.0)),
+                              float(tof_obj.meta.get("vfov_deg", 45.0)),
+                              int(tof_obj.meta.get("max_range_mm", 4000)))
+    return tof_obj.derive(
+        "points", {"points": pts, "zones": zones},
+        source="kernel:tof_grid_points", **KERNEL_META["tof_grid_points"])
+
+
+def _heading_kernel(obj: EchoObject):
+    h = _heading_fn(np.asarray(obj.data["mag"], dtype=np.float64),
+                    np.asarray(obj.data["accel"], dtype=np.float64))
+    return obj.derive("heading", {"heading_deg": h},
+                      source="kernel:tilt_compensated_heading",
+                      **KERNEL_META["tilt_compensated_heading"])
+
+
+def _pressure_altitude_kernel(obj: EchoObject):
+    h = _pressure_altitude_fn(float(obj.data["pressure_hpa"]),
+                              float(obj.data["reference_hpa"]))
+    return obj.derive("altitude", {"altitude_m": h},
+                      source="kernel:pressure_altitude_m",
+                      **KERNEL_META["pressure_altitude_m"])
+
+
+def _sound_speed_kernel(obj: EchoObject):
+    c = _sound_speed_fn(float(obj.data["temp_c"]))
+    return obj.derive("sound_speed", {"speed_of_sound_mps": c},
+                      source="kernel:speed_of_sound_mps",
+                      **KERNEL_META["speed_of_sound_mps"])
+
+
+def _sync_stats_kernel(obj: EchoObject):
+    stats = _sync_stats_fn([np.asarray(s, dtype=np.float64)
+                            for s in obj.data["streams"]])
+    return obj.derive("sync_report", stats, source="kernel:stream_sync_stats",
+                      **KERNEL_META["stream_sync_stats"])
+
+
+def _spectral_ratios_kernel(obj: EchoObject):
+    out = _spectral_ratios_fn(np.asarray(obj.data["counts"], dtype=np.float64))
+    return obj.derive("spectrum", out, source="kernel:spectral_ratios",
+                      **KERNEL_META["spectral_ratios"])
+
+
+def register_ds_batch3(registry: Registry | None = None) -> Registry:
+    """Register the DS batch-3 kernels; returns the registry."""
+    reg = registry if registry is not None else Registry()
+    reg.add(Kernel("tof_grid_points", ("tof_frame",), "points",
+                   _tof_grid_kernel, cost=1.0))
+    reg.add(Kernel("tilt_compensated_heading", ("mag_accel",), "heading",
+                   _heading_kernel, cost=1.0))
+    reg.add(Kernel("pressure_altitude_m", ("env",), "altitude",
+                   _pressure_altitude_kernel, cost=1.0))
+    reg.add(Kernel("speed_of_sound_mps", ("env",), "sound_speed",
+                   _sound_speed_kernel, cost=1.0))
+    reg.add(Kernel("stream_sync_stats", ("streams",), "sync_report",
+                   _sync_stats_kernel, cost=1.0))
+    reg.add(Kernel("spectral_ratios", ("spectrum",), "spectrum",
+                   _spectral_ratios_kernel, cost=1.0))
+    return reg
+
+
+# ---------------------------------------------------------------------------
+# DS batch 4 (2026-11-01): Studio pre-development — one keyframe utility
+# (spec echo_super/workorders/WO-sample-track.md, code
+# echo_super/ds_batch4.py, benches echo_super/test_ds_batch4.py):
+#   sample_track   keyframe_track -> track_value   实测 · 已验
+
+from .ds_batch4 import sample_track as _sample_track_fn  # noqa: E402
+
+KERNEL_META.update({
+    "sample_track": {"evidence": "实测", "status": "已验"},
+})
+
+
+def _sample_track_kernel(obj: EchoObject):
+    data = obj.data
+    if isinstance(data, dict):
+        keys = data["keys"]
+        t = float(data.get("t", obj.meta.get("query_t", 0.0)))
+    else:
+        keys = data
+        t = float(obj.t if isinstance(obj.t, (int, float))
+                  else obj.meta.get("query_t", 0.0))
+    v = _sample_track_fn([(float(k[0]), float(k[1]), str(k[2])) for k in keys], t)
+    return obj.derive("track_value", {"value": v, "t": t},
+                      source="kernel:sample_track", **KERNEL_META["sample_track"])
+
+
+def register_ds_batch4(registry: Registry | None = None) -> Registry:
+    """Register the DS batch-4 kernels; returns the registry."""
+    reg = registry if registry is not None else Registry()
+    reg.add(Kernel("sample_track", ("keyframe_track",), "track_value",
+                   _sample_track_kernel, cost=1.0))
+    return reg
+
+
+# ---------------------------------------------------------------------------
+# DS batch 5 (2026-11-02): the hot-update kernels, registered after
+# Muse's bench verification (echo_super/ds_batch5.py holds the code,
+# echo_super/test_ds_batch5.py the benches; spec in
+# workorders/WO-update-kernels.md):
+#   manifest_digest   manifest -> digest  实测 · 已验
+#   plan_update       manifest x manifest -> plan  实测 · 已验
+#   verify_listing    manifest x listing -> report 实测 · 已验
+#   order_apply_steps plan -> steps       实测 · 已验
+# Bench results: all green, including digest recomputed independently,
+# plan diffs exact on hand fixtures, verify semantics (extra files never
+# fail), apply order (version stamp flips last), and ValueError on
+# unsafe paths / malformed shapes. First DS attempt burned its budget
+# on reasoning; the retry with a minimal-deliberation brief landed
+# clean and passed review line-by-line unchanged.
+
+from .ds_batch5 import (  # noqa: E402
+    manifest_digest as _manifest_digest_fn,
+    order_apply_steps as _order_apply_steps_fn,
+    plan_update as _plan_update_fn,
+    verify_listing as _verify_listing_fn,
+)
+
+KERNEL_META.update({
+    "manifest_digest": {"evidence": "实测", "status": "已验"},
+    "plan_update": {"evidence": "实测", "status": "已验"},
+    "verify_listing": {"evidence": "实测", "status": "已验"},
+    "order_apply_steps": {"evidence": "实测", "status": "已验"},
+})
+
+
+def _manifest_digest_kernel(manifest_obj: EchoObject):
+    return manifest_obj.derive(
+        "digest", _manifest_digest_fn(manifest_obj.data),
+        source="kernel:manifest_digest", **KERNEL_META["manifest_digest"])
+
+
+def _plan_update_kernel(old_obj: EchoObject, new_obj: EchoObject):
+    return new_obj.derive(
+        "plan", _plan_update_fn(old_obj.data, new_obj.data),
+        source="kernel:plan_update", **KERNEL_META["plan_update"])
+
+
+def _verify_listing_kernel(manifest_obj: EchoObject, listing_obj: EchoObject):
+    return manifest_obj.derive(
+        "report", _verify_listing_fn(manifest_obj.data, listing_obj.data),
+        source="kernel:verify_listing", **KERNEL_META["verify_listing"])
+
+
+def _order_apply_steps_kernel(plan_obj: EchoObject):
+    return plan_obj.derive(
+        "steps", _order_apply_steps_fn(plan_obj.data),
+        source="kernel:order_apply_steps", **KERNEL_META["order_apply_steps"])
+
+
+def register_ds_batch5(registry: Registry | None = None) -> Registry:
+    """Register the DS batch-5 hot-update kernels; returns the registry."""
+    reg = registry if registry is not None else Registry()
+    reg.add(Kernel("manifest_digest", ("manifest",), "digest",
+                   _manifest_digest_kernel, cost=1.0))
+    reg.add(Kernel("plan_update", ("manifest", "manifest"), "plan",
+                   _plan_update_kernel, cost=1.0))
+    reg.add(Kernel("verify_listing", ("manifest", "listing"), "report",
+                   _verify_listing_kernel, cost=1.0))
+    reg.add(Kernel("order_apply_steps", ("plan",), "steps",
+                   _order_apply_steps_kernel, cost=1.0))
+    return reg
+
+
+# ---------------------------------------------------------------------------
+# DS batch 6 (2026-11-02): the quick-line release kernels, registered
+# after Muse's bench verification (echo_super/ds_batch6.py holds the
+# code, echo_super/test_ds_batch6.py the benches; spec in
+# workorders/WO-batch6-quickline.md):
+#   merge_manifest  manifest x patch -> manifest  实测 · 已验
+#   select_changes  manifest x candidates -> change_set  实测 · 已验
+#   align_crlf      bytes -> bytes                实测 · 已验
+#   looks_text      bytes -> flag                 实测 · 已验
+# Bench results: all green, including a full-scale replay of the
+# real v0.4.0 -> v0.5.0 hot update -- the kernels reproduce the
+# hand-built release's exact change set (5 payload files), its
+# target manifest, and the very bytes the shipped pack carried.
+# Reviewed line-by-line unchanged. These kernels are the diff brain
+# of tools/quick_update.py, the one-command fast release line.
+
+from .ds_batch6 import (  # noqa: E402
+    align_crlf as _align_crlf_fn,
+    looks_text as _looks_text_fn,
+    merge_manifest as _merge_manifest_fn,
+    select_changes as _select_changes_fn,
+)
+
+KERNEL_META.update({
+    "merge_manifest": {"evidence": "实测", "status": "已验"},
+    "select_changes": {"evidence": "实测", "status": "已验"},
+    "align_crlf": {"evidence": "实测", "status": "已验"},
+    "looks_text": {"evidence": "实测", "status": "已验"},
+})
+
+
+def _merge_manifest_kernel(manifest_obj: EchoObject, patch_obj: EchoObject):
+    version = patch_obj.data["version"]
+    overrides = patch_obj.data["overrides"]
+    return manifest_obj.derive(
+        "manifest", _merge_manifest_fn(manifest_obj.data, overrides, version),
+        source="kernel:merge_manifest", **KERNEL_META["merge_manifest"])
+
+
+def _select_changes_kernel(manifest_obj: EchoObject, cand_obj: EchoObject):
+    return manifest_obj.derive(
+        "change_set",
+        _select_changes_fn(manifest_obj.data["files"], cand_obj.data),
+        source="kernel:select_changes", **KERNEL_META["select_changes"])
+
+
+def _align_crlf_kernel(bytes_obj: EchoObject):
+    return bytes_obj.derive(
+        "bytes", _align_crlf_fn(bytes_obj.data),
+        source="kernel:align_crlf", **KERNEL_META["align_crlf"])
+
+
+def _looks_text_kernel(bytes_obj: EchoObject):
+    return bytes_obj.derive(
+        "flag", _looks_text_fn(bytes_obj.data),
+        source="kernel:looks_text", **KERNEL_META["looks_text"])
+
+
+def register_ds_batch6(registry: Registry | None = None) -> Registry:
+    """Register the DS batch-6 quick-line kernels; returns the registry."""
+    reg = registry if registry is not None else Registry()
+    reg.add(Kernel("merge_manifest", ("manifest", "manifest_patch"),
+                   "manifest", _merge_manifest_kernel, cost=1.0))
+    reg.add(Kernel("select_changes", ("manifest", "candidates"),
+                   "change_set", _select_changes_kernel, cost=1.0))
+    reg.add(Kernel("align_crlf", ("bytes",), "bytes",
+                   _align_crlf_kernel, cost=1.0))
+    reg.add(Kernel("looks_text", ("bytes",), "flag",
+                   _looks_text_kernel, cost=1.0))
+    return reg

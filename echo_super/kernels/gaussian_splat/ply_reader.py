@@ -1,0 +1,259 @@
+"""PLY vertex-table reader — DS Flash work order WO-gs-ply-reader.
+
+Written by DeepSeek Flash against the contract in
+echo_super/workorders/WO-gs-ply-reader.md; verified line by line and
+against hand-built fixtures by Muse (tests/test_gaussian_adapter.py).
+Kept verbatim below the header: it is the general (ascii + binary,
+any element order) reader. core.py adds a vectorized fast path for the
+standard all-scalar binary layout and cross-checks against this one
+in tests.
+"""
+import numpy as np
+
+_TYPE_MAP = {
+    "char": np.dtype("int8"),
+    "int8": np.dtype("int8"),
+    "uchar": np.dtype("uint8"),
+    "uint8": np.dtype("uint8"),
+    "short": np.dtype("int16"),
+    "int16": np.dtype("int16"),
+    "ushort": np.dtype("uint16"),
+    "uint16": np.dtype("uint16"),
+    "int": np.dtype("int32"),
+    "int32": np.dtype("int32"),
+    "uint": np.dtype("uint32"),
+    "uint32": np.dtype("uint32"),
+    "float": np.dtype("float32"),
+    "float32": np.dtype("float32"),
+    "double": np.dtype("float64"),
+    "float64": np.dtype("float64"),
+}
+
+
+def _parse_type(token):
+    try:
+        return _TYPE_MAP[token.lower()]
+    except KeyError:
+        raise ValueError("unknown property type") from None
+
+
+def _ascii_scalar(token, dtype):
+    if dtype.kind in "iu":
+        try:
+            value = int(token)
+        except ValueError:
+            raise ValueError("invalid ascii value") from None
+        info = np.iinfo(dtype)
+        if value < info.min or value > info.max:
+            raise ValueError("invalid ascii value")
+        return value
+    if dtype.kind == "f":
+        try:
+            return float(token)
+        except ValueError:
+            raise ValueError("invalid ascii value") from None
+    raise ValueError("invalid ascii value")
+
+
+def _ascii_count(token, dtype):
+    try:
+        value = int(token)
+    except ValueError:
+        raise ValueError("invalid list count") from None
+    info = np.iinfo(dtype)
+    if value < 0 or value > info.max:
+        raise ValueError("invalid list count")
+    return value
+
+
+def _read_ascii(elements, text):
+    tokens = text.split()
+    pos = 0
+
+    def take():
+        nonlocal pos
+        if pos >= len(tokens):
+            raise ValueError("truncated data")
+        token = tokens[pos]
+        pos += 1
+        return token
+
+    vertex = {}
+    for elem in elements:
+        is_vertex = elem["name"] == "vertex"
+        if is_vertex:
+            vertex = {
+                prop["name"]: np.empty(elem["count"], dtype=prop["dtype"])
+                for prop in elem["props"]
+            }
+        for row in range(elem["count"]):
+            for prop in elem["props"]:
+                if not prop["is_list"]:
+                    value = _ascii_scalar(take(), prop["dtype"])
+                    if is_vertex:
+                        vertex[prop["name"]][row] = value
+                else:
+                    count = _ascii_count(take(), prop["count_dtype"])
+                    for _ in range(count):
+                        take()
+    return vertex
+
+
+def _read_binary(elements, raw):
+    offset = 0
+    total = len(raw)
+    vertex = {}
+
+    for elem in elements:
+        is_vertex = elem["name"] == "vertex"
+        if is_vertex:
+            vertex = {
+                prop["name"]: np.empty(elem["count"], dtype=prop["dtype"])
+                for prop in elem["props"]
+            }
+
+        for row in range(elem["count"]):
+            for prop in elem["props"]:
+                if not prop["is_list"]:
+                    dtype = prop["dtype"]
+                    size = dtype.itemsize
+                    if offset + size > total:
+                        raise ValueError("truncated data")
+                    value = np.frombuffer(
+                        raw, dtype=dtype.newbyteorder("<"), count=1, offset=offset
+                    )[0]
+                    if is_vertex:
+                        vertex[prop["name"]][row] = value
+                    offset += size
+                else:
+                    count_dtype = prop["count_dtype"]
+                    csize = count_dtype.itemsize
+                    if offset + csize > total:
+                        raise ValueError("truncated data")
+                    count = int(
+                        np.frombuffer(
+                            raw,
+                            dtype=count_dtype.newbyteorder("<"),
+                            count=1,
+                            offset=offset,
+                        )[0]
+                    )
+                    offset += csize
+                    if count < 0:
+                        raise ValueError("invalid list count")
+                    item_size = prop["dtype"].itemsize
+                    skip = count * item_size
+                    if offset + skip > total:
+                        raise ValueError("truncated data")
+                    if is_vertex:
+                        raise ValueError("vertex list property")
+                    offset += skip
+
+    return vertex
+
+
+def read_ply_vertices(path) -> dict[str, np.ndarray]:
+    """Read a PLY 1.0 file and return only its vertex element as property arrays."""
+    with open(path, "rb") as f:
+        first = f.readline()
+        if not first or first.strip() != b"ply":
+            raise ValueError("malformed header")
+
+        elements = []
+        current = None
+        fmt = None
+
+        while True:
+            line = f.readline()
+            if not line:
+                raise ValueError("missing end_header")
+            try:
+                text = line.decode("ascii").strip()
+            except UnicodeDecodeError:
+                raise ValueError("malformed header") from None
+            if not text:
+                raise ValueError("malformed header")
+
+            parts = text.split()
+            key = parts[0].lower()
+
+            if key in ("comment", "obj_info"):
+                continue
+
+            if key == "format":
+                if len(parts) != 3:
+                    raise ValueError("malformed format")
+                if fmt is not None:
+                    raise ValueError("duplicate format")
+                if parts[2] != "1.0":
+                    raise ValueError("unsupported PLY version")
+                fmt = parts[1].lower()
+                if fmt == "binary_big_endian":
+                    raise ValueError("binary_big_endian not supported")
+                if fmt not in ("ascii", "binary_little_endian"):
+                    raise ValueError("unsupported format")
+
+            elif key == "element":
+                if len(parts) != 3:
+                    raise ValueError("malformed element")
+                try:
+                    count = int(parts[2])
+                except ValueError:
+                    raise ValueError("malformed element") from None
+                if count < 0:
+                    raise ValueError("malformed element")
+                current = {"name": parts[1], "count": count, "props": []}
+                elements.append(current)
+
+            elif key == "property":
+                if current is None:
+                    raise ValueError("property without element")
+                if len(parts) == 3:
+                    current["props"].append(
+                        {
+                            "name": parts[2],
+                            "is_list": False,
+                            "dtype": _parse_type(parts[1]),
+                        }
+                    )
+                elif len(parts) == 5 and parts[1].lower() == "list":
+                    count_dtype = _parse_type(parts[2])
+                    if count_dtype.kind not in "iu":
+                        raise ValueError("invalid list count type")
+                    current["props"].append(
+                        {
+                            "name": parts[4],
+                            "is_list": True,
+                            "count_dtype": count_dtype,
+                            "dtype": _parse_type(parts[3]),
+                        }
+                    )
+                else:
+                    raise ValueError("malformed property")
+
+            elif key == "end_header":
+                if len(parts) != 1:
+                    raise ValueError("malformed end_header")
+                break
+
+            else:
+                raise ValueError("malformed header")
+
+        if fmt is None:
+            raise ValueError("missing format")
+
+        for elem in elements:
+            if elem["name"] == "vertex":
+                for prop in elem["props"]:
+                    if prop["is_list"]:
+                        raise ValueError("vertex list property")
+
+        if fmt == "ascii":
+            raw = f.read()
+            try:
+                text = raw.decode("ascii")
+            except UnicodeDecodeError:
+                raise ValueError("invalid ascii data") from None
+            return _read_ascii(elements, text)
+
+        return _read_binary(elements, f.read())

@@ -1,0 +1,796 @@
+"""ECHO sensor record: the handheld collector's capture-folder format.
+
+One folder per capture. Everything in the folder shares ONE clock:
+seconds on the device's monotonic clock since capture start. No stream
+carries wall-clock timestamps, so the streams can never drift apart by
+timezone/DST/NTP accidents; meta.json maps the monotonic origin to a
+UTC instant once, for humans.
+
+Layout
+------
+    <capture>/
+      meta.json     device, firmware, clock, stream inventory, calibration
+      video.mp4     the camera recording (absent in simulated captures)
+      frames.csv    frame,t_s,file        one row per recorded video frame
+      imu.csv       t_s,qw,qx,qy,qz,ax,ay,az,gx,gy,gz
+      tof.csv       t_s,z00,z01,...,z63   8x8 zones, millimetres, -1 = no target
+
+Optional meta.json block (collector v0.10+; absent in earlier
+captures, readers expose None):
+
+      "orientation": {
+        "capture_orientation": "portrait" | "landscape",
+        "video_rotation_deg": 0 | 90 | 180 | 270,
+        "display_rotation_deg": 0 | 90 | 180 | 270,
+        "video_width": <coded frame width>, "video_height": <coded>}
+
+  Written by the collector AT RECORD TIME from the device display
+  rotation and the camera sensor orientation, so a capture's
+  orientation is a stated fact from birth, never a downstream guess:
+  video_rotation_deg is the orientation hint handed to the recorder
+  / muxer for video.mp4 (the display rotation a player must apply),
+  and capture_orientation is the portrait/landscape class of the
+  video as it stands upright (coded size, swapped on quarter turns).
+  parse_orientation validates the block -- including that the class
+  agrees with the coded size and rotation -- and Capture exposes it
+  as .orientation.
+
+Optional streams (added 2026-11-01 for the expanded collection head;
+absent in earlier captures, readers expose None when missing):
+
+      env.csv       t_s,temp_c,humidity_pct,pressure_hpa,gas_ohm
+                    (BME680 class; gas is the raw sensor resistance)
+      mag.csv       t_s,mx,my,mz          raw magnetometer counts, device frame
+      spec.csv      t_s,f1,...,f8,clear,nir,flicker
+                    (AS7341 class raw channel counts)
+
+Conventions (fixed by this module; the Pi capture program in device/
+writes exactly this, and the importer below reads exactly this):
+
+  * Quaternions are scalar-first (qw,qx,qy,qz) and give the rotation
+    that maps DEVICE-frame vectors into the IMU's own world frame
+    (world-from-device). That world frame is arbitrary -- it is fixed
+    by the device at boot. Registering it onto a reconstruction's
+    frame is the importer's job (register_imu_frame).
+  * Accelerometer: m/s^2 in the device frame, INCLUDING gravity (a
+    resting device reports ~+9.81 along its up axis). Gyro: rad/s in
+    the device frame.
+  * Device frame: x right, y up, z back toward the operator (a board
+    held in the hand, screen facing the operator). The camera uses the
+    OpenCV convention (x right, y DOWN, z forward). Calibration in
+    meta.json gives cam_from_device: the 3x3 rotation R with
+    v_cam = R @ v_dev.
+  * ToF zones: row-major from the TOP-LEFT of the ranging imager's
+    view, zone (r, c) -> column z{r*8+c}. Zone centres tile a square
+    field of view (tof_fov_deg in meta.json, full angle, both axes)
+    uniformly in tan(angle) space. Distances are the range to the
+    nearest surface in the zone, in whole millimetres; -1 means the
+    zone saw no target (out of range / no return). This mirrors an
+    8x8 multi-zone ToF part (VL53L5CX class).
+
+The payoff derivations at the bottom are why the sensors exist:
+
+  * estimate_scale_from_tof -- TRUE SCALE. The reconstruction is in
+    arbitrary units; each ToF zone measures real metres along a ray
+    the reconstruction also knows. The metres-per-unit scale is the
+    least-squares fit through the origin over every valid
+    (scene distance, measured distance) pair -- one explicit global
+    objective, no voting, no per-zone decisions.
+  * estimate_up_from_imu -- LEVEL. The accelerometer's mean vector,
+    carried into the reconstruction frame by the registered IMU
+    orientation stream, is the gravity direction; up is its negation.
+    This replaces the pipeline's pose-guessing up-alignment with a
+    measurement (the two are compared in the sensor payoff report).
+
+Evidence honesty: a capture folder says what the sensors measured.
+Simulated captures (meta.json "simulated": true) are fabricated from
+an existing reconstruction and prove the data path and the estimator
+maths only -- see experiments/sensor_sim/payoff_report.md.
+"""
+import csv
+import json
+import shutil
+from pathlib import Path
+
+import numpy as np
+from scipy.spatial.transform import Rotation, Slerp
+
+__all__ = [
+    "FORMAT_VERSION",
+    "TOF_GRID",
+    "TOF_INVALID",
+    "write_meta",
+    "write_frames",
+    "write_imu",
+    "write_tof",
+    "write_env",
+    "write_mag",
+    "write_spec",
+    "Capture",
+    "read_capture",
+    "parse_orientation",
+    "zone_distances_from_points",
+    "register_imu_frame",
+    "estimate_up_from_imu",
+    "estimate_scale_from_tof",
+    "RECORD_FILES",
+    "JOB_SENSOR_DIRNAME",
+    "is_capture_folder",
+    "import_capture_record",
+    "read_job_capture",
+    "stored_frame_roll_deg",
+    "cam_from_device_stored",
+]
+
+FORMAT_VERSION = 1
+TOF_GRID = 8
+TOF_INVALID = -1
+
+_FRAMES_HEADER = ["frame", "t_s", "file"]
+_IMU_HEADER = ["t_s", "qw", "qx", "qy", "qz", "ax", "ay", "az", "gx", "gy", "gz"]
+_TOF_HEADER = ["t_s"] + [f"z{r * TOF_GRID + c}" for r in range(TOF_GRID)
+                         for c in range(TOF_GRID)]
+_ENV_HEADER = ["t_s", "temp_c", "humidity_pct", "pressure_hpa", "gas_ohm"]
+_MAG_HEADER = ["t_s", "mx", "my", "mz"]
+_SPEC_HEADER = (["t_s"] + [f"f{i}" for i in range(1, 9)]
+                + ["clear", "nir", "flicker"])
+# Collector v0.2 streams (phone app; both optional, absent on the
+# tethered/Pi captures): the capture device's own metric trajectory
+# (poses.csv, backend world frame, metres, quat xyzw, per-row
+# tracking state) and per-frame camera state (frame_meta.csv).
+_POSES_HEADER = ["t_s", "tx", "ty", "tz", "qx", "qy", "qz", "qw", "tracking"]
+_POSES_HEADER_LEGACY = _POSES_HEADER[:-1]  # collector v0.1: no state column
+_FRAME_META_HEADER = ["frame", "t_s", "exposure_ns", "iso", "focus_m",
+                      "ae_state", "af_state"]
+
+
+# ---------------------------------------------------------------------------
+# Writers. Each takes plain numpy arrays / dicts and writes one file of
+# the format. The Pi program uses its own copies of these (it cannot
+# import this package); tests lock the two implementations to the same
+# bytes-level contract via the readers here.
+# ---------------------------------------------------------------------------
+
+def _fmt(x: float) -> str:
+    return f"{x:.6f}"
+
+
+def write_meta(folder: Path, meta: dict) -> Path:
+    folder = Path(folder)
+    folder.mkdir(parents=True, exist_ok=True)
+    meta = dict(meta)
+    meta.setdefault("format_version", FORMAT_VERSION)
+    path = folder / "meta.json"
+    path.write_text(json.dumps(meta, ensure_ascii=False, indent=2))
+    return path
+
+
+def write_frames(folder: Path, frame_ids: np.ndarray, t_s: np.ndarray,
+                 files: list) -> Path:
+    path = Path(folder) / "frames.csv"
+    with open(path, "w", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(_FRAMES_HEADER)
+        for i, t, name in zip(frame_ids, t_s, files):
+            w.writerow([int(i), _fmt(float(t)), name])
+    return path
+
+
+def write_imu(folder: Path, t_s: np.ndarray, quat_wxyz: np.ndarray,
+              accel: np.ndarray, gyro: np.ndarray) -> Path:
+    """quat_wxyz: (N,4) scalar-first, world-from-device.
+    accel: (N,3) m/s^2 device frame incl. gravity. gyro: (N,3) rad/s."""
+    path = Path(folder) / "imu.csv"
+    with open(path, "w", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(_IMU_HEADER)
+        for t, q, a, g in zip(t_s, quat_wxyz, accel, gyro):
+            w.writerow([_fmt(float(t))] + [_fmt(float(v)) for v in q]
+                       + [_fmt(float(v)) for v in a]
+                       + [_fmt(float(v)) for v in g])
+    return path
+
+
+def write_tof(folder: Path, t_s: np.ndarray, zones_mm: np.ndarray) -> Path:
+    """zones_mm: (N,64) integer millimetres, TOF_INVALID for no target."""
+    zones_mm = np.asarray(zones_mm)
+    if zones_mm.ndim != 2 or zones_mm.shape[1] != TOF_GRID * TOF_GRID:
+        raise ValueError(f"zones_mm must be (N,{TOF_GRID * TOF_GRID})")
+    path = Path(folder) / "tof.csv"
+    with open(path, "w", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(_TOF_HEADER)
+        for t, row in zip(t_s, zones_mm):
+            w.writerow([_fmt(float(t))] + [str(int(v)) for v in row])
+    return path
+
+
+def _write_wide(folder: Path, name: str, header: list, t_s: np.ndarray,
+                data: np.ndarray) -> Path:
+    data = np.asarray(data, dtype=np.float64)
+    if data.ndim != 2 or data.shape[1] != len(header) - 1:
+        raise ValueError(f"{name} data must be (N,{len(header) - 1})")
+    path = Path(folder) / name
+    with open(path, "w", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(header)
+        for t, row in zip(t_s, data):
+            w.writerow([_fmt(float(t))] + [_fmt(float(v)) for v in row])
+    return path
+
+
+def write_env(folder: Path, t_s: np.ndarray, env: np.ndarray) -> Path:
+    """env: (N,4) temp_c, humidity_pct, pressure_hpa, gas_ohm (raw)."""
+    return _write_wide(folder, "env.csv", _ENV_HEADER, t_s, env)
+
+
+def write_mag(folder: Path, t_s: np.ndarray, mag: np.ndarray) -> Path:
+    """mag: (N,3) raw magnetometer counts in the device frame."""
+    return _write_wide(folder, "mag.csv", _MAG_HEADER, t_s, mag)
+
+
+def write_spec(folder: Path, t_s: np.ndarray, counts: np.ndarray) -> Path:
+    """counts: (N,11) AS7341-order raw counts [F1..F8, Clear, NIR, Flicker]."""
+    return _write_wide(folder, "spec.csv", _SPEC_HEADER, t_s, counts)
+
+
+# ---------------------------------------------------------------------------
+# Reader.
+# ---------------------------------------------------------------------------
+
+_QUARTER_TURNS = (0, 90, 180, 270)
+
+
+def parse_orientation(meta: dict) -> dict | None:
+    """Validate meta.json's optional "orientation" block (written by
+    the collector at record time; see the module header) and return
+    it normalized, or None when the capture predates the block.
+
+    Strict on purpose: the block exists so orientation never has to
+    be guessed downstream, so a block that contradicts itself --
+    unknown class, a rotation that is not a quarter turn, or a class
+    that disagrees with the coded size under that rotation -- is a
+    format error, not something to silently paper over.
+    """
+    raw = meta.get("orientation")
+    if raw is None:
+        return None
+    if not isinstance(raw, dict):
+        raise ValueError("orientation block is not an object")
+    label = raw.get("capture_orientation")
+    if label not in ("portrait", "landscape"):
+        raise ValueError(f"bad capture_orientation {label!r}")
+    rotation = raw.get("video_rotation_deg")
+    if rotation not in _QUARTER_TURNS:
+        raise ValueError(f"bad video_rotation_deg {rotation!r}")
+    out = {"capture_orientation": label,
+           "video_rotation_deg": int(rotation)}
+    display = raw.get("display_rotation_deg")
+    if display is not None:
+        if display not in _QUARTER_TURNS:
+            raise ValueError(f"bad display_rotation_deg {display!r}")
+        out["display_rotation_deg"] = int(display)
+    width, height = raw.get("video_width"), raw.get("video_height")
+    if width is not None or height is not None:
+        if not (isinstance(width, int) and isinstance(height, int)
+                and width > 0 and height > 0):
+            raise ValueError(
+                f"bad orientation video size {width!r}x{height!r}")
+        up_w, up_h = (height, width) if rotation in (90, 270) \
+            else (width, height)
+        expected = "portrait" if up_h > up_w else "landscape"
+        if expected != label:
+            raise ValueError(
+                f"capture_orientation {label!r} contradicts coded size "
+                f"{width}x{height} at rotation {rotation}")
+        out["video_width"] = width
+        out["video_height"] = height
+    return out
+
+
+class Capture:
+    """A read capture folder. Arrays are float64 except tof_mm (int32).
+
+    frames: dict file name -> t_s (plus .frame_t / .frame_files arrays)
+    imu_t, imu_quat (N,4 wxyz world-from-device), imu_accel, imu_gyro
+    tof_t, tof_mm (M,64)
+    Optional streams: env_t/env (N,4), mag_t/mag (N,3), spec_t/spec (N,11)
+    -- each pair is None when the capture predates that stream.
+    Collector streams: traj_t/traj_pos (N,3 m)/traj_quat_xyzw/traj_tracking
+    from poses.csv, and fm_* per-frame camera state from frame_meta.csv --
+    None when the capture has no such stream.
+    cam_from_device: (3,3) from meta calibration, or None.
+    """
+
+    def __init__(self, folder: Path):
+        folder = Path(folder)
+        self.folder = folder
+        self.meta = json.loads((folder / "meta.json").read_text())
+        if int(self.meta.get("format_version", 0)) != FORMAT_VERSION:
+            raise ValueError(
+                f"unsupported format_version {self.meta.get('format_version')}")
+
+        with open(folder / "frames.csv", newline="") as f:
+            rows = list(csv.reader(f))
+        assert rows[0] == _FRAMES_HEADER, "frames.csv header mismatch"
+        self.frame_ids = np.array([int(r[0]) for r in rows[1:]], dtype=np.int64)
+        self.frame_t = np.array([float(r[1]) for r in rows[1:]])
+        self.frame_files = [r[2] for r in rows[1:]]
+        self.frame_time = {name: t for name, t in
+                           zip(self.frame_files, self.frame_t)}
+
+        with open(folder / "imu.csv", newline="") as f:
+            rows = list(csv.reader(f))
+        assert rows[0] == _IMU_HEADER, "imu.csv header mismatch"
+        imu = np.array([[float(v) for v in r] for r in rows[1:]])
+        self.imu_t = imu[:, 0]
+        self.imu_quat = imu[:, 1:5]
+        self.imu_accel = imu[:, 5:8]
+        self.imu_gyro = imu[:, 8:11]
+
+        with open(folder / "tof.csv", newline="") as f:
+            rows = list(csv.reader(f))
+        assert rows[0] == _TOF_HEADER, "tof.csv header mismatch"
+        self.tof_t = np.array([float(r[0]) for r in rows[1:]])
+        self.tof_mm = np.array([[int(v) for v in r[1:]] for r in rows[1:]],
+                               dtype=np.int32)
+
+        # Optional streams (2026-11-01): present on the expanded head,
+        # absent in earlier captures -> attributes stay None.
+        self.env_t = self.env = None
+        self.mag_t = self.mag = None
+        self.spec_t = self.spec = None
+        for fname, header, t_attr, d_attr in (
+                ("env.csv", _ENV_HEADER, "env_t", "env"),
+                ("mag.csv", _MAG_HEADER, "mag_t", "mag"),
+                ("spec.csv", _SPEC_HEADER, "spec_t", "spec")):
+            path = folder / fname
+            if not path.exists():
+                continue
+            with open(path, newline="") as f:
+                rows = list(csv.reader(f))
+            assert rows[0] == header, f"{fname} header mismatch"
+            arr = np.array([[float(v) for v in r] for r in rows[1:]])
+            setattr(self, t_attr, arr[:, 0])
+            setattr(self, d_attr, arr[:, 1:])
+
+        # Collector trajectory + per-frame camera state (v0.2).
+        # Each group stays None when the capture has no such stream.
+        self.traj_t = self.traj_pos = self.traj_quat_xyzw = None
+        self.traj_tracking = None
+        poses_path = folder / "poses.csv"
+        if poses_path.exists():
+            with open(poses_path, newline="") as f:
+                rows = list(csv.reader(f))
+            if rows[0] == _POSES_HEADER:
+                states = [r[8] for r in rows[1:]]
+                nums = [[float(v) for v in r[:8]] for r in rows[1:]]
+            elif rows[0] == _POSES_HEADER_LEGACY:
+                states = ["UNKNOWN"] * (len(rows) - 1)
+                nums = [[float(v) for v in r] for r in rows[1:]]
+            else:
+                raise AssertionError("poses.csv header mismatch")
+            arr = np.array(nums, dtype=np.float64)
+            self.traj_t = arr[:, 0]
+            self.traj_pos = arr[:, 1:4]
+            self.traj_quat_xyzw = arr[:, 4:8]
+            self.traj_tracking = states
+
+        self.fm_frame = self.fm_t = None
+        self.fm_exposure_ns = self.fm_iso = self.fm_focus_m = None
+        self.fm_ae_state = self.fm_af_state = None
+        fm_path = folder / "frame_meta.csv"
+        if fm_path.exists():
+            with open(fm_path, newline="") as f:
+                rows = list(csv.reader(f))
+            assert rows[0] == _FRAME_META_HEADER, \
+                "frame_meta.csv header mismatch"
+            self.fm_frame = np.array([int(r[0]) for r in rows[1:]],
+                                     dtype=np.int64)
+            fm = np.array([[float(v) for v in r[1:]] for r in rows[1:]])
+            self.fm_t = fm[:, 0]
+            self.fm_exposure_ns = fm[:, 1].astype(np.int64)
+            self.fm_iso = fm[:, 2].astype(np.int64)
+            self.fm_focus_m = fm[:, 3]
+            self.fm_ae_state = fm[:, 4].astype(np.int64)
+            self.fm_af_state = fm[:, 5].astype(np.int64)
+
+        cal = self.meta.get("calibration", {})
+        R = cal.get("cam_from_device")
+        self.cam_from_device = (np.array(R, dtype=np.float64)
+                                if R is not None else None)
+        # Record-time orientation statement (collector v0.10+);
+        # None on captures that predate the block. Validated --
+        # a self-contradictory block fails the read (see
+        # parse_orientation).
+        self.orientation = parse_orientation(self.meta)
+        self.tof_fov_deg = float(self.meta.get("tof", {}).get("fov_deg", 45.0))
+
+        stamp_sets = [("frames", self.frame_t), ("imu", self.imu_t),
+                      ("tof", self.tof_t)]
+        for name, t in (("env", self.env_t), ("mag", self.mag_t),
+                        ("spec", self.spec_t), ("poses", self.traj_t),
+                        ("frame_meta", self.fm_t)):
+            if t is not None:
+                stamp_sets.append((name, t))
+        for name, arr in stamp_sets:
+            if len(arr) > 1 and np.any(np.diff(arr) <= 0):
+                raise ValueError(f"{name} timestamps not strictly increasing")
+
+    def imu_rotation(self) -> Rotation:
+        """World-from-device rotations at imu_t (scipy, xyzw order)."""
+        return Rotation.from_quat(self.imu_quat[:, [1, 2, 3, 0]])
+
+    def trajectory_length_m(self, only_tracking: bool = True) -> float:
+        """Path length of the recorded device trajectory, in metres.
+
+        With only_tracking, only segments whose BOTH endpoints were
+        TRACKING count — a LIMITED/STOPPED stretch contributes
+        nothing rather than a guessed distance. NaN when the capture
+        has no trajectory stream.
+        """
+        if self.traj_pos is None or len(self.traj_pos) < 2:
+            return float("nan")
+        seg = np.linalg.norm(np.diff(self.traj_pos, axis=0), axis=1)
+        if only_tracking and self.traj_tracking is not None:
+            ok = np.array([a == "TRACKING" and b == "TRACKING" for a, b in
+                           zip(self.traj_tracking[:-1],
+                               self.traj_tracking[1:])])
+            seg = seg[ok]
+        return float(seg.sum())
+
+    def exposure_report(self) -> dict | None:
+        """Per-frame exposure summary from frame_meta.csv (measured
+        camera state, not an estimate): median/p90 shutter time,
+        the share of frames slower than 1/60 s (hand-shake blur
+        territory at walking speed), and median ISO. None when the
+        capture has no frame_meta stream; rows the device did not
+        report (exposure -1) are excluded."""
+        if self.fm_exposure_ns is None:
+            return None
+        exp = self.fm_exposure_ns[self.fm_exposure_ns > 0]
+        if len(exp) == 0:
+            return None
+        ms = exp / 1e6
+        iso = self.fm_iso[self.fm_iso > 0]
+        return {
+            "frames": int(len(exp)),
+            "median_exposure_ms": float(np.median(ms)),
+            "p90_exposure_ms": float(np.percentile(ms, 90)),
+            "frac_slower_than_1_60": float(np.mean(exp > 1e9 / 60.0)),
+            "median_iso": float(np.median(iso)) if len(iso) else None,
+        }
+
+
+def read_capture(folder: Path) -> Capture:
+    return Capture(folder)
+
+
+# ---------------------------------------------------------------------------
+# ToF zone model. Shared by the simulator (device model) and the
+# importer: given a point cloud in CAMERA coordinates, the distance an
+# ideal 8x8 imager would report per zone -- the low-percentile range of
+# the points falling in the zone's angular cell (a point cloud's
+# approximation of "nearest surface in the cone").
+# ---------------------------------------------------------------------------
+
+def zone_distances_from_points(points_cam: np.ndarray, fov_deg: float = 45.0,
+                               percentile: float = 10.0,
+                               min_points: int = 3) -> np.ndarray:
+    """points_cam: (N,3) OpenCV camera frame (z forward). Returns (64,)
+    float distances in the same units as the points, NaN where the zone
+    has too few points."""
+    out = np.full(TOF_GRID * TOF_GRID, np.nan)
+    if len(points_cam) == 0:
+        return out
+    z = points_cam[:, 2]
+    keep = z > 0.05
+    if not np.any(keep):
+        return out
+    p = points_cam[keep]
+    half = np.tan(np.radians(fov_deg) / 2.0)
+    u = p[:, 0] / p[:, 2] / half  # -1..1 across the FoV
+    v = p[:, 1] / p[:, 2] / half  # camera y is DOWN: v>0 is lower half
+    inside = (np.abs(u) <= 1.0) & (np.abs(v) <= 1.0)
+    if not np.any(inside):
+        return out
+    p, u, v = p[inside], u[inside], v[inside]
+    col = np.minimum(((u + 1.0) * 0.5 * TOF_GRID).astype(int), TOF_GRID - 1)
+    row = np.minimum(((v + 1.0) * 0.5 * TOF_GRID).astype(int), TOF_GRID - 1)
+    zone = row * TOF_GRID + col
+    dist = np.linalg.norm(p, axis=1)
+    order = np.argsort(zone, kind="stable")
+    zone_s, dist_s = zone[order], dist[order]
+    bounds = np.searchsorted(zone_s, np.arange(TOF_GRID * TOF_GRID + 1))
+    for zi in range(TOF_GRID * TOF_GRID):
+        seg = dist_s[bounds[zi]:bounds[zi + 1]]
+        if len(seg) >= min_points:
+            out[zi] = np.percentile(seg, percentile)
+    return out
+
+
+# ---------------------------------------------------------------------------
+# Landing a capture's record inside a pipeline job, and the stored-frame
+# calibration convention. The importers (CLI import, the desktop app)
+# share import_capture_record; fuse reads the landed copy back with
+# read_job_capture. The video itself is NOT copied -- the job already
+# references it, and the record is the small text half of the capture.
+# ---------------------------------------------------------------------------
+
+RECORD_FILES = ("meta.json", "frames.csv", "imu.csv", "tof.csv",
+                "env.csv", "mag.csv", "spec.csv", "poses.csv",
+                "frame_meta.csv")
+JOB_SENSOR_DIRNAME = "sensor_record"
+
+
+def is_capture_folder(folder: Path) -> bool:
+    """True when folder carries the record half of a capture (the
+    three files no capture exists without)."""
+    folder = Path(folder)
+    return all((folder / name).exists()
+               for name in ("meta.json", "frames.csv", "imu.csv"))
+
+
+def import_capture_record(src_dir: Path, job_dir: Path) -> dict | None:
+    """Copy a capture folder's sensor record into
+    job_dir/JOB_SENSOR_DIRNAME, byte for byte (the record format is
+    the folder itself, so the landed copy reads back with
+    read_capture unchanged). Returns an info dict for the job record,
+    or None when src_dir is not a capture folder -- plain videos and
+    ordinary folders import exactly as before.
+    """
+    src_dir = Path(src_dir)
+    if not is_capture_folder(src_dir):
+        return None
+    # The record-time orientation statement is validated and passed
+    # through into the job record at import, so the job states the
+    # capture's orientation outright. A malformed block fails the
+    # import loudly instead of landing an ambiguous record.
+    meta = json.loads((src_dir / "meta.json").read_text())
+    orientation = parse_orientation(meta)
+    dest = Path(job_dir) / JOB_SENSOR_DIRNAME
+    dest.mkdir(parents=True, exist_ok=True)
+    copied = []
+    for name in RECORD_FILES:
+        src = src_dir / name
+        if src.exists():
+            shutil.copyfile(src, dest / name)
+            copied.append(name)
+    info = {"sensor_record": JOB_SENSOR_DIRNAME,
+            "sensor_files": copied,
+            "has_imu": "imu.csv" in copied}
+    if orientation is not None:
+        info["capture_orientation"] = orientation["capture_orientation"]
+        info["video_rotation_deg"] = orientation["video_rotation_deg"]
+    return info
+
+
+def read_job_capture(job_dir: Path) -> Capture | None:
+    """The job's landed sensor record, or None -- any gap (no record,
+    half-copied folder, unreadable file) is a quiet None, never an
+    exception: sensor orientation is an upgrade, not a requirement."""
+    folder = Path(job_dir) / JOB_SENSOR_DIRNAME
+    if not folder.is_dir():
+        return None
+    try:
+        return read_capture(folder)
+    except Exception:
+        return None
+
+
+def stored_frame_roll_deg(capture: Capture) -> float:
+    """In-plane roll (degrees) between the frame cam_from_device
+    describes and the frames the pipeline actually poses.
+
+    Proven on the real collector (orientation audit, 2026-11-04,
+    experiments/orientation_check): meta's cam_from_device targets
+    the camera's NATIVE sensor frame, while the stored landscape
+    frames are rotated -90 deg in-plane against it. Measured gravity
+    vs the image-down axis of the posed frames: 87.2 deg with the raw
+    calibration, 5.6 deg once the roll is applied (the other sign
+    gives ~177 deg -- decisively wrong). The collector's meta records
+    the sensor's mounting orientation (android.sensor_orientation_deg
+    = 90 on the OnePlus), so the stored-frame roll is its negation.
+    Captures without that record (the Pi program, the simulator)
+    store frames in the native frame already: roll 0, calibration
+    untouched.
+    """
+    android = capture.meta.get("android") or {}
+    deg = android.get("sensor_orientation_deg")
+    if deg is None:
+        return 0.0
+    return -float(deg)
+
+
+def cam_from_device_stored(capture: Capture) -> np.ndarray | None:
+    """cam_from_device corrected for the stored frames' in-plane
+    roll (stored_frame_roll_deg): R_stored = Rz(roll) @ R_native.
+    This is the calibration that pairs with COLMAP poses of the
+    stored frames; the raw cam_from_device pairs with native-frame
+    imagery only. None when the capture carries no calibration."""
+    R = capture.cam_from_device
+    if R is None:
+        return None
+    roll = stored_frame_roll_deg(capture)
+    if roll == 0.0:
+        return R
+    a = np.radians(roll)
+    Rz = np.array([[np.cos(a), -np.sin(a), 0.0],
+                   [np.sin(a), np.cos(a), 0.0],
+                   [0.0, 0.0, 1.0]])
+    return Rz @ R
+
+
+# ---------------------------------------------------------------------------
+# Payoff 1: LEVEL from the IMU.
+# ---------------------------------------------------------------------------
+
+def _quat_wxyz_to_matrix(q: np.ndarray) -> np.ndarray:
+    return Rotation.from_quat(np.asarray(q)[..., [1, 2, 3, 0]]).as_matrix()
+
+
+def register_imu_frame(capture: Capture, poses: dict,
+                       cam_from_device: np.ndarray,
+                       frame_times: dict | None = None) -> np.ndarray:
+    """Rotation R_align mapping the IMU's boot world frame onto the
+    reconstruction's world frame (v_recon = R_align @ v_imu_world).
+
+    Pairs each reconstruction pose (cam_from_world, OpenCV convention,
+    named frames) with the IMU orientation interpolated at that frame's
+    capture time, converts both to world-from-device in their own
+    frames (R_wd_recon = R_wc @ cam_from_device), and solves the
+    orthogonal Procrustes problem in closed form (Markley's method) --
+    one global least-squares objective over all pairs, no voting.
+
+    Pairing times come from capture.frame_time (the capture's own
+    frame names) unless frame_times (name -> t_s) is given. The
+    override exists for pipeline jobs: stage_extract renumbers the
+    frames it pulls from the video, so a job pose named
+    frame_00004.jpg is NOT the capture's fourth frame -- production
+    passes the extraction-time map (frame_capture_times.json) instead
+    of silently pairing each pose with the wrong instant.
+    """
+    pairs_recon, pairs_imu = [], []
+    slerp = Slerp(capture.imu_t, capture.imu_rotation())
+    for name, pose in poses.items():
+        t = (frame_times.get(name) if frame_times is not None
+             else capture.frame_time.get(name))
+        q = pose.get("cam_from_world_quat_xyzw")
+        if t is None or q is None:
+            continue
+        if t < capture.imu_t[0] or t > capture.imu_t[-1]:
+            continue
+        R_cw = _quat_wxyz_to_matrix(np.array(
+            [q[3], q[0], q[1], q[2]]))  # poses store xyzw; to wxyz
+        R_wc = R_cw.T
+        pairs_recon.append(R_wc @ cam_from_device)
+        pairs_imu.append(slerp([t]).as_matrix()[0])
+    if len(pairs_recon) < 3:
+        raise ValueError("too few pose/IMU pairs to register frames")
+    A = np.stack(pairs_recon)   # world-from-device, recon frame
+    B = np.stack(pairs_imu)     # world-from-device, IMU boot frame
+    M = np.einsum("nij,nkj->ik", A, B)  # sum_i A_i @ B_i^T
+    U, _, Vt = np.linalg.svd(M)
+    D = np.diag([1.0, 1.0, np.sign(np.linalg.det(U @ Vt))])
+    return U @ D @ Vt
+
+
+def estimate_up_from_imu(capture: Capture, R_align: np.ndarray) -> np.ndarray:
+    """Unit world-up vector in the reconstruction frame.
+
+    The format's accelerometer stream is specific force (see the
+    module header: a resting device reports ~+9.81 along its up
+    axis), so each sample is the reaction to gravity plus walking
+    motion, written in the device frame. Rotating every sample into
+    the reconstruction frame with the registered orientation stream
+    and averaging over the whole capture cancels the zero-mean
+    walking motion; what remains points along UP directly -- no
+    negation. (An earlier version negated the mean, matching the
+    simulated capture's then gravity-vector convention; both real
+    writers -- the Pi's BNO055 and Android TYPE_ACCELEROMETER --
+    report specific force, and on the 2026-11-03 phone capture the
+    rotated mean sits 0.2 deg off ENU +Z, i.e. up.)
+    """
+    R_wd = capture.imu_rotation().as_matrix()          # boot frame
+    R_wd_recon = np.einsum("ij,njk->nik", R_align, R_wd)
+    a_recon = np.einsum("nij,nj->ni", R_wd_recon, capture.imu_accel)
+    a_mean = a_recon.mean(axis=0)
+    return a_mean / np.linalg.norm(a_mean)
+
+
+# ---------------------------------------------------------------------------
+# Payoff 2: TRUE SCALE from the ToF stream.
+# ---------------------------------------------------------------------------
+
+def _camera_centers_and_rotations(poses: dict):
+    """name -> (center, cam_from_world matrix) in reconstruction units."""
+    out = {}
+    for name, pose in poses.items():
+        q = pose.get("cam_from_world_quat_xyzw")
+        t = pose.get("cam_from_world_t")
+        if q is None or t is None:
+            continue
+        R_cw = _quat_wxyz_to_matrix(np.array([q[3], q[0], q[1], q[2]]))
+        center = -R_cw.T @ np.array(t, dtype=np.float64)
+        out[name] = (center, R_cw)
+    return out
+
+
+def estimate_scale_from_tof(capture: Capture, poses: dict,
+                            points: np.ndarray,
+                            max_time_gap_s: float = 0.75,
+                            tof_stride: int = 1) -> dict:
+    """Metres per reconstruction unit, from ToF vs reconstruction rays.
+
+    Each ToF frame is paired with the reconstruction's camera pose AT
+    the ToF timestamp: poses come from running the pipeline on the
+    captured video (same clock), and the trajectory between pose knots
+    is interpolated (lerp centres, slerp orientations -- the same
+    continuous-route construction the replay stage uses). Pairing a
+    moving sensor with the NEAREST knot instead measurably biases the
+    fit, so interpolation is the honest correspondence. For every zone
+    valid on both sides -- the sensor saw a target AND the cloud has
+    geometry in that zone -- the pair (scene distance s, measured
+    distance m in metres) enters one global least-squares fit through
+    the origin: scale = sum(s*m) / sum(s^2). Pairs beyond 3 robust
+    sigmas of the fit are dropped and the fit repeated once (the
+    pipeline's usual one round of principled trimming, identical in
+    spirit to fuse's anchor fit; it removes zones whose surface the
+    cloud does not actually contain, e.g. glass).
+    """
+    cams = _camera_centers_and_rotations(poses)
+    if not cams:
+        raise ValueError("no usable poses")
+    names = sorted((n for n in cams if n in capture.frame_time),
+                   key=lambda n: capture.frame_time[n])
+    if len(names) < 2:
+        raise ValueError("too few poses with capture times")
+    pose_t = np.array([capture.frame_time[n] for n in names])
+    centers = np.stack([cams[n][0] for n in names])
+    slerp_cw = Slerp(pose_t, Rotation.from_matrix(
+        np.stack([cams[n][1] for n in names])))
+
+    s_all, m_all = [], []
+    used_frames = 0
+    for t_tof, zones in list(zip(capture.tof_t, capture.tof_mm))[::tof_stride]:
+        if t_tof < pose_t[0] - max_time_gap_s or \
+                t_tof > pose_t[-1] + max_time_gap_s:
+            continue
+        tc = float(np.clip(t_tof, pose_t[0], pose_t[-1]))
+        center = np.array([np.interp(tc, pose_t, centers[:, a])
+                           for a in range(3)])
+        R_cw = slerp_cw([tc]).as_matrix()[0]
+        scene = zone_distances_from_points((points - center) @ R_cw.T,
+                                           fov_deg=capture.tof_fov_deg)
+        meas = zones.astype(np.float64) / 1000.0
+        ok = (zones > 0) & np.isfinite(scene)
+        if np.any(ok):
+            used_frames += 1
+            s_all.append(scene[ok])
+            m_all.append(meas[ok])
+    if not s_all:
+        raise ValueError("no overlapping ToF/reconstruction zones")
+    s = np.concatenate(s_all)
+    m = np.concatenate(m_all)
+
+    def _fit(s, m):
+        return float(np.sum(s * m) / np.sum(s * s))
+
+    scale = _fit(s, m)
+    resid = m - scale * s
+    sigma = 1.4826 * np.median(np.abs(resid - np.median(resid))) + 1e-9
+    keep = np.abs(resid) <= 3.0 * sigma
+    dropped = int((~keep).sum())
+    if dropped and keep.sum() >= 10:
+        s, m = s[keep], m[keep]
+        scale = _fit(s, m)
+        resid = m - scale * s
+    return {
+        "scale_m_per_unit": scale,
+        "pairs": int(len(s)),
+        "pairs_dropped": dropped,
+        "tof_frames_used": used_frames,
+        "median_ratio": float(np.median(m / s)),
+        "residual_rms_m": float(np.sqrt(np.mean(resid ** 2))),
+        "residual_median_abs_m": float(np.median(np.abs(resid))),
+    }
