@@ -9,6 +9,7 @@ import json
 import sys
 import tempfile
 import time
+from unittest.mock import patch
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -74,6 +75,18 @@ def main():
     check("poll reports idle state",
           poll["busy"] is False and poll["hasJob"] is False)
 
+    bridge._publish_preview(b"frame one")
+    first = bridge.poll(-1)
+    check("first poll delivers the current preview", bool(first.get("preview")))
+    check("acknowledged preview is omitted", "preview" not in bridge.poll(first["previewSeq"]))
+    bridge._publish_preview(b"frame two")
+    hidden = bridge.poll(first["previewSeq"], False)
+    restored = bridge.poll(first["previewSeq"])
+    check("hidden poll skips image and restore catches up",
+          "preview" not in hidden and restored["preview"] != first["preview"])
+    check("legacy callers still receive complete previews",
+          bridge.poll()["preview"] == bridge.get_preview_frame()["data"] == restored["preview"])
+
     # a job with no outputs cannot open a scene
     bridge.job = running
     check("open_scene on unfinished job is a no-op",
@@ -113,9 +126,9 @@ def main():
           and hop["tag_name"] == "v0.5.1")
     check("hop at the top is None",
           updater.pick_hop(releases, "0.5.1") is None)
-    check("manual check never raises and answers honestly",
-          bridge.manual_check_update()["status"] in
-          ("update", "latest", "error"))
+    with patch.object(updater, "_urlopen_with", side_effect=OSError("offline")):
+        check("manual check reports an offline network",
+              bridge.manual_check_update()["status"] == "error")
 
     # Route cascade: direct dead, first candidate dead, second
     # answers -> it wins, is cached, and is reported as auto-found.

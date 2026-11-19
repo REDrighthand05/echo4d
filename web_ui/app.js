@@ -333,7 +333,7 @@ function buildField() {
 /* plus one render draw. No buffer is re-uploaded per frame.         */
 /* ------------------------------------------------------------------ */
 let gl = null, gpuOK = false, gpuTried = false;
-const gpu = {};
+const gpu = { scaleX: 1, scaleY: 1 };
 const GPU_VS = `#version 300 es
 void main() {
   vec2 p = vec2(float((gl_VertexID << 1) & 2), float(gl_VertexID & 2));
@@ -344,6 +344,7 @@ precision highp float;
 uniform sampler2D uS0, uS1, uA0, uA1, uA2;
 uniform float uDt, uAmbT, uAmp;
 uniform vec3 uMouse;
+uniform vec2 uResizeScale;
 layout(location = 0) out vec4 o0;
 layout(location = 1) out vec4 o1;
 void main() {
@@ -353,6 +354,8 @@ void main() {
   vec4 a0 = texelFetch(uA0, ij, 0);
   vec4 a1 = texelFetch(uA1, ij, 0);
   vec4 a2 = texelFetch(uA2, ij, 0);
+  st0.xy *= uResizeScale;
+  st1.xy *= uResizeScale;
   float x = st0.x, y = st0.y, z = st0.z;
   float vx = st1.x, vy = st1.y, vz = st1.z;
   float driftX = sin(uAmbT * 0.045 + a1.x) * 15.0 * uAmp;
@@ -500,7 +503,7 @@ function gpuEnsure() {
   }
   gpu.u = {};
   for (const name of ["uS0", "uS1", "uA0", "uA1", "uA2",
-                      "uDt", "uAmbT", "uAmp", "uMouse"])
+                      "uDt", "uAmbT", "uAmp", "uMouse", "uResizeScale"])
     gpu.u["p_" + name] = gl.getUniformLocation(gpu.phys, name);
   for (const name of ["uS0", "uA1", "uA2", "uA3",
                       "uViewport", "uAmbT", "uAmp", "uMistSize", "uCount"])
@@ -513,7 +516,7 @@ function gpuEnsure() {
   gpuOK = true;
   return true;
 }
-function gpuPackStatics() {
+function gpuPackStatics(homesOnly = false) {
   const n = beads.length, side = gpu.side, out = [];
   const packs = [
     b => [b.hx, b.hy, b.hz, b.phase],
@@ -526,6 +529,7 @@ function gpuPackStatics() {
     const arr = new Float32Array(side * side * 4);
     beads.forEach((b, i) => arr.set(pack(b), i * 4));
     out.push(arr);
+    if (homesOnly) break;
   }
   return out;
 }
@@ -533,6 +537,7 @@ function gpuUploadField() {
   const n = beads.length;
   gpu.side = Math.max(1, Math.ceil(Math.sqrt(n)));
   gpu.count = n;
+  gpu.scaleX = gpu.scaleY = 1;
   const side = gpu.side;
   for (const t of gpu.texStatics || []) gl.deleteTexture(t);
   for (const t of gpu.texState || []) gl.deleteTexture(t);
@@ -555,15 +560,15 @@ function gpuUploadStatics() {
      textures only -- the live state keeps its momentum */
   if (!gpuOK || !gpu.texStatics) return;
   const side = gpu.side;
-  gpuPackStatics().forEach((arr, k) => {
+  gpuPackStatics(true).forEach((arr, k) => {
     gl.bindTexture(gl.TEXTURE_2D, gpu.texStatics[k]);
     if (gpu.half) {
       const h = new Uint16Array(arr.length);
       for (let i = 0; i < arr.length; i++) h[i] = f32ToF16(arr[i]);
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA16F, side, side, 0,
+      gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, side, side,
                     gl.RGBA, gl.HALF_FLOAT, h);
     } else {
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, side, side, 0,
+      gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, side, side,
                     gl.RGBA, gl.FLOAT, arr);
     }
   });
@@ -597,6 +602,8 @@ function gpuStep(dt) {
     gl.activeTexture(gl.TEXTURE1);
     gl.bindTexture(gl.TEXTURE_2D, gpu.texState[r * 2 + 1]);
     gl.uniform1i(u.p_uS1, 1);
+    gl.uniform2f(u.p_uResizeScale, gpu.scaleX, gpu.scaleY);
+    gpu.scaleX = gpu.scaleY = 1;
     gl.uniform1f(u.p_uDt, sdt);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
     gpu.read = w;
@@ -653,10 +660,11 @@ function rescaleField() {
     b.rx *= sx; b.ry *= sy; b.x *= sx; b.y *= sy;
   }
   applyCalmZones();
-  /* the GPU state restarts from the (scaled) homes on a resize;
-     the field re-settles in a breath -- during a window drag
-     this keeps the wall from smearing */
-  if (gpuOK && gpu.texState) gpuUploadField();
+  // Apply the resize to the live positions on the next physics step.
+  if (gpuOK) {
+    gpu.scaleX *= sx;
+    gpu.scaleY *= sy;
+  }
 }
 
 function calmZones() {
@@ -801,7 +809,15 @@ window.addEventListener("focus", () => { pageFocused = true; wakeWall(); });
 window.addEventListener("blur", () => { pageFocused = false; });
 window.addEventListener("mousemove", e => { mouse = { x: e.clientX, y: e.clientY }; });
 window.addEventListener("mouseout", () => { mouse = null; });
-window.addEventListener("resize", rescaleField);
+let resizePending = false;
+window.addEventListener("resize", () => {
+  if (resizePending) return;
+  resizePending = true;
+  requestAnimationFrame(() => {
+    resizePending = false;
+    rescaleField();
+  });
+});
 
 /* working state: the graffiti recedes, the scene takes the wall */
 let holdTimer = null;
@@ -1459,9 +1475,18 @@ async function initBridge() {
   setStatus(snap.status, snap.frac);
   bridge.check_update();
   let wasBusy = false;
+  let polling = false;
   setInterval(async () => {
     let out;
-    try { out = await bridge.poll(); } catch (e) { return; }
+    if (polling) return;
+    polling = true;
+    try {
+      out = await bridge.poll(pvSeq, !document.hidden);
+    } catch (e) {
+      return;
+    } finally {
+      polling = false;
+    }
     state.busy = !!out.busy;
     state.depthReady = !!out.depthReady;
     if (out.busy && !wasBusy) setWorking(true);
@@ -1486,10 +1511,9 @@ async function initBridge() {
         : `有新版本 v${out.update.version}`;
     }
     if (out.depthUrl) showDepthVideo(out.depthUrl);
-    if (out.previewSeq !== pvSeq) {
+    if (out.preview && out.previewSeq !== pvSeq) {
       pvSeq = out.previewSeq;
-      const fr = await bridge.get_preview_frame();
-      if (fr && fr.data) drawPreview(fr.data);
+      drawPreview(out.preview);
     }
   }, 450);
 }

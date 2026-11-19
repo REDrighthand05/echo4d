@@ -1,0 +1,29 @@
+name: Desktop runtime regression
+on:
+  pull_request:
+    branches: [product/echo-scene]
+    paths:
+      - 'web_ui/**'
+      - 'web_app.py'
+      - 'echo_scene/depth_batch.py'
+      - 'tests/test_web_bridge.py'
+      - 'tests/test_window_resize.py'
+      - 'tests/test_depth_dispatch.py'
+      - '.github/workflows/desktop-runtime.yml'
+permissions:
+  contents: read
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 12
+    env:
+      PYTHONUTF8: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install numpy pillow onnxruntime-directml playwright
+      - run: python tests/test_web_bridge.py
+      - run: python tests/test_depth_dispatch.py
+      - run: python tests/test_window_resize.py
