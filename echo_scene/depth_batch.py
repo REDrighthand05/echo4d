@@ -57,9 +57,13 @@ def _infer_single(path, session):
 
 
 def make_session(model_path, providers=None):
-    if providers is not None:
-        return ort.InferenceSession(str(model_path), providers=providers)
-    return ort.InferenceSession(str(model_path))
+    if providers is None:
+        try:
+            from echo_engine.compute_policy import select_providers
+            providers = select_providers()
+        except Exception:
+            providers = list(ort.get_available_providers())
+    return ort.InferenceSession(str(model_path), providers=providers)
 
 
 # How many worker sessions a parallel depth run may open. One

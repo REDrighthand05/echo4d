@@ -11,6 +11,7 @@ an error that lists the places searched instead of one wrong guess.
 """
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
@@ -36,6 +37,10 @@ def candidate_model_dirs() -> list:
     add(here.parent / "models")                     # source tree / payload
     add(here.parent.parent / "models")              # install root
     add(Path.cwd() / "models")
+    env_dir = os.environ.get("ECHO_MODELS_DIR")
+    if env_dir:
+        add(env_dir)
+    add(Path("E:/ECHO_Experiment/models"))
     return dirs
 
 

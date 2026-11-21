@@ -8,5 +8,7 @@ artifacts/
 outputs/
 datasets/
 *.tar.gz
+models/
+*.onnx
 .openai/local*
 node_modules/

@@ -20,36 +20,43 @@ _SESSIONS: Dict[str, ort.InferenceSession] = {}
 # The active execution provider, recorded on first session creation
 # ("CPUExecutionProvider" until a GPU runtime is installed).
 ACTIVE_PROVIDER: str | None = None
+LAST_RECEIPT: dict | None = None
 
 
 def _provider_chain() -> list:
-    """Best-first providers the installed onnxruntime actually has.
-
-    CUDA first, then DirectML (any DX12 GPU on Windows, no toolkit
-    needed), then CPU. The bundled runtime is CPU-only today, so this
-    resolves to CPU there and lights up by itself the day the GPU
-    runtime ships in the installer. ECHO_DEPTH_PROVIDER pins a choice
-    (benchmarking / debugging)."""
-    available = list(ort.get_available_providers())
-    forced = os.environ.get("ECHO_DEPTH_PROVIDER")
-    if forced and forced in available:
-        return [forced]
-    chain = [p for p in ("CUDAExecutionProvider", "DmlExecutionProvider")
-             if p in available]
-    chain.append("CPUExecutionProvider")
-    return chain
+    """Best-first providers resolved through compute_policy."""
+    try:
+        from echo_engine.compute_policy import select_providers
+        return select_providers()
+    except Exception:
+        available = list(ort.get_available_providers())
+        forced = os.environ.get("ECHO_DEPTH_PROVIDER")
+        if forced and forced in available:
+            return [forced]
+        chain = [p for p in ("CUDAExecutionProvider", "DmlExecutionProvider")
+                 if p in available]
+        chain.append("CPUExecutionProvider")
+        return chain
 
 
 def _get_session(model_path: Union[str, os.PathLike]) -> ort.InferenceSession:
-    global ACTIVE_PROVIDER
+    global ACTIVE_PROVIDER, LAST_RECEIPT
     key = os.fspath(model_path)
     session = _SESSIONS.get(key)
     if session is None:
         if not os.path.isfile(key):
             raise FileNotFoundError(f"ONNX model file not found: {key}")
-        session = ort.InferenceSession(key, providers=_provider_chain())
-        ACTIVE_PROVIDER = session.get_providers()[0]
+        providers = _provider_chain()
+        session = ort.InferenceSession(key, providers=providers)
+        active = session.get_providers()[0]
+        ACTIVE_PROVIDER = active
         _SESSIONS[key] = session
+        LAST_RECEIPT = {
+            "requested_providers": providers,
+            "active_provider": active,
+            "session_providers": session.get_providers(),
+            "model_path": key,
+        }
     return session
 
 
