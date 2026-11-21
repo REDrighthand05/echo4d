@@ -144,13 +144,30 @@ def run_pipeline(video: Path, jobs_root: Path, log, job_sink=None) -> Path:
         ("正在生成过程回放", lambda: stage_preview(job)),
         ("正在生成路线回放", lambda: stage_replay(job)),
     ]
-    for label, fn in steps:
-        log(label + "…")
-        info = fn()
-        if isinstance(info, dict) and info.get("ok") is False:
-            raise RuntimeError(f"{label}失败：{info.get('reason', '未知原因')}")
-    log("完成。")
-    return job
+    import gc
+    current_label = "初始化"
+    try:
+        for label, fn in steps:
+            current_label = label
+            log(label + "…")
+            info = fn()
+            if isinstance(info, dict) and info.get("ok") is False:
+                raise RuntimeError(f"{label}失败：{info.get('reason', '未知原因')}")
+            # 及时释放重算子产生的临时内存，防止内存单调累积
+            gc.collect()
+        log("完成。")
+        return job
+    except Exception as exc:
+        try:
+            (job / "job.json").write_text(json.dumps(
+                {"stage": "failed", "ok": False, "status": "failed",
+                 "failed_step": current_label, "error": str(exc),
+                 "video": str(video),
+                 "failed_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")},
+                ensure_ascii=False, indent=2))
+        except Exception:
+            pass
+        raise
 
 
 def run_depth_video(video: Path, progress=None) -> Path:

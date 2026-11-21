@@ -171,12 +171,17 @@ def _stage_mesh_impl(job_dir: Path, o3d) -> dict:
     _write_vertices_bin(verts, vcols, job_dir / "mesh_vertices.bin")
     tris.astype("<u4").tofile(job_dir / "mesh_indices.bin")
 
+    verts_full = int(len(mesh.vertices))
+    del pcd, mesh, web
+    import gc
+    gc.collect()
+
     return {
         "stage": "mesh",
         "ok": True,
         "input_points": int(n_input),
         "points_used": int(len(points)),
-        "verts_full": int(len(mesh.vertices)),
+        "verts_full": verts_full,
         "tris_full": int(tris_full),
         "verts_web": int(len(verts)),
         "tris_web": int(len(tris)),

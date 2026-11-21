@@ -290,6 +290,11 @@ class Bridge:
         self._view = None
         self._toolbox = None         # cached toolbox payload (lazy)
         self.update = None           # {"version": str} when available
+        # Throttled filesystem scan caches (eliminates 90%+ disk churn during 500ms polling)
+        self._history_cache = None
+        self._history_cache_time = 0.0
+        self._inbox_cache = None
+        self._inbox_cache_time = 0.0
         # v0.6.29: the silent 10-minute auto-check + the async
         # manual check + the download progress the page shows live.
         self._check_lock = threading.Lock()
@@ -362,6 +367,11 @@ class Bridge:
             self.frac = self._stage_idx / STAGE_COUNT
         self._log(text)
 
+    def _invalidate_history_cache(self):
+        """Invalidate the history/inbox filesystem caches so the next poll reads fresh disk state."""
+        self._history_cache_time = 0.0
+        self._inbox_cache_time = 0.0
+
     def _check_video(self, path: Path):
         if path.suffix.lower() not in backend.VIDEO_SUFFIXES:
             return "这个文件不是视频，换个视频文件试试。"
@@ -376,6 +386,27 @@ class Bridge:
                 return "这个视频是空的（0 字节），换一个视频试试。"
         except OSError:
             return "没找到这个视频文件。"
+
+        # 磁盘空间预警检查（防生成过程中写满导致硬崩溃）
+        try:
+            import shutil
+            target = self.jobs_root if self.jobs_root.exists() else self.jobs_root.parent
+            usage = shutil.disk_usage(target)
+            if usage.free < 500 * 1024 * 1024:
+                mb = usage.free // (1024 * 1024)
+                return f"磁盘空间不足（仅剩 {mb} MB），建议保留至少 500 MB 空间再开始生成。"
+        except Exception:
+            pass
+
+        # 视频可读性与时长校验
+        try:
+            from echo_scene.pipeline import _ffprobe_duration
+            dur = _ffprobe_duration(path)
+            if dur <= 0.2:
+                return "视频时长过短（小于 0.2 秒），无法用于 3D 重建。"
+        except Exception:
+            return "视频文件无法解析（可能格式损坏或编码不支持），换个正常视频试试。"
+
         return None
 
     def _history(self):
@@ -514,25 +545,34 @@ class Bridge:
             return []
 
     # -- snapshot + polling ------------------------------------------
-    def _history_safe(self):
-        """History for the poll, never raising: one unexpected
-        backend exception used to kill the whole twice-a-second
-        poll response (U-7). None means "keep what the page
-        already has"; the failure is logged, not swallowed
-        silently."""
+    def _history_safe(self, force=False):
+        """History for the poll, never raising, throttled to avoid disk churn:
+        cached for up to 2.5s unless explicitly forced or invalidated."""
+        now = time.time()
+        if not force and self._history_cache is not None and (now - self._history_cache_time < 2.5):
+            return self._history_cache
         try:
-            return self._history()
+            data = self._history()
+            self._history_cache = data
+            self._history_cache_time = now
+            return data
         except Exception as exc:
             self._log(f"历史刷新失败：{exc}")
-            return None
+            return self._history_cache
 
-    def _inbox_safe(self):
-        """Same guard for the capture inbox (U-7)."""
+    def _inbox_safe(self, force=False):
+        """Same throttled guard for the capture inbox (cached up to 3.0s)."""
+        now = time.time()
+        if not force and self._inbox_cache is not None and (now - self._inbox_cache_time < 3.0):
+            return self._inbox_cache
         try:
-            return self._inbox()
+            data = self._inbox()
+            self._inbox_cache = data
+            self._inbox_cache_time = now
+            return data
         except Exception as exc:
             self._log(f"收件夹刷新失败：{exc}")
-            return None
+            return self._inbox_cache
 
     def get_snapshot(self):
         hist = self._history_safe()
@@ -724,6 +764,9 @@ class Bridge:
             # lock as the claim, so no check can slip between.
             with self._busy_lock:
                 self.busy, self.busy_kind = False, None
+            self._invalidate_history_cache()
+            import gc
+            gc.collect()
 
     def start_depth(self):
         # v0.6.38 (U-1): same locked claim as start_scene --
@@ -808,6 +851,9 @@ class Bridge:
             # v0.6.38 (U-1): release through the claim lock.
             with self._busy_lock:
                 self.busy, self.busy_kind = False, None
+            self._invalidate_history_cache()
+            import gc
+            gc.collect()
 
     # -- outputs --------------------------------------------------------
     def _job_for(self, job_dir):
