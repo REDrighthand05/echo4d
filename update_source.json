@@ -1,0 +1,11 @@
+{
+  "$comment": "ECHO 热更新源配置文件。新组织接手维护时，修改此文件或设置环境变量即可直接重定向更新源，无需重新编译客户端。",
+  "repo": "REDrighthand05/echo4d",
+  "relay_repo": "REDrighthand05/echo4d-update",
+  "relay_bases": [
+    "https://cdn.jsdelivr.net/gh/REDrighthand05/echo4d-update@main",
+    "https://redrighthand05.github.io/echo4d-update"
+  ],
+  "latest_url": null,
+  "releases_url": null
+}

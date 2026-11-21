@@ -77,12 +77,35 @@ def _tool_path(name: str) -> str:
 
 
 def _ffprobe_duration(video: Path) -> float:
-    out = subprocess.run(
-        [_tool_path("ffprobe"), "-v", "error", "-show_entries",
-         "format=duration", "-of", "json", str(video)],
-        capture_output=True, text=True, check=True,
-    )
-    return float(json.loads(out.stdout)["format"]["duration"])
+    # 优先解析 container 级别 duration，超时 15 秒防止挂死
+    try:
+        out = subprocess.run(
+            [_tool_path("ffprobe"), "-v", "error", "-show_entries",
+             "format=duration", "-of", "json", str(video)],
+            capture_output=True, text=True, check=True, timeout=15,
+        )
+        data = json.loads(out.stdout)
+        dur = data.get("format", {}).get("duration")
+        if dur is not None and str(dur).strip() not in ("N/A", ""):
+            return float(dur)
+    except Exception:
+        pass
+
+    # 兜底：尝试解析首个视频流 stream duration
+    try:
+        out = subprocess.run(
+            [_tool_path("ffprobe"), "-v", "error", "-select_streams", "v:0",
+             "-show_entries", "stream=duration", "-of", "json", str(video)],
+            capture_output=True, text=True, check=True, timeout=15,
+        )
+        data = json.loads(out.stdout)
+        streams = data.get("streams", [])
+        if streams and "duration" in streams[0] and str(streams[0]["duration"]).strip() not in ("N/A", ""):
+            return float(streams[0]["duration"])
+    except Exception:
+        pass
+
+    raise ValueError(f"无法读取视频有效时长: {video}")
 
 
 _HWACCEL_CACHE: list | None = None

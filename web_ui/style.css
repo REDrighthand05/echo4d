@@ -54,9 +54,9 @@
      v0.6.4's shipped numbers; app.js rewrites them live from
      the saved settings, and the -w set is the running state's
      pane, interpolated from the haze slider. */
-  --frost-blur: 2.5px;
-  --frost-veil: 0.26;
-  --frost-sat: 155%;
+  --frost-blur: 1.0px;
+  --frost-veil: 0.08;
+  --frost-sat: 175%;
   --frost-blur-w: 0.5px;
   --frost-veil-w: 0.05;
   --frost-sat-w: 108%;
@@ -141,6 +141,8 @@ body {
   filter: saturate(var(--graf-sat));
   opacity: var(--graf-opacity);
   pointer-events: none;
+  transform: translateZ(0);
+  will-change: transform, opacity;
   transition: opacity 1.4s ease;
 }
 #echo {
@@ -148,6 +150,8 @@ body {
   width: 100%; height: 100%;
   pointer-events: none;
   opacity: 0;
+  transform: translateZ(0);
+  will-change: transform, opacity;
   transition: opacity 1.4s ease, filter 1.2s ease;
 }
 #frost {
@@ -160,6 +164,8 @@ body {
   -webkit-backdrop-filter: blur(var(--frost-blur)) saturate(var(--frost-sat));
   backdrop-filter: blur(var(--frost-blur)) saturate(var(--frost-sat));
   pointer-events: none;
+  transform: translateZ(0);
+  will-change: backdrop-filter;
   transition: background 1.2s ease, backdrop-filter 1.2s ease,
               -webkit-backdrop-filter 1.2s ease;
 }
@@ -191,6 +197,7 @@ body.working #echo {
 #sheen {
   position: fixed; inset: 0; z-index: 1;
   overflow: hidden; pointer-events: none;
+  transform: translateZ(0);
   transition: opacity 1.2s ease;
 }
 #sheen::before {
@@ -202,16 +209,17 @@ body.working #echo {
     rgba(255, 255, 255, 0.24) 50%,
     rgba(255, 255, 255, 0.13) 58%,
     transparent);
-  transform: translateX(-170%) skewX(-8deg);
+  transform: translate3d(-170%, 0, 0) skewX(-8deg);
+  will-change: transform;
   animation: sheen-pass var(--sheen-dur) ease-in-out infinite;
 }
 /* the sheen pass is a setting now （常态动效 → 光泽扫过）:
    off -- or the whole ambient motion off -- and it never comes */
 body.no-sheen #sheen { display: none; }
 @keyframes sheen-pass {
-  0% { transform: translateX(-170%) skewX(-8deg); }
-  38% { transform: translateX(430%) skewX(-8deg); }
-  100% { transform: translateX(430%) skewX(-8deg); }
+  0% { transform: translate3d(-170%, 0, 0) skewX(-8deg); }
+  38% { transform: translate3d(430%, 0, 0) skewX(-8deg); }
+  100% { transform: translate3d(430%, 0, 0) skewX(-8deg); }
 }
 body.working #sheen { opacity: 0; }
 @media (prefers-reduced-motion: reduce) {
@@ -505,7 +513,11 @@ body.working #sheen { opacity: 0; }
   border-radius: 999px; border: 1px solid transparent;
   background: transparent; box-shadow: none;
   cursor: pointer; color: var(--ink);
-  transition: background 0.2s ease, opacity 0.2s ease;
+  transform: translateZ(0);
+  transition: background 0.15s ease, opacity 0.15s ease, transform 0.08s cubic-bezier(0.2, 0.9, 0.3, 1);
+}
+.btn:active:not(:disabled) {
+  transform: scale(0.97) translateZ(0);
 }
 .btn.small { height: 30px; font-size: 12px; padding: 0 12px; }
 .btn.primary {
@@ -610,8 +622,9 @@ body.working #sheen { opacity: 0; }
 /* -- log side panel ----------------------------------------------------- */
 #logpanel {
   position: fixed; top: 88px; right: 0; bottom: 0; width: 308px;
-  transform: translateX(100%);
-  transition: transform 0.35s cubic-bezier(0.22, 0.9, 0.3, 1);
+  transform: translate3d(100%, 0, 0);
+  will-change: transform;
+  transition: transform 0.22s cubic-bezier(0.2, 0.9, 0.3, 1);
   background: transparent;
   -webkit-backdrop-filter: blur(22px) saturate(150%);
   backdrop-filter: blur(22px) saturate(150%);
@@ -619,7 +632,7 @@ body.working #sheen { opacity: 0; }
   border-left: 1px solid var(--hairline);
   z-index: 30; display: flex; flex-direction: column;
 }
-#logpanel.open { transform: translateX(0); }
+#logpanel.open { transform: translate3d(0, 0, 0); }
 .log-head { font-size: 13px; font-weight: 600; letter-spacing: 0.03em; padding: 14px 16px 8px; }
 #logbody {
   flex: 1; overflow: auto; padding: 0 16px 14px;
@@ -726,16 +739,16 @@ body.working #sheen { opacity: 0; }
 #settings-page.leave .set-card { animation: card-out 0.23s ease-in both; }
 @keyframes veil-in { from { opacity: 0; } to { opacity: 1; } }
 @keyframes card-in {
-  from { opacity: 0; transform: translateY(34px) scale(0.92); }
-  to { opacity: 1; transform: translateY(0) scale(1); }
+  from { opacity: 0; transform: translate3d(0, 24px, 0) scale3d(0.96, 0.96, 1); }
+  to { opacity: 1; transform: translate3d(0, 0, 0) scale3d(1, 1, 1); }
 }
 @keyframes card-out {
-  from { opacity: 1; transform: translateY(0) scale(1); }
-  to { opacity: 0; transform: translateY(18px) scale(0.95); }
+  from { opacity: 1; transform: translate3d(0, 0, 0) scale3d(1, 1, 1); }
+  to { opacity: 0; transform: translate3d(0, 16px, 0) scale3d(0.97, 0.97, 1); }
 }
 @keyframes row-in {
-  from { opacity: 0; transform: translateY(16px); }
-  to { opacity: 1; transform: translateY(0); }
+  from { opacity: 0; transform: translate3d(0, 14px, 0); }
+  to { opacity: 1; transform: translate3d(0, 0, 0); }
 }
 @media (prefers-reduced-motion: reduce) {
   #settings-page.enter, #settings-page.leave,
@@ -748,6 +761,7 @@ body.working #sheen { opacity: 0; }
 .set-card {
   width: 1080px; max-width: 96vw; height: 100%;
   display: flex; flex-direction: column; padding: 8px 4px 12px;
+  transform: translateZ(0); will-change: transform, opacity;
 }
 .set-card > .set-head { flex: none; }
 .set-head { display: flex; align-items: center; gap: 16px; margin-bottom: 14px; }
@@ -951,6 +965,7 @@ body.working #sheen { opacity: 0; }
 .tbx-wrap {
   width: 1180px; max-width: 96vw; height: 100%;
   display: flex; flex-direction: column; padding: 8px 4px 4px;
+  transform: translateZ(0); will-change: transform, opacity;
 }
 .tbx-sub { color: var(--subink); font-size: 12.5px; font-weight: 500; }
 #tbx-cols {

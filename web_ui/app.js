@@ -39,12 +39,12 @@ let bridgeMode = "waiting";   // "waiting" -> "real" | "demo"
 /* and each change is saved back through the bridge.               */
 /* ------------------------------------------------------------------ */
 const APPEARANCE_DEFAULTS = {
-  frostBlur: 2.5, frostVeil: 0.26, frostSaturate: 155,
+  frostBlur: 1.0, frostVeil: 0.08, frostSaturate: 175,
   workHaze: 0,
   setBlur: 24, setVeil: 0.72, setSaturate: 200,
-  grafCount: 0, grafWidth: 1, grafOpacity: 1, grafSaturate: 115,
-  mistDensity: 100, mistSize: 1,
-  motionOn: true, motionSpeed: 1, motionAmp: 1, sheenOn: true,
+  grafCount: 2, grafWidth: 1.1, grafOpacity: 1, grafSaturate: 125,
+  mistDensity: 115, mistSize: 1.2,
+  motionOn: true, motionSpeed: 1, motionAmp: 1.1, sheenOn: true,
 };
 let appearance = { ...APPEARANCE_DEFAULTS };
 let windowMode = "borderless";  /* 窗口模式：最大化按钮怎么铺满 */
@@ -221,7 +221,7 @@ const canvas = document.getElementById("beads");
 let ctx = null;               // 2D context, only on the fallback path
 const echoCanvas = document.getElementById("echo");
 const echoCtx = echoCanvas.getContext("2d");
-const WALL_FPS = 30;          // hard cap: ambient frame rate
+const WALL_FPS = 60;          // 60 FPS buttery smooth ambient frame rate
 let W = 0, H = 0, beads = [], mouse = null;
 let wallStrokes = [];
 /* ambient motion (v3): each giant stroke gets its own slow
@@ -368,12 +368,14 @@ void main() {
   if (uMouse.z > 0.5) {
     float dx = x - uMouse.x, dy = y - uMouse.y;
     float d = sqrt(dx * dx + dy * dy);
-    if (d < 140.0 && d > 0.01) {
+    if (d < 180.0 && d > 0.01) {
       float zn0 = (z + 1.15) / 2.3;
-      float f = 1.0 - d / 140.0;
-      ax += (dx / d) * 4200.0 * (0.5 + 0.8 * zn0) * f + a2.x * 950.0 * f;
-      ay += (dy / d) * 4200.0 * (0.5 + 0.8 * zn0) * f + a2.y * 950.0 * f;
-      vz += f * a1.w * 62.0 * uDt * 3.0;
+      float normD = d / 180.0;
+      float f = 1.0 - normD;
+      float smoothF = f * f * (3.0 - 2.0 * f);
+      ax += (dx / d) * 3800.0 * (0.5 + 0.8 * zn0) * smoothF + a2.x * 750.0 * smoothF;
+      ay += (dy / d) * 3800.0 * (0.5 + 0.8 * zn0) * smoothF + a2.y * 750.0 * smoothF;
+      vz += smoothF * a1.w * 62.0 * uDt * 3.0;
     }
   }
   vx += ax * uDt; vy += ay * uDt;
@@ -781,12 +783,14 @@ function stepWall2D(dt) {
     if (mouse) {
       const dx = b.x - mouse.x, dy = b.y - mouse.y;
       const d = Math.hypot(dx, dy);
-      if (d < 140 && d > 0.01) {
+      if (d < 180 && d > 0.01) {
         const zn0 = (b.z + 1.15) / 2.3;
-        const f = 1 - d / 140;
-        ax += (dx / d) * 4200 * (0.5 + 0.8 * zn0) * f + b.sdirx * 950 * f;
-        ay += (dy / d) * 4200 * (0.5 + 0.8 * zn0) * f + b.sdiry * 950 * f;
-        b.vz += f * b.zdir * 62 * dt * 3;
+        const normD = d / 180;
+        const f = 1 - normD;
+        const smoothF = f * f * (3 - 2 * f);
+        ax += (dx / d) * 3800 * (0.5 + 0.8 * zn0) * smoothF + b.sdirx * 750 * smoothF;
+        ay += (dy / d) * 3800 * (0.5 + 0.8 * zn0) * smoothF + b.sdiry * 750 * smoothF;
+        b.vz += smoothF * b.zdir * 62 * dt * 3;
       }
     }
     b.vx += ax * dt; b.vy += ay * dt;
@@ -894,8 +898,14 @@ function selectVideo(name, path) {
 }
 
 /* file picking + drag and drop */
-/* frameless window controls (bridge only; inert in demo mode) */
-$("win-min").addEventListener("click", () => { if (bridge) bridge.win_minimize(); });
+/* frameless window controls (bridge only; alerts in web preview mode) */
+$("win-min").addEventListener("click", () => {
+  if (bridge) {
+    bridge.win_minimize();
+  } else {
+    log("提示：网页预览模式无法最小化操作系统窗口，请使用 EchoScene.exe 桌面程序。");
+  }
+});
 /* maximise: in 全屏化 the window goes DOM-fullscreen (taskbar
    hidden); otherwise the bridge maximises the window itself --
    in the default 无边框窗口全屏化 that fills the work area and
@@ -905,10 +915,22 @@ function toggleMax() {
     if (document.fullscreenElement) document.exitFullscreen();
     else document.documentElement.requestFullscreen &&
       document.documentElement.requestFullscreen();
-  } else if (bridge) bridge.win_toggle_max();
+  } else if (bridge) {
+    bridge.win_toggle_max();
+  } else {
+    if (document.fullscreenElement) document.exitFullscreen();
+    else if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen();
+  }
 }
 $("win-max").addEventListener("click", toggleMax);
-$("win-close").addEventListener("click", () => { if (bridge) bridge.win_close(); });
+$("win-close").addEventListener("click", () => {
+  if (bridge) {
+    bridge.win_close();
+  } else {
+    log("提示：网页预览模式无法关闭主程序，请使用 EchoScene.exe 桌面程序。");
+    try { window.close(); } catch (e) {}
+  }
+});
 /* The titlebar is the window's drag region, and it carries working
    buttons (the view tabs, the caption trio). pywebview starts a
    window move whenever a mousedown bubbles up from inside a drag
@@ -1693,6 +1715,11 @@ syncAppearanceControls();
 wakeWall();
 setTimeout(applyCalmZones, 350);  // re-measure calm zones once text layout settles
 refresh();
+const DEFAULT_APP_VERSION = "0.6.71";
+window.__echoVersion = window.__echoVersion || DEFAULT_APP_VERSION;
+if ($("set-version")) $("set-version").textContent = `当前版本 v${window.__echoVersion}`;
+if ($("settings-desc")) $("settings-desc").textContent = `任务文件夹：默认 · 当前版本 v${window.__echoVersion}`;
+
 log("ECHO 已就绪。");
 
 /* bridge binding: try at once, on pywebview's ready event, and on
