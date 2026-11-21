@@ -9,6 +9,8 @@ from typing import Any, Dict, List, Optional
 from echo_app.settings import load_settings, save_settings
 from echo_app.version import APP_VERSION
 from echo_desktop.bridge_helpers import (
+    appearance_from_js,
+    appearance_to_js,
     dialog_export_batch,
     dialog_export_camera_route,
     dialog_export_scene,
@@ -18,7 +20,13 @@ from echo_desktop.bridge_helpers import (
     open_target,
 )
 from echo_desktop.win32_drop import set_drop_callback
-from echo_desktop.win32_hook import maximize_work_area, resize_hook_status
+from echo_desktop.win32_hook import (
+    close_window,
+    maximize_work_area,
+    minimize_window,
+    resize_hook_status,
+    toggle_maximize,
+)
 from echo_desktop.win32_wndproc import set_log_callback
 from echo_engine import (
     job_display_name,
@@ -73,28 +81,17 @@ class Bridge:
                 self._all_log.pop(0)
 
     @property
-    def busy(self) -> bool:
-        return self.job_manager.busy
-
+    def busy(self) -> bool: return self.job_manager.busy
     @property
-    def busy_kind(self) -> Optional[str]:
-        return self.job_manager.busy_kind
-
+    def busy_kind(self) -> Optional[str]: return self.job_manager.busy_kind
     @property
-    def status(self) -> str:
-        return self.job_manager.status
-
+    def status(self) -> str: return self.job_manager.status
     @property
-    def frac(self) -> float:
-        return self.job_manager.frac
-
+    def frac(self) -> float: return self.job_manager.frac
     @property
-    def job(self) -> Optional[Path]:
-        return self.job_manager.current_job
-
+    def job(self) -> Optional[Path]: return self.job_manager.current_job
     @property
-    def depth_out(self) -> Optional[Path]:
-        return self.job_manager.depth_out
+    def depth_out(self) -> Optional[Path]: return self.job_manager.depth_out
 
     # --- Snapshot & Polling ---
     def get_snapshot(self) -> Dict[str, Any]:
@@ -105,7 +102,7 @@ class Bridge:
                 "autostart": self.settings.autostart,
                 "autoUpdate": self.settings.auto_update,
                 "updateProxy": self.settings.update_proxy,
-                "appearance": self.settings.appearance,
+                "appearance": appearance_to_js(self.settings.appearance),
                 "windowMode": self.settings.window_mode,
                 "textContrast": self.settings.text_contrast,
             },
@@ -258,7 +255,9 @@ class Bridge:
     def save_settings(self, data: Dict[str, Any]):
         try:
             for k, v in data.items():
-                if hasattr(self.settings, k):
+                if k == "appearance" and isinstance(v, dict):
+                    self.settings.appearance = appearance_from_js(self.settings.appearance, v)
+                elif hasattr(self.settings, k):
                     setattr(self.settings, k, v)
             save_settings(self.settings)
             return {"ok": True}
@@ -285,14 +284,13 @@ class Bridge:
 
     # --- Window Controls ---
     def win_minimize(self):
-        if self._window:
-            self._window.minimize()
+        ok = minimize_window(self._window)
+        return {"ok": ok}
 
     def win_toggle_max(self):
-        if self._window:
-            maximize_work_area(self._window)
+        is_max = toggle_maximize(self._window)
+        return {"ok": True, "maximized": is_max}
 
     def win_close(self):
-        if self._window:
-            self._window.destroy()
-        sys.exit(0)
+        close_window(self._window)
+        return {"ok": True}

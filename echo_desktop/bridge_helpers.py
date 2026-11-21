@@ -99,3 +99,34 @@ def dialog_export_batch(window, jobs_root: Path, fmt: str = "glb") -> Dict[str, 
         jobs = list_previous_jobs(jobs_root)
         return batch_export_to_dir(jobs, Path(dest[0]), fmt=fmt)
     return {"ok": False, "cancelled": True}
+
+
+_APPEARANCE_KEYS = [
+    ("frostBlur", "frost_blur"), ("frostVeil", "frost_veil"),
+    ("frostSaturate", "frost_saturate"), ("workHaze", "work_haze"),
+    ("setBlur", "set_blur"), ("setVeil", "set_veil"),
+    ("setSaturate", "set_saturate"), ("grafCount", "graf_count"),
+    ("grafWidth", "graf_width"), ("grafOpacity", "graf_opacity"),
+    ("grafSaturate", "graf_saturate"), ("mistDensity", "mist_density"),
+    ("mistSize", "mist_size"), ("motionOn", "motion_on"),
+    ("motionSpeed", "motion_speed"), ("motionAmp", "motion_amp"),
+    ("sheenOn", "sheen_on"),
+]
+
+
+def appearance_to_js(appearance) -> Dict[str, Any]:
+    """Serialize Appearance dataclass into JSON-compatible camelCase dict."""
+    if not appearance:
+        return {}
+    return {camel: getattr(appearance, snake)
+            for camel, snake in _APPEARANCE_KEYS
+            if hasattr(appearance, snake)}
+
+
+def appearance_from_js(appearance, data: Dict[str, Any]):
+    """Update Appearance instance from camelCase JSON dict."""
+    from echo_app.settings import coerce_appearance
+    snake = {snake: data[camel] for camel, snake in _APPEARANCE_KEYS
+             if isinstance(data, dict) and camel in data}
+    return coerce_appearance(snake, base=appearance)
+

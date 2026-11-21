@@ -220,3 +220,74 @@ def maximize_work_area(window):
         ctypes.windll.user32.ShowWindow(hwnd, 3)  # SW_MAXIMIZE
     except Exception:
         pass
+
+
+def is_window_maximized(window) -> bool:
+    if sys.platform != "win32":
+        return False
+    try:
+        hwnd = _resolve_hwnd(window)
+        if hwnd:
+            import ctypes
+            return bool(ctypes.windll.user32.IsZoomed(hwnd))
+    except Exception:
+        pass
+    return False
+
+
+def toggle_maximize(window) -> bool:
+    if sys.platform != "win32":
+        if window:
+            window.maximize()
+        return True
+    try:
+        hwnd = _resolve_hwnd(window)
+        if not hwnd:
+            return False
+        import ctypes
+        if is_window_maximized(window):
+            ctypes.windll.user32.ShowWindow(hwnd, 9)  # SW_RESTORE
+            return False
+        else:
+            ensure_maximize_styles(hwnd)
+            ctypes.windll.user32.ShowWindow(hwnd, 3)  # SW_MAXIMIZE
+            return True
+    except Exception:
+        return False
+
+
+def minimize_window(window) -> bool:
+    if sys.platform == "win32":
+        try:
+            hwnd = _resolve_hwnd(window)
+            if hwnd:
+                import ctypes
+                ok = bool(ctypes.windll.user32.ShowWindow(hwnd, 6))  # SW_MINIMIZE
+                if ok:
+                    return True
+        except Exception:
+            pass
+    if window is not None:
+        try:
+            window.minimize()
+            return True
+        except Exception:
+            pass
+    return False
+
+
+def close_window(window):
+    try:
+        import threading
+        def _destroy():
+            try:
+                if window is not None:
+                    window.destroy()
+            except Exception:
+                pass
+        threading.Thread(target=_destroy, daemon=True).start()
+    except Exception:
+        pass
+    import os
+    os._exit(0)
+

@@ -898,8 +898,14 @@ function selectVideo(name, path) {
 }
 
 /* file picking + drag and drop */
-/* frameless window controls (bridge only; inert in demo mode) */
-$("win-min").addEventListener("click", () => { if (bridge) bridge.win_minimize(); });
+/* frameless window controls (bridge only; alerts in web preview mode) */
+$("win-min").addEventListener("click", () => {
+  if (bridge) {
+    bridge.win_minimize();
+  } else {
+    log("提示：网页预览模式无法最小化操作系统窗口，请使用 EchoScene.exe 桌面程序。");
+  }
+});
 /* maximise: in 全屏化 the window goes DOM-fullscreen (taskbar
    hidden); otherwise the bridge maximises the window itself --
    in the default 无边框窗口全屏化 that fills the work area and
@@ -909,10 +915,22 @@ function toggleMax() {
     if (document.fullscreenElement) document.exitFullscreen();
     else document.documentElement.requestFullscreen &&
       document.documentElement.requestFullscreen();
-  } else if (bridge) bridge.win_toggle_max();
+  } else if (bridge) {
+    bridge.win_toggle_max();
+  } else {
+    if (document.fullscreenElement) document.exitFullscreen();
+    else if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen();
+  }
 }
 $("win-max").addEventListener("click", toggleMax);
-$("win-close").addEventListener("click", () => { if (bridge) bridge.win_close(); });
+$("win-close").addEventListener("click", () => {
+  if (bridge) {
+    bridge.win_close();
+  } else {
+    log("提示：网页预览模式无法关闭主程序，请使用 EchoScene.exe 桌面程序。");
+    try { window.close(); } catch (e) {}
+  }
+});
 /* The titlebar is the window's drag region, and it carries working
    buttons (the view tabs, the caption trio). pywebview starts a
    window move whenever a mousedown bubbles up from inside a drag
@@ -1611,6 +1629,8 @@ function pumpCliToasts() {
 async function initBridge() {
   const snap = await bridge.get_snapshot();
   window.__echoVersion = snap.version;
+  const verBadge = $("app-ver");
+  if (verBadge) verBadge.textContent = `v${snap.version}`;
   $("settings-desc").textContent =
     `任务文件夹：${snap.jobsRoot} · 当前版本 v${snap.version}`;
   $("set-jobs").textContent = snap.jobsRoot;
@@ -1697,6 +1717,11 @@ syncAppearanceControls();
 wakeWall();
 setTimeout(applyCalmZones, 350);  // re-measure calm zones once text layout settles
 refresh();
+const DEFAULT_APP_VERSION = "0.6.71";
+window.__echoVersion = window.__echoVersion || DEFAULT_APP_VERSION;
+if ($("app-ver")) $("app-ver").textContent = `v${window.__echoVersion}`;
+if ($("set-version")) $("set-version").textContent = `当前版本 v${window.__echoVersion}`;
+
 log("ECHO 已就绪。");
 
 /* bridge binding: try at once, on pywebview's ready event, and on
