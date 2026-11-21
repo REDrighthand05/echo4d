@@ -1,66 +1,100 @@
-# Echo4D — 长程协作 Agent 工作约定
+# ECHO 4D Architecture & AI Agent Maintenance Guide (AGENTS.md)
 
-适用于使用本仓库的 AI 开发代理及人工协作者。**先核对现场，再行动；Issue 记录为什么与验收，PR 记录实际变更，CI/独立数据负责证实。**本文件不是允许无人值守自动合并或无限制修改仓库的授权。
+## 1. Architectural Philosophy & Token Dilution Defense
+In complex projects, LLM agents begin experiencing context dilution and attention drift when maintaining monolithic source files exceeding 1,000 lines (often surpassing 260k tokens across multi-turn reasoning).
 
-## 产品初心门禁（所有贡献者必读）
+To guarantee lifelong maintainability, ECHO is structured around a **4-Layer Micro-Modular Architecture** governed by one strict invariant:
+> **The Micro-Modular Invariant**: Every single Python module must strictly be **<= 300 lines of code**. Large monolithic classes must be decoupled into cohesive domain modules, facades, and helpers.
 
-必须同时阅读 [产品北极星](docs/PRODUCT_NORTH_STAR.md)、[前端共享合同](docs/FRONTEND_SYSTEM.md) 及 Issue #1/#4/#74。每项研发须说明如何帮助真实生活场景被可靠重建、自由观察、时间回放；不以新模型名、三角形数、CI/截图的漂亮程度代替实景结构可辨、独立证据和可信边界。任何「完成」声明都要区分 UI 可用、路线已执行、数据已审阅、场景 P0 通过四种不同状态。统一 UI 不得由42条路线复制成42套实现。未经验证的生成/推测不得污染实测层。对冻结实验 head 不进行自动 UI 覆盖或重写。
-
-## 开始任何一个工作回合
-
-1. 先读取 [Issue #1：愿景与边界](https://github.com/REDrighthand05/echo4d/issues/1)、[Issue #15：下一阶段总实验](https://github.com/REDrighthand05/echo4d/issues/15)；处理米制尺度时再读 [Issue #14：三锚点标定实验](https://github.com/REDrighthand05/echo4d/issues/14)。
-2. **重新拉取** `main` HEAD、目标 Issue 最新正文与评论、相关开放 PR 的 **head/base、Draft 状态、文件列表及最近 CI**。不要将历史聊天中的 PR 状态视为实时。
-3. 选定一个可以独立检验的子任务。重复任务应关联现有 Issue，不另造相同主题；如果范围变更，先在 Issue 说明差异。
-4. 明确输出：`需求/假设 → 输入与许可 → 预注册指标 → 代码与测试 → 真实运行与失败 → 证据链接 → 下一步`。
-5. 收尾时回写 Issue（已验证/待验证、run URL、文件路径、参数、已知限制），用 Draft PR 交付代码。让下一次无聊天上下文的 Agent 可以继续。
-
-完整工作台索引见 [docs/WORKBENCH.md](docs/WORKBENCH.md)。
-
-## 不允许混淆的证据层级
-
-- **E0 未执行**：想法/设计/模型或论文预期。
-- **E1 静态审查**：查过源码、文档、契约、许可证，但未在本回合执行。
-- **E2 单元/合成**：本地 mock、数学构造反例或合成 demo 通过。
-- **E3 公开真实数据实跑**：写明数据 SHA、head SHA、可追溯 CI/job/run、配置和真实失败。
-- **E4 独立真值验收**：未参与优化的测量来源与冻结协议；仍要写明局限与样本范围。
-
-不能用 E2 替代 E3，不把 E3 的同一设备留出深度误差宣称为独立实物几何 E4。主分支依赖 **已知 TUM 位姿** 的 TSDF 不等于自动定位；单目 COLMAP 的事后 Sim(3) ATE 不等于已测得物理米制尺度。美观截图不能代替数值、失败和独立观测。
-
-## 当前依赖与研究责任（2026-10-27 整合快照）
-
-- 当前主干已接收统一 COLMAP/实测深度入口、源 PTS、米制尺度与 A/B 静态 Mesh 链。不要重新开发另一套导入器、评分器或 C→D 交换格式。
-- #15 是 A/B/C 重建总门禁，#2 跟踪普通视频/原生设备输入，#3 跟踪独立几何真值；#47 协调下一阶段。历史 #7/#11/#14 实验的完成不能替代这些研究门槛。
-- desk V1 原冻结名单配对失败；V2 Mesh 已生成，原12帧覆盖93.7357%、RMSE16.7779cm，15cm筛选仍FAIL。工具接收、CPU单测与CI通过不改变几何结论。
-- #42 Hi3D/家具只作辅助研究。CPU接口、安全工具通过不代表GPU推理、真实家具或独立尺度验收。
-- 逐PR的接收/替代依据与未完成责任以 #47 最新整合交接和GitHub实时状态为准；历史工作台保留在 docs/WORKBENCH.md，旧日期的分支状态不是当前指令。
-
-## 已授权开发策略：有限模块棋盘（2026-10-27）
-
-- 按 [路线全集](docs/STRATEGY_CHESSBOARD.md)、[共享模块](docs/STRATEGY_MODULES.md)、[逐格验证](docs/STRATEGY_VALIDATION.md)推进。固定组合规则和接口，不把任何RGB-only/IMU/旧Mesh路径设为全项目唯一入口。
-- 所有登记组合保留开发/验证待办；共享功能只实现一次，按依赖接收后供多条路线组合。不同模块可并行，公共文件明确主修改责任；并行不是复制多个导入器或评分器。
-- 每个PR注明模块ID、受影响路线、输入/接口/版本、依赖、实际测试checkout、证据与未完成。每个路线实验独立登记输入、provider与参数、冻结协议和真实失败，不能继承子模块PASS。
-- 历史“唯一下一步”只描述当时某个实验，不得据此收缩全项目棋盘。新目录/枚举不等于已实现，不因文档更新撤销原FAIL或关闭研究Issue。
-- v1穷举的是有限角色组合与输入存在/缺失掩码，不是世界全部技术；扩展角色/后端要登记版本。用户已授权既定模块化开发方向，范围内的可逆子任务按既有授权推进。
-
-## 提交和验证纪律
-
-- 普通开发使用独立分支、**Draft PR**，引用 Issue 与父 PR 依赖；不直接改稳定 `main`，合并和结案按用户明确授权执行，始终遵守保护规则，不绕过必需检查、不伪造第二位审查者。
-- 不把 CI 绿色等同算法准确；区分代码检查、真实运行与外部真值评分。特别保留首次失败、完整注册率、无数据区域和异常长尾。
-- 每个结论尽量带源代码文件、提交 SHA、数据哈希、可复现命令、版本、输入分组、阈值、相机约定、运行成本和原始失败链接。声明未测量的内容。
-- 估计位姿与真值位姿、实测深度与模型预测深度、评估用尺度与可部署尺度，必须分离存储与展示。
-- 保护第三方影像/私人物料：公共 Issue 与 CI 不上传未经授权的自拍、生物特征、私人位置/校园影像等。先用有许可的公开数据集。
-- 若测试环境不可用，不要报告已运行；记录具体阻塞，并交付仍可独立审查的改动。
-- 涉及高影响架构或用户体验取舍（例如人物身份、实时采集方式、目标验收权重）保留给用户决定；可先做可逆、小范围实验。
-
-## 回合交接（贴到 Issue 或 PR）
-
-```text
-本轮目标 / Issue:
-改动分支 / commit / PR:
-证据等级 E0–E4:
-真实运行及链接（或注明未运行）:
-输入来源与 SHA / 指标 / 失败:
-尚未解决 / 阻塞:
-下一回合最小行动（一个）:
-需要用户做的选择（若有）:
 ```
++-------------------------------------------------------------------------+
+|                              Entrypoints                                |
+|   EchoScene.exe / web_app.py (<80 lines)  |  app.py (<120 lines facade)  |
++-------------------------------------------------------------------------+
+                                    |
+      +-----------------------------+-----------------------------+
+      |                             |                             |
+      v                             v                             v
++------------------+      +-------------------+      +-------------------+
+|  echo_desktop    |      |    echo_cli       |      |   echo_service    |
+| (PyWebview, Win32|      | (Headless CLI:    |      | (REST API Server, |
+|  Bridge & WebUI) |      |  run, depth, ...) |      |  Queue & Export)  |
++------------------+      +-------------------+      +-------------------+
+      |                             |                             |
+      +-----------------------------+-----------------------------+
+                                    |
+                                    v
++-------------------------------------------------------------------------+
+|                               echo_engine                               |
+|        (Pure 12-Stage 3D Reconstruction Pipeline, Depth, & Jobs)        |
++-------------------------------------------------------------------------+
+```
+
+---
+
+## 2. Directory Layout & Module Responsibilities
+
+### Layer 1: Pure Algorithm Engine (`echo_engine/`)
+Completely detached from GUI frameworks, windowing systems, and HTTP protocols.
+* **`echo_engine/types.py`** (21 lines): Type annotations (`JobOutput`, callback definitions).
+* **`echo_engine/jobs.py`** (133 lines): Job queries, directory listings, status detection, scale lines.
+* **`echo_engine/depth.py`** (26 lines): Depth estimation kernel runner.
+* **`echo_engine/pipeline.py`** (139 lines): 12-stage 3D reconstruction pipeline orchestrator with atomic crash-recovery markers and inter-stage memory management (`gc.collect()`).
+* **`echo_engine/__init__.py`** (39 lines): Clean public API re-exports.
+
+### Layer 2: Service & Task Management (`echo_service/`)
+Asynchronous execution, disk cache throttling, validators, and REST endpoints.
+* **`echo_service/types.py`** (29 lines): Serializable data schemas (`JobInfo`, `ServiceStatus`).
+* **`echo_service/cache.py`** (34 lines): `ThrottledCache` (2.5s / 3.0s TTL) eliminating filesystem polling churn.
+* **`echo_service/validator.py`** (48 lines): Pre-flight validation (video format, file size, disk space >= 500MB, duration > 0.2s).
+* **`echo_service/exporter.py`** (80 lines): Universal voxel solidifier (GLB/PLY), camera trajectory export, batch export.
+* **`echo_service/task_queue.py`** (238 lines): `JobManager` thread management, busy locks, progress callbacks, and post-task garbage collection.
+* **`echo_service/server.py`** (169 lines): Lightweight local REST API server exposing `/api/status`, `/api/jobs`, `/api/jobs/select`, `/api/jobs/scene`, `/api/jobs/depth`, `/api/export`.
+* **`echo_service/__init__.py`** (35 lines): Clean service facade.
+
+### Layer 3: Headless Command-Line Interface (`echo_cli/`)
+Standardized CLI interface for automated scripting and server environments.
+* **`echo_cli/parser.py`** (107 lines): `argparse` configuration for subcommands: `run`, `depth`, `serve`, `export`, `status`.
+* **`echo_cli/runner.py`** (173 lines): Headless execution handlers with terminal progress formatting.
+* **`echo_cli/main.py`** (42 lines): CLI entrypoint.
+* **`echo_cli/__main__.py`** (7 lines): `python -m echo_cli` execution entry.
+* **`echo_cli/__init__.py`** (6 lines): Public exports.
+
+### Layer 4: Desktop Shell & WebUI (`echo_desktop/`)
+Native Windows frameless window integration, PyWebview JavaScript bridge, and WebUI runtime.
+* **`echo_desktop/win32_types.py`** (154 lines): Ctypes structures, hit-testing geometry (`hit_test_resize`), monitor work-area queries.
+* **`echo_desktop/win32_wndproc.py`** (217 lines): Subclassed window procedure, border snapping, maximize handling.
+* **`echo_desktop/win32_child.py`** (96 lines): WebView2 browser-child window resizing with message loop deferral (`WM_APP`).
+* **`echo_desktop/win32_drop.py`** (79 lines): Native Win32 drag-and-drop file ingestion (`DragAcceptFiles`, `WM_DROPFILES`).
+* **`echo_desktop/win32_hook.py`** (222 lines): DWM cosmetic polish (rounded corners, caption tint) and hook verification.
+* **`echo_desktop/bridge.py`** (298 lines): PyWebview JS bridge class (`Bridge`) connecting WebUI to `echo_service`.
+* **`echo_desktop/bridge_helpers.py`** (101 lines): Dialog prompts and target file opening routines.
+* **`echo_desktop/launcher.py`** (88 lines): PyWebview window creation, DPI awareness, and event hooks.
+* **`echo_desktop/tk_gui/`** (Subpackage): Fallback Tkinter interface broken into micro-modules (`theme.py`, `components.py`, `handlers.py`, `runner.py`), all <= 165 lines.
+* **`echo_desktop/__init__.py`** (21 lines): Desktop module entrypoints.
+
+### Root Facades (Binary Compatibility)
+* **`app.py`** (112 lines): Re-exports legacy functions (`run_pipeline`, `list_previous_jobs`, `JOBS_ROOT`). Dispatches CLI arguments if provided, or launches desktop.
+* **`web_app.py`** (77 lines): PyInstaller `EchoScene.exe` entrypoint facade delegating directly to `echo_desktop.launch_desktop()`.
+
+---
+
+## 3. WebUI & Presentation Layer Invariants
+The WebUI (`app/web_ui/`) is pre-tuned for high performance and visual clarity:
+* **Option 1 Ultra-Clear Frosted Glass**: Configured with `--frost-veil: 0.08` and `--frost-blur: 1.0px` to maximize background particle visibility while maintaining text contrast.
+* **GPU 60 FPS Hardware Acceleration**: Hardware compositing enabled via `translateZ(0)` and `will-change: transform`.
+* **Particle Physics**: 180px mouse ripple interaction and dynamic particle animation loop with frame capping.
+* Agents modifying the WebUI must **never** degrade these visual parameters.
+
+---
+
+## 4. Verification & Testing
+Before committing any changes, agents must execute the automated test suite:
+```bash
+python tests/test_modern_architecture.py
+```
+This verifies:
+1. Micro-modular line count constraints (every file <= 300 lines).
+2. All 4 layers import with zero warnings or missing dependencies.
+3. CLI commands and REST endpoints respond correctly.
+4. Backward compatibility facades retain all legacy symbols.

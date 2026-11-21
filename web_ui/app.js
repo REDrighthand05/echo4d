@@ -39,7 +39,7 @@ let bridgeMode = "waiting";   // "waiting" -> "real" | "demo"
 /* and each change is saved back through the bridge.               */
 /* ------------------------------------------------------------------ */
 const APPEARANCE_DEFAULTS = {
-  frostBlur: 1.8, frostVeil: 0.16, frostSaturate: 165,
+  frostBlur: 1.0, frostVeil: 0.08, frostSaturate: 175,
   workHaze: 0,
   setBlur: 24, setVeil: 0.72, setSaturate: 200,
   grafCount: 2, grafWidth: 1.1, grafOpacity: 1, grafSaturate: 125,

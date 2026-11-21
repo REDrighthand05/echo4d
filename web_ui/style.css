@@ -54,9 +54,9 @@
      v0.6.4's shipped numbers; app.js rewrites them live from
      the saved settings, and the -w set is the running state's
      pane, interpolated from the haze slider. */
-  --frost-blur: 2.5px;
-  --frost-veil: 0.26;
-  --frost-sat: 155%;
+  --frost-blur: 1.0px;
+  --frost-veil: 0.08;
+  --frost-sat: 175%;
   --frost-blur-w: 0.5px;
   --frost-veil-w: 0.05;
   --frost-sat-w: 108%;
