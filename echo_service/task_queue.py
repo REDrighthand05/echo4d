@@ -4,6 +4,7 @@ import base64
 import gc
 import threading
 import traceback
+from enum import Enum
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional, Tuple
 
@@ -16,6 +17,21 @@ from echo_engine import (
     scale_status_line,
 )
 from echo_service.validator import check_video
+
+
+class TaskState(str, Enum):
+    """Unified 10-state lifecycle machine for product tasks."""
+    CREATED = "CREATED"
+    VALIDATING = "VALIDATING"
+    QUEUED = "QUEUED"
+    RUNNING = "RUNNING"
+    PAUSE_REQUESTED = "PAUSE_REQUESTED"
+    PAUSED = "PAUSED"
+    CANCEL_REQUESTED = "CANCEL_REQUESTED"
+    CANCELLED = "CANCELLED"
+    FAILED = "FAILED"
+    COMPLETED = "COMPLETED"
+
 
 _PNG_SIG = b"\x89PNG\r\n\x1a\n"
 _PNG_IEND = b"\x00\x00\x00\x00IEND\xaeB`\x82"
@@ -61,6 +77,9 @@ class JobManager:
         self._preview_seq: int = 0
         self._preview_data: Optional[str] = None
         self._depth_stop = threading.Event()
+        self.task_state: TaskState = TaskState.CREATED
+        self._cancel_event = threading.Event()
+        self._pause_event = threading.Event()
 
     def select_video(self, path: Path) -> Tuple[bool, Optional[str]]:
         """Atomically validate and select a video file."""
@@ -87,8 +106,12 @@ class JobManager:
             err = check_video(self.video, self.jobs_root)
             if err:
                 self.status = err
+                self.task_state = TaskState.FAILED
                 return False, err
             self.busy, self.busy_kind = True, "scene"
+            self.task_state = TaskState.RUNNING
+            self._cancel_event.clear()
+            self._pause_event.clear()
 
         self._stage_idx = 0
         self.frac = 0.0
@@ -96,7 +119,33 @@ class JobManager:
         threading.Thread(target=self._scene_worker, daemon=True).start()
         return True, None
 
+    def request_cancel(self) -> Tuple[bool, str]:
+        """Request cooperative cancellation at nearest safe pipeline stage."""
+        with self._busy_lock:
+            if not self.busy:
+                return False, "当前没有正在执行的任务"
+            self.task_state = TaskState.CANCEL_REQUESTED
+            self._cancel_event.set()
+            self._depth_stop.set()
+            msg = "取消请求已接收，正在等待安全检查点终止…"
+            self._set_status(msg, self.frac)
+            return True, msg
+
+    def request_pause(self) -> Tuple[bool, str]:
+        """Request cooperative pause at nearest stage checkpoint."""
+        with self._busy_lock:
+            if not self.busy:
+                return False, "当前没有正在执行的任务"
+            self.task_state = TaskState.PAUSE_REQUESTED
+            self._pause_event.set()
+            msg = "暂停请求已接收，正在等待当前阶段完成…"
+            self._set_status(msg, self.frac)
+            return True, msg
+
     def _pipeline_log(self, line: str):
+        if self._cancel_event.is_set():
+            self.task_state = TaskState.CANCEL_REQUESTED
+            raise InterruptedError("Task cancelled by cooperative request")
         text = str(line)
         key = text.rstrip("…").strip()
         if key in PLAIN_STATUS:
@@ -114,12 +163,18 @@ class JobManager:
                 job_sink=self._handle_job_started,
             )
             self.current_job = job
+            self.task_state = TaskState.COMPLETED
             self._set_status("场景做好了。点「打开场景」就能看。", 1.0)
             scale = scale_status_line(job)
             if scale:
                 self._log(scale)
             self._log("场景生成完成。")
+        except InterruptedError:
+            self.task_state = TaskState.CANCELLED
+            self._set_status("任务已安全取消。", self.frac)
+            self._log("任务已按用户请求安全取消。")
         except Exception:
+            self.task_state = TaskState.FAILED
             self._set_status("生成失败，看一下日志。", self.frac)
             self._log(traceback.format_exc(limit=2))
         finally:
@@ -234,5 +289,6 @@ class JobManager:
             "video": str(self.video) if self.video else None,
             "currentJob": str(self.current_job) if self.current_job else None,
             "depthOut": str(self.depth_out) if self.depth_out else None,
+            "taskState": self.task_state.value,
             "previewSeq": self._preview_seq,
         }

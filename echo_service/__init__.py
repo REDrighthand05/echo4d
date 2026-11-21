@@ -10,12 +10,16 @@ from echo_service.exporter import (
     export_scene_to_dir,
     export_voxel_model,
 )
+from echo_service.checkpoint import CheckpointData, CheckpointManager
 from echo_service.server import EchoRequestHandler, EchoServer
-from echo_service.task_queue import JobManager, is_png_complete
+from echo_service.task_queue import JobManager, TaskState, is_png_complete
 from echo_service.types import JobInfo, ServiceStatus
 from echo_service.validator import VIDEO_SUFFIXES, check_video
 
 __all__ = [
+    "CheckpointData",
+    "CheckpointManager",
+    "TaskState",
     "ThrottledCache",
     "export_voxel_model",
     "export_scene_to_dir",

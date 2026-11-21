@@ -261,8 +261,7 @@ class Bridge:
     def pick_jobs_root(self):
         new_root = dialog_pick_jobs_root(self._window)
         if new_root:
-            self.jobs_root = new_root
-            self.job_manager.jobs_root = new_root
+            self.jobs_root = self.job_manager.jobs_root = new_root
             self.history_cache.invalidate()
             return str(self.jobs_root)
         return None
@@ -286,15 +285,15 @@ class Bridge:
         threading.Thread(target=_check, daemon=True).start()
         return {"ok": True, "checking": True}
 
+    def cancel_job(self):
+        ok, msg = self.job_manager.request_cancel()
+        return {"ok": ok, "message": msg}
+
+    def pause_job(self):
+        ok, msg = self.job_manager.request_pause()
+        return {"ok": ok, "message": msg}
+
     # --- Window Controls ---
-    def win_minimize(self):
-        ok = minimize_window(self._window)
-        return {"ok": ok}
-
-    def win_toggle_max(self):
-        is_max = toggle_maximize(self._window)
-        return {"ok": True, "maximized": is_max}
-
-    def win_close(self):
-        close_window(self._window)
-        return {"ok": True}
+    def win_minimize(self): return {"ok": minimize_window(self._window)}
+    def win_toggle_max(self): return {"ok": True, "maximized": toggle_maximize(self._window)}
+    def win_close(self): close_window(self._window); return {"ok": True}
