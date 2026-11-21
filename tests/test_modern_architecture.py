@@ -17,7 +17,15 @@ class TestMicroModularConstraints(unittest.TestCase):
     """Verify that every refactored source file strictly adheres to the <= 300 lines rule."""
 
     def test_line_counts_under_300(self):
-        packages = ["echo_engine", "echo_service", "echo_cli", "echo_desktop"]
+        packages = [
+            "echo_engine",
+            "echo_service",
+            "echo_cli",
+            "echo_desktop",
+            "echo_scene/geometry",
+            "echo_scene/materials",
+            "echo_scene/rendering",
+        ]
         for pkg in packages:
             pkg_path = APP_DIR / pkg
             for root, _, files in os.walk(pkg_path):

@@ -118,7 +118,7 @@ def render_offline_standalone(
     config: OfflineRenderConfig,
     out_dir: Path,
 ) -> List[Path]:
-    """Execute offline rendering using Open3D headless PBR offscreen renderer."""
+    """Execute offline rendering using Open3D standalone renderer."""
     import open3d as o3d
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -126,60 +126,82 @@ def render_offline_standalone(
     rendered_files: List[Path] = []
     w, h = config.width, config.height
 
-    renderer = o3d.visualization.rendering.OffscreenRenderer(w, h)
-    scene = renderer.scene
-    scene.set_background([0.12, 0.12, 0.14, 1.0])
-
-    # PBR Material
-    mat = o3d.visualization.rendering.MaterialRecord()
-    mat.shader = "defaultLit"
-    mat.base_color = [0.85, 0.85, 0.88, 1.0]
-    mat.base_roughness = 0.4
-    mat.base_reflectance = 0.5
-
-    # Load Observed Mesh
     scene_center = np.array([0.0, 0.0, 0.0], dtype=np.float64)
     obs_p = manifest.geometry.get("observed_mesh")
+    mesh_obs = None
     if obs_p and Path(obs_p).exists():
         mesh_obs = o3d.io.read_triangle_mesh(obs_p)
         mesh_obs.compute_vertex_normals()
         scene_center = np.asarray(mesh_obs.get_center())
-        scene.add_geometry("observed_mesh", mesh_obs, mat)
 
-    # Load Structural Mesh if exists
     struct_p = manifest.geometry.get("structural_mesh")
+    mesh_struct = None
     if struct_p and Path(struct_p).exists():
-        struct_mat = o3d.visualization.rendering.MaterialRecord()
-        struct_mat.shader = "defaultLit"
-        struct_mat.base_color = [0.70, 0.78, 0.86, 1.0]
-        struct_mat.base_roughness = 0.6
         mesh_struct = o3d.io.read_triangle_mesh(struct_p)
         mesh_struct.compute_vertex_normals()
-        scene.add_geometry("structural_mesh", mesh_struct, struct_mat)
+        if not mesh_struct.has_vertex_colors():
+            mesh_struct.paint_uniform_color([0.7, 0.78, 0.88])
 
-    # Setup Directional Sun Light
-    scene.scene.set_sun_light(
-        [-0.5, -1.0, -0.6], [1.0, 0.98, 0.95], 100000.0
-    )
-    scene.scene.enable_sun_light(True)
+    try:
+        vis = o3d.visualization.Visualizer()
+        vis.create_window(visible=False, width=w, height=h)
+        if mesh_obs:
+            vis.add_geometry(mesh_obs)
+        if mesh_struct:
+            vis.add_geometry(mesh_struct)
+        opt = vis.get_render_option()
+        opt.background_color = np.array([0.12, 0.12, 0.14])
+        opt.light_on = True
+        ctr = vis.get_view_control()
 
-    # Render each camera view in the manifest (up to 3 source + 2 free views)
-    for cam in manifest.cameras:
-        if cam.is_free_view:
-            c_pos = scene_center + np.array(cam.center, dtype=np.float64)
-        else:
+        for cam in manifest.cameras:
             c_pos = np.array(cam.center, dtype=np.float64)
-        target = scene_center
-        up = np.array([0.0, 1.0, 0.0], dtype=np.float64)
+            if cam.is_free_view:
+                c_pos = scene_center + c_pos
+            diff = c_pos - scene_center
+            norm = np.linalg.norm(diff)
+            front = (diff / norm) if norm > 1e-6 else np.array([0.0, 0.0, 1.0])
+            cam_up = np.array(getattr(cam, "up", [0.0, 1.0, 0.0]), dtype=np.float64)
+            ctr.set_lookat(scene_center)
+            ctr.set_front(front)
+            ctr.set_up(cam_up)
+            ctr.set_zoom(0.7 if cam.is_free_view else 0.8)
+            vis.poll_events()
+            vis.update_renderer()
+            img = vis.capture_screen_float_buffer(do_render=True)
+            arr = (np.asarray(img) * 255).astype(np.uint8)
+            if arr.size > 0 and arr.max() > 0:
+                out_file = out_dir / f"{cam.name}.{config.format}"
+                Image.fromarray(arr).save(out_file)
+                rendered_files.append(out_file)
+        vis.destroy_window()
+    except Exception:
+        rendered_files.clear()
 
-        renderer.setup_camera(float(cam.fov_degrees), target, c_pos, up)
-        img_arr = np.asarray(renderer.render_to_image())
-        if img_arr.size > 0:
-            out_file = out_dir / f"{cam.name}.{config.format}"
-            Image.fromarray(img_arr).save(out_file)
-            rendered_files.append(out_file)
+    if not rendered_files:
+        try:
+            renderer = o3d.visualization.rendering.OffscreenRenderer(w, h)
+            scene = renderer.scene
+            scene.set_background([0.12, 0.12, 0.14, 1.0])
+            mat = o3d.visualization.rendering.MaterialRecord()
+            mat.shader = "defaultLit"
+            if mesh_obs:
+                scene.add_geometry("observed_mesh", mesh_obs, mat)
+            if mesh_struct:
+                scene.add_geometry("structural_mesh", mesh_struct, mat)
+            for cam in manifest.cameras:
+                c_pos = (scene_center + np.array(cam.center)) if cam.is_free_view else np.array(cam.center)
+                cam_up = np.array(getattr(cam, "up", [0.0, 1.0, 0.0]), dtype=np.float64)
+                renderer.setup_camera(float(cam.fov_degrees), scene_center, c_pos, cam_up)
+                img_arr = np.asarray(renderer.render_to_image())
+                if img_arr.size > 0:
+                    out_file = out_dir / f"{cam.name}.{config.format}"
+                    Image.fromarray(img_arr).save(out_file)
+                    rendered_files.append(out_file)
+            del renderer
+        except Exception:
+            pass
 
-    del renderer
     return rendered_files
 
 
