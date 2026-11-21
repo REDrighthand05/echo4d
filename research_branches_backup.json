@@ -1,0 +1,450 @@
+[
+  {
+    "branch": "research/echo4d-product-delivery-20261030",
+    "commit": "8e3ea75275c8b4f7b33b95af3cfba430a57a7c58",
+    "author": "yang you",
+    "date": "Fri Oct 30 05:51:33 2026 +0800",
+    "subject": "docs(product): bind geometry, timeline, viewer and long-term capture to one acceptance path"
+  },
+  {
+    "branch": "research/fountain-depth-ladder-20261031",
+    "commit": "6a5599b7181d586e029d31694d9697dc730de747",
+    "author": "yang you",
+    "date": "Sat Oct 31 03:59:08 2026 +0800",
+    "subject": "ci(reconstruction): run real Fountain 33/16/8 sensor-depth Mesh and five-view A/B"
+  },
+  {
+    "branch": "research/fountain-measured-prior-fusion-20261031",
+    "commit": "38d620f212417acc53ed9962d5d56475143eb7fd",
+    "author": "yang you",
+    "date": "Sat Oct 31 03:11:14 2026 +0800",
+    "subject": "ci(mesh): run full prior RGB projection vs measured-only five-view geometry"
+  },
+  {
+    "branch": "research/fountain-rgb8-multiview-guard-20261031",
+    "commit": "a3d07ab3122aaf0910e7fd354f72232e3aba728d",
+    "author": "yang you",
+    "date": "Sat Oct 31 06:00:31 2026 +0800",
+    "subject": "ci(reconstruction): execute real Fountain four-GLB CPU RGB visibility A/B"
+  },
+  {
+    "branch": "research/fountain16-plus8-rgb-cpu-20261031",
+    "commit": "f682c01a12da56311c016cc4aa40e01cce86db47",
+    "author": "yang you",
+    "date": "Sat Oct 31 05:00:10 2026 +0800",
+    "subject": "ci(fountain): execute real 16 sensor plus 8 CPU RGB mesh comparison and upload five views"
+  },
+  {
+    "branch": "research/lounge-72sensor-24rgb-cpu-20261031",
+    "commit": "6a798b2b4392924fbe92a2acc8be54fe9d4eab61",
+    "author": "yang you",
+    "date": "Sat Oct 31 06:57:28 2026 +0800",
+    "subject": "ci(mesh): run real Lounge 144/72/72+24 RGB CPU five-view GLB experiment"
+  },
+  {
+    "branch": "research/lounge-depth-gap-views-20261031",
+    "commit": "37e120e2da3579e7a423437fe3a465fe2f853b42",
+    "author": "yang you",
+    "date": "Sat Oct 31 07:05:13 2026 +0800",
+    "subject": "ci(mesh): execute real 144-vs-216 gap-targeted Lounge depth fusion"
+  },
+  {
+    "branch": "research/lounge-gap-targeted-rgb24-20261031",
+    "commit": "10a0e0f37ace913c617df7426fbf248de8a9a8dd",
+    "author": "yang you",
+    "date": "Sat Oct 31 08:01:27 2026 +0800",
+    "subject": "ci(lounge): avoid redundant intermediate runs and upload five real meshes"
+  },
+  {
+    "branch": "research/lounge-global-plane-tsdf-20261031",
+    "commit": "ce9917ea1a0e64ce30603466a4c4e2733f969b33",
+    "author": "yang you",
+    "date": "Sat Oct 31 08:59:13 2026 +0800",
+    "subject": "ci(mesh): execute real Stanford Lounge global plane-constrained TSDF A/B"
+  },
+  {
+    "branch": "research/lounge-measured-first-carve-20261031",
+    "commit": "3abe9ad8af824b94be5d9a43d64f0c766b2da18e",
+    "author": "yang you",
+    "date": "Sat Oct 31 05:04:49 2026 +0800",
+    "subject": "ci(mesh): run real Lounge scan-carving A/B and export five-view GLBs"
+  },
+  {
+    "branch": "research/lounge-planar-measured-holes-20261031",
+    "commit": "442b6c388232fe9593093a66ad40d0762697994a",
+    "author": "yang you",
+    "date": "Sat Oct 31 08:02:46 2026 +0800",
+    "subject": "research(mesh): add measured-support planar hole geometry A/B .github/workflows/lounge-planar-completion-real.yml"
+  },
+  {
+    "branch": "research/lounge-rgb-crossview24-20261031",
+    "commit": "2b0d26f09708aa42bcfa89be5e813007b7747077",
+    "author": "yang you",
+    "date": "Sat Oct 31 08:59:13 2026 +0800",
+    "subject": "ci(reconstruction): execute Lounge RGB cross-view Mesh ablation on real dataset"
+  },
+  {
+    "branch": "research/lounge-visibility-prior-20261031",
+    "commit": "81a553abac1063ded263aebf2f78262a80c754be",
+    "author": "yang you",
+    "date": "Sat Oct 31 06:06:34 2026 +0800",
+    "subject": "feat(mesh): lounge-visibility-prior-real.yml for real Lounge ray-aware PRIOR fusion"
+  },
+  {
+    "branch": "research/redwood-bedroom-depth-cutoff-ab-20261030",
+    "commit": "eca8990db4899b41dee4b6428af61c481081abe8",
+    "author": "yang you",
+    "date": "Fri Oct 30 03:06:06 2026 +0800",
+    "subject": "ci(real-room): run native 600-frame Redwood 3m vs 4.5m depth A/B and publish color Mesh"
+  },
+  {
+    "branch": "research/redwood-boardroom-prior-fusion-20261031",
+    "commit": "4f3e40aa90c45e51b2e4afcf7bd1a364d8694ab6",
+    "author": "yang you",
+    "date": "Sat Oct 31 03:06:11 2026 +0800",
+    "subject": "fix(mesh): download real Redwood Google Drive binaries, reject HTML and validate poses before RGB-D"
+  },
+  {
+    "branch": "research/redwood-conservative-hole-caps-20261030",
+    "commit": "4202bd3c5ca3ac2beafddb9706ef7a1dd02f27f4",
+    "author": "yang you",
+    "date": "Fri Oct 30 12:08:14 2026 +0800",
+    "subject": "ci(real-room): run hole caps on published Redwood colored GLB and upload real result"
+  },
+  {
+    "branch": "research/redwood-depth-edge-guard-20261030",
+    "commit": "caaff58ccecbe46eb4fe9eb0ba305805cd32b871",
+    "author": "yang you",
+    "date": "Fri Oct 30 06:07:48 2026 +0800",
+    "subject": "ci(real-mesh): run original Redwood RGB-D edge-aware fusion and five-view A/B"
+  },
+  {
+    "branch": "research/redwood-measured-loop-pose-refusion-20261030",
+    "commit": "7ccb03fbad740eebcc11984003f791e784de8c81",
+    "author": "yang you",
+    "date": "Fri Oct 30 06:31:00 2026 +0800",
+    "subject": "fix(test): index measured camera poses by original frame ID, matching real data"
+  },
+  {
+    "branch": "research/redwood-multiview-depth-consistency-20261030",
+    "commit": "6ae397b2c1dfcd9d2f4d1c44bb2721b0e41c7fa1",
+    "author": "yang you",
+    "date": "Fri Oct 30 09:06:38 2026 +0800",
+    "subject": "ci(mesh): run real 600-frame Redwood cross-view fusion and five-view A/B"
+  },
+  {
+    "branch": "research/redwood-observed-component-cleanup-20261030",
+    "commit": "bafb24124e98772f7f1116b56c49f30cb14bb91c",
+    "author": "yang you",
+    "date": "Fri Oct 30 08:06:19 2026 +0800",
+    "subject": "ci(real): run Redwood measured-mesh cleanup and export five-view comparison"
+  },
+  {
+    "branch": "research/redwood-occlusion-aware-depth-20261030",
+    "commit": "99623f5a0f4eade68db1e07dbce9c01774686263",
+    "author": "yang you",
+    "date": "Fri Oct 30 07:00:49 2026 +0800",
+    "subject": "fix(test): use original frame-indexed camera pose arrays in Redwood loop test"
+  },
+  {
+    "branch": "research/redwood-original-prior-detail-20261030",
+    "commit": "6ed37250a87bbbda42d50e043580bcf289a7093d",
+    "author": "yang you",
+    "date": "Fri Oct 30 15:03:04 2026 +0800",
+    "subject": "test(redwood): freeze three original and two free camera comparisons"
+  },
+  {
+    "branch": "research/redwood-prior-measured-hybrid-20261030",
+    "commit": "043664b5fbdce46326ce8046711d0099efdfb8ee",
+    "author": "yang you",
+    "date": "Fri Oct 30 10:08:01 2026 +0800",
+    "subject": "ci(real-scene): run prior-measured geometry on actual Redwood RGB-D"
+  },
+  {
+    "branch": "research/redwood-prior-measured-surface-fit-20261030",
+    "commit": "bf306611e0613bee0044439c6c8e0436caf0ad4f",
+    "author": "yang you",
+    "date": "Fri Oct 30 13:09:54 2026 +0800",
+    "subject": "ci(redwood): run measured-supported prior surface fit on actual archived RGB-D geometry"
+  },
+  {
+    "branch": "research/redwood-prior-poisson-continuity-20261030",
+    "commit": "4d0382d575c0bbfe7e3d3eccf619f8fa49770b12",
+    "author": "yang you",
+    "date": "Fri Oct 30 16:10:13 2026 +0800",
+    "subject": "ci(redwood): run real 500k prior Poisson continuity and upload 3+2 visual GLB artifacts"
+  },
+  {
+    "branch": "research/stanford-colmap-independent150-20261029",
+    "commit": "bed14f985cfd850c31c81e539ec7466fcb0a2ee3",
+    "author": "yang you",
+    "date": "Fri Oct 30 02:01:46 2026 +0800",
+    "subject": "research(room): run independent 150-frame COLMAP real RGB-D reconstruction"
+  },
+  {
+    "branch": "research/stanford-colmap-independent600-20261029",
+    "commit": "43cbd242d180b1e4f6147a334012f8cc78aa96a1",
+    "author": "yang you",
+    "date": "Fri Oct 30 01:00:48 2026 +0800",
+    "subject": "research(room): run independent 600-frame COLMAP RGB-D room after 300-frame visual recovery"
+  },
+  {
+    "branch": "research/stanford-colmap150-depth-pnp-20261030",
+    "commit": "318f52cb2906bb55031e71f5be76155fb14aa017",
+    "author": "yang you",
+    "date": "Fri Oct 30 03:58:04 2026 +0800",
+    "subject": "ci(room): execute real Stanford 150-frame PnP recovery and fixed-view mesh comparison"
+  },
+  {
+    "branch": "research/stanford-colmap150-exhaustive-20261030",
+    "commit": "c67d7379902f6e94de314288f478e39ab0cc7720",
+    "author": "yang you",
+    "date": "Fri Oct 30 03:00:50 2026 +0800",
+    "subject": "ci(room): execute real independent 150-frame COLMAP exhaustive matching and save five views"
+  },
+  {
+    "branch": "research/stanford-colmap300-da16-spatial-20261030",
+    "commit": "f005a0b60dd9edc6f1e8a8483b9fc2587b556759",
+    "author": "yang you",
+    "date": "Fri Oct 30 17:57:04 2026 +0800",
+    "subject": "fix(room): describe eight additional RGB predictions accurately"
+  },
+  {
+    "branch": "research/stanford-colmap300-da2-track-filter-20261030",
+    "commit": "1a4afbc84672c3754e3a52d3d245ae23b70953f4",
+    "author": "yang you",
+    "date": "Fri Oct 30 14:59:26 2026 +0800",
+    "subject": "ci: execute real Stanford DA2 track-filter ablation with held-out sensor evaluation"
+  },
+  {
+    "branch": "research/stanford-colmap300-da8-spatial-20261030",
+    "commit": "fb6795ba71b99f44564df0916b951d65b2d95eb0",
+    "author": "yang you",
+    "date": "Fri Oct 30 15:59:48 2026 +0800",
+    "subject": "research(room): preserve three unscaled original RGB photos with the real five-view Mesh"
+  },
+  {
+    "branch": "research/stanford-colmap300-depth10-nested-20261030",
+    "commit": "48fc9e2e1fa44369b7b07b04142faab434020f61",
+    "author": "yang you",
+    "date": "Fri Oct 30 07:57:23 2026 +0800",
+    "subject": "ci: run real Stanford 30/15/10 depth-only ablation from frozen 300 RGB COLMAP artifact"
+  },
+  {
+    "branch": "research/stanford-colmap300-depth10-pose-cover-20261030",
+    "commit": "5a7daeef508a25eb02f3bbdf3eb26cc8941294d2",
+    "author": "yang you",
+    "date": "Fri Oct 30 08:59:03 2026 +0800",
+    "subject": "research: use RGB-pose-only room-scale free orbit instead of camera-local close-ups"
+  },
+  {
+    "branch": "research/stanford-colmap300-depth10-sfm-cover-20261030",
+    "commit": "70fc238a9ab998c02eb6857e43efff1b880e593e",
+    "author": "yang you",
+    "date": "Fri Oct 30 09:52:47 2026 +0800",
+    "subject": "ci(real): run SfM-observed ten-depth Stanford A/B and preserve five-view Mesh evidence"
+  },
+  {
+    "branch": "research/stanford-colmap300-depthanything2-20261030",
+    "commit": "c635ef3fec2dd7e83eae9dd2a9003130c2729bab",
+    "author": "yang you",
+    "date": "Fri Oct 30 13:55:28 2026 +0800",
+    "subject": "ci: run real Stanford 8 measured + 2 CPU learned-depth Mesh A/B"
+  },
+  {
+    "branch": "research/stanford-colmap300-eight-measured-control-20261030",
+    "commit": "fd537c52aedda1be3e7c2f78afe2efd19f2e3912",
+    "author": "yang you",
+    "date": "Fri Oct 30 11:58:49 2026 +0800",
+    "subject": "fix: use identical TSDF integration order for eight-only and 8+2 comparison"
+  },
+  {
+    "branch": "research/stanford-colmap300-four-depth-six-stereo-20261030",
+    "commit": "11715e2ec46cfa2b855db203e04890fcefc9d8ba",
+    "author": "yang you",
+    "date": "Fri Oct 30 11:00:24 2026 +0800",
+    "subject": "fix(room): store baseline five ray coverages once across both actual A/B panels"
+  },
+  {
+    "branch": "research/stanford-colmap300-mvs2-20261030",
+    "commit": "6029cc4cd85a80d6421c7b25ea37c56641bc351d",
+    "author": "yang you",
+    "date": "Fri Oct 30 12:59:39 2026 +0800",
+    "subject": "ci: run real Stanford 8-measured vs 8+2 CPU RGB MVS geometry experiment"
+  },
+  {
+    "branch": "research/stanford-colmap300-rgb-pnp-rescue-20261030",
+    "commit": "c0015f3ebace8ff48f10493764ed1b2c21031240",
+    "author": "yang you",
+    "date": "Fri Oct 30 07:01:09 2026 +0800",
+    "subject": "research(room): track original COLMAP 3D observations with RGB optical flow before PnP"
+  },
+  {
+    "branch": "research/stanford-colmap300-temporal-overlap-20261030",
+    "commit": "8d4c3a1509a85f67e84c2a8f8e9eb47478ae024d",
+    "author": "yang you",
+    "date": "Fri Oct 30 07:04:35 2026 +0800",
+    "subject": "ci(room): run real independent early-overlap 300 RGB plus 30 measured-depth Mesh"
+  },
+  {
+    "branch": "research/stanford-colmap300rgb-75-30depth-20261030",
+    "commit": "6aca2a39b5e702e7143ee6f9b1f9fff787ca673a",
+    "author": "yang you",
+    "date": "Fri Oct 30 04:57:25 2026 +0800",
+    "subject": "ci(room): execute real Stanford 300 RGB independent-pose depth ladder"
+  },
+  {
+    "branch": "research/stanford-colmap600rgb-150depth-20261030",
+    "commit": "75a7e19a65a64d1297502f45392d2152afa441c8",
+    "author": "yang you",
+    "date": "Fri Oct 30 04:02:09 2026 +0800",
+    "subject": "ci(room): real 600 RGB and 150 measured depth ablation with no pose prior"
+  },
+  {
+    "branch": "research/stanford-colmap600rgb-75-30depth-20261030",
+    "commit": "0e7ce5cc6c2fad484e471caa1228b47e71464629",
+    "author": "yang you",
+    "date": "Fri Oct 30 04:09:01 2026 +0800",
+    "subject": "ci(room): run real nested 150/75/30 depth fusion with 600 RGB SfM poses"
+  },
+  {
+    "branch": "research/stanford-da8-crossview-20261030",
+    "commit": "0632866860723106948e35c6ea82d1ccc9314bb5",
+    "author": "yang you",
+    "date": "Fri Oct 30 17:02:03 2026 +0800",
+    "subject": "ci(research): run same-input Stanford 8+8 measured-ray guard and upload five-view A/B"
+  },
+  {
+    "branch": "research/stanford-far-depth-coherence-20261030",
+    "commit": "434a6c26a3b63e337a4ba057b7710b78ed0febbf",
+    "author": "yang you",
+    "date": "Fri Oct 30 02:00:44 2026 +0800",
+    "subject": "ci(mesh): run coherent far-depth full 3000-frame A/B against unfiltered result"
+  },
+  {
+    "branch": "research/stanford-far-depth-refusion-20261030",
+    "commit": "6793d19e58e1378c730122074e36dbc9a327a3f6",
+    "author": "yang you",
+    "date": "Fri Oct 30 01:07:59 2026 +0800",
+    "subject": "ci(mesh): run full real 3000-frame extended-depth TSDF and five-view A/B"
+  },
+  {
+    "branch": "research/stanford-lounge-spatial-prior-20261031",
+    "commit": "ea6c7decb7c1150a28b1e1dfff8532caae876a98",
+    "author": "yang you",
+    "date": "Sat Oct 31 03:59:17 2026 +0800",
+    "subject": "ci(mesh): run real Stanford Lounge 48 vs 144 spatial RGB-D with supplied scan PRIOR"
+  },
+  {
+    "branch": "research/stanford-measured-gap-patches-20261029",
+    "commit": "2ce9811124371b32216177245ddc030156d08572",
+    "author": "yang you",
+    "date": "Fri Oct 30 00:02:56 2026 +0800",
+    "subject": "fix(ci): interpolate GitHub workflow token and artifact run id"
+  },
+  {
+    "branch": "research/tum-desk-known-pose-open3d-20261030",
+    "commit": "f4d79e841c9f235ff35413c955ef5f9a6eb63e1d",
+    "author": "yang you",
+    "date": "Fri Oct 30 20:02:48 2026 +0800",
+    "subject": "ci(mesh): run real TUM Desk RGB-D fusion and export five-view GLB artifacts"
+  },
+  {
+    "branch": "research/tum-desk-lens-rectification-20261030",
+    "commit": "6918e76a20af8993795fb5a595f208c32008d249",
+    "author": "yang you",
+    "date": "Fri Oct 30 21:03:07 2026 +0800",
+    "subject": "ci(mesh): run real Freiburg1 Desk lens-corrected TSDF and five views"
+  },
+  {
+    "branch": "research/tum-desk-native640-24-plus-da12-20261030",
+    "commit": "7963392105fd3e73ee9c84a000e0c763b5feb910",
+    "author": "yang you",
+    "date": "Fri Oct 30 23:57:18 2026 +0800",
+    "subject": "ci(desk): execute real 24 sensor plus 12 CPU RGB Mesh comparison and upload GLBs"
+  },
+  {
+    "branch": "research/tum-desk-native640-depth-ladder-20261030",
+    "commit": "353d049ee8f6f454adc19ae619c071bf37e36530",
+    "author": "yang you",
+    "date": "Fri Oct 30 22:57:46 2026 +0800",
+    "subject": "ci: run real Desk 57/24/12 depth Mesh and publish five-view artifacts"
+  },
+  {
+    "branch": "research/tum-desk-native640-island-prune-20261030",
+    "commit": "7ed24b48dfc092528e4460666881ff277d092e0e",
+    "author": "yang you",
+    "date": "Fri Oct 30 23:05:39 2026 +0800",
+    "subject": "fix(ci): render measured Desk mesh under Xvfb software OpenGL"
+  },
+  {
+    "branch": "research/tum-desk-native640-mvs23-20261031",
+    "commit": "58ce9716dce62b3591d7f5fb35531dc779566cc6",
+    "author": "yang you",
+    "date": "Sat Oct 31 00:55:42 2026 +0800",
+    "subject": "ci(reconstruction): run real Desk RGB-MVS replacement and export three GLBs"
+  },
+  {
+    "branch": "research/tum-desk-native640-tsdf-20261030",
+    "commit": "3055bcc2b35936a6c35a509e0ba8404c128e0f88",
+    "author": "yang you",
+    "date": "Fri Oct 30 22:04:21 2026 +0800",
+    "subject": "test(mesh): verify native 640 to 320 ray calibration and fixed view poses"
+  },
+  {
+    "branch": "research/tum-room-loop-coverage-20261031",
+    "commit": "33d3d72775617636ac4e4b6be313b66ab93c10f3",
+    "author": "yang you",
+    "date": "Sat Oct 31 01:09:31 2026 +0800",
+    "subject": "feat(mesh): reject TUM Room measured cross-view foreground conflicts"
+  },
+  {
+    "branch": "research/tum-room-pose-depth36-20261031",
+    "commit": "3ccaff850ac2085a734a8926e6a6efd8ab3e58b4",
+    "author": "yang you",
+    "date": "Sat Oct 31 02:59:28 2026 +0800",
+    "subject": "test(mesh): verify 36-frame pose cohort nested and original RGB-D fusion reused"
+  },
+  {
+    "branch": "research/tum-room-pose-spread-depth72-20261031",
+    "commit": "61b5e259f3560bf8c1588db199c351624dfff117",
+    "author": "yang you",
+    "date": "Sat Oct 31 01:59:41 2026 +0800",
+    "subject": "ci(room): run real 145-vs-72 GLB and five-view reconstruction"
+  },
+  {
+    "branch": "research/tum-xyz-depth-48-24-12-20261030",
+    "commit": "9cca4f418b6053eb58ff2d344c395d7d0771663e",
+    "author": "yang you",
+    "date": "Fri Oct 30 18:58:39 2026 +0800",
+    "subject": "ci: verify five real 48/24/12/6/3 Mesh levels and 3+2 views"
+  },
+  {
+    "branch": "research/tum-xyz-open3d-320-measured-20261030",
+    "commit": "466f2cbdd2614d0a6327815a90f6e455f7c0e847",
+    "author": "yang you",
+    "date": "Fri Oct 30 19:08:27 2026 +0800",
+    "subject": "feat(mesh): fuse 96 interleaved measured TUM views against 48-frame baseline"
+  },
+  {
+    "branch": "research/tum-xyz-six-da6-local-bias-20261030",
+    "commit": "838b746c36bcd78a870cb3a3cfefdad5b0fc75b6",
+    "author": "yang you",
+    "date": "Fri Oct 30 21:03:06 2026 +0800",
+    "subject": "ci: isolate real-run concurrency and verify three exported colored meshes"
+  },
+  {
+    "branch": "research/tum-xyz-six-measured-six-da2-20261030",
+    "commit": "cec2ddf3e0121d83bf9e2a686632450dbf455e68",
+    "author": "yang you",
+    "date": "Fri Oct 30 19:56:58 2026 +0800",
+    "subject": "ci(tum): execute real 6 measured + 6 CPU Depth Anything mesh and five-view comparison"
+  },
+  {
+    "branch": "research/tum-xyz-six-measured-twelve-ai-20261030",
+    "commit": "9078732aaf16c66a56f2fb6ae24ae54270e5666d",
+    "author": "yang you",
+    "date": "Fri Oct 30 22:01:21 2026 +0800",
+    "subject": "fix(research): initialize TUM importer command receipt before real reconstruction"
+  }
+]
