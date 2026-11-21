@@ -3,7 +3,18 @@
 import sys
 from typing import Any, Dict, Optional
 
-from echo_desktop.win32_types import ensure_win32_argtypes
+from echo_desktop.win32_types import (
+    ensure_win32_argtypes,
+    resolve_hwnd,
+)
+from echo_desktop.win32_window import (
+    close_window,
+    is_window_maximized,
+    maximize_work_area,
+    minimize_window,
+    restore_work_area,
+    toggle_maximize,
+)
 from echo_desktop.win32_wndproc import (
     ensure_maximize_styles,
     handle_drop_files,
@@ -110,23 +121,37 @@ def real_win32_facade() -> Optional[Win32Facade]:
         return None
 
 
-def _resolve_hwnd(window) -> Optional[int]:
-    if sys.platform != "win32":
+def callback_addr(cb) -> Optional[int]:
+    if cb is None:
         return None
-    hwnd = None
-    native = getattr(window, "native", None)
-    if native is not None:
-        try:
-            hwnd = int(native.Handle)
-        except Exception:
-            hwnd = None
-    if not hwnd:
-        try:
-            import ctypes
-            hwnd = ctypes.windll.user32.FindWindowW(None, "ECHO 回声") or None
-        except Exception:
-            hwnd = None
-    return hwnd
+    try:
+        return int(getattr(cb, "address"))
+    except Exception:
+        pass
+    try:
+        import ctypes
+
+        val = ctypes.cast(cb, ctypes.c_void_p).value
+        return int(val) if val else None
+    except Exception:
+        return None
+
+
+def resize_proc_is_ours(current, ours) -> bool:
+    if current is None or ours is None:
+        return False
+    try:
+        return int(current) == int(ours)
+    except Exception:
+        return False
+
+
+def resize_needs_reinstall(current, ours, installed_hwnd, hwnd) -> bool:
+    if hwnd is None:
+        return False
+    if installed_hwnd != hwnd:
+        return True
+    return not resize_proc_is_ours(current, ours)
 
 
 def install_resize_hook(window, win32_facade=None) -> bool:
@@ -135,16 +160,37 @@ def install_resize_hook(window, win32_facade=None) -> bool:
     if facade is None:
         return False
     try:
-        hwnd = _resolve_hwnd(window)
+        hwnd = resolve_hwnd(window)
         if not hwnd:
             _resize_status_info = {"installed": False, "hwnd": None, "msg": "找不到窗口句柄"}
             return False
 
-        current = facade.get_proc(hwnd)
+        try:
+            current = facade.get_proc(hwnd)
+        except Exception:
+            current = None
+
+        if not resize_needs_reinstall(
+            current, callback_addr(_resize_callback), _resize_hook_hwnd, hwnd
+        ):
+            _resize_hook_hwnd = hwnd
+            _resize_status_info = {"installed": True, "hwnd": hwnd, "msg": "已装上（读回确认）"}
+            return True
+
         cb = facade.make_callback(resize_wndproc)
         prev = facade.set_proc(hwnd, cb)
         if not prev:
             _resize_status_info = {"installed": False, "hwnd": hwnd, "msg": "换过程失败"}
+            return False
+
+        try:
+            current = facade.get_proc(hwnd)
+        except Exception:
+            current = None
+
+        if not resize_proc_is_ours(current, callback_addr(cb)):
+            _resize_callback = cb
+            _resize_status_info = {"installed": False, "hwnd": hwnd, "msg": "装完读回的过程不是我们的"}
             return False
 
         _resize_callback = cb
@@ -152,6 +198,7 @@ def install_resize_hook(window, win32_facade=None) -> bool:
         _resize_hook_hwnd = hwnd
 
         import echo_desktop.win32_wndproc as wp
+
         wp._resize_orig_proc = _resize_orig_proc
 
         _resize_status_info = {"installed": True, "hwnd": hwnd, "msg": "已装上"}
@@ -165,11 +212,12 @@ def polish_window(window):
     """Win11 DWM cosmetic attributes (round corners, soft caption tint)."""
     if sys.platform != "win32":
         return
-    hwnd = _resolve_hwnd(window)
+    hwnd = resolve_hwnd(window)
     if not hwnd:
         return
     try:
         import ctypes
+
         dwm = ctypes.windll.dwmapi
 
         def _set(attr, val):
@@ -187,11 +235,12 @@ def polish_window(window):
 def install_drop_accept(window):
     if sys.platform != "win32":
         return
-    hwnd = _resolve_hwnd(window)
+    hwnd = resolve_hwnd(window)
     if not hwnd:
         return
     try:
         import ctypes
+
         ctypes.windll.shell32.DragAcceptFiles(hwnd, True)
     except Exception:
         pass
@@ -208,86 +257,4 @@ def resize_hook_status() -> Dict[str, Any]:
     return dict(_resize_status_info)
 
 
-def maximize_work_area(window):
-    if sys.platform != "win32":
-        return
-    hwnd = _resolve_hwnd(window)
-    if not hwnd:
-        return
-    try:
-        import ctypes
-        ensure_maximize_styles(hwnd)
-        ctypes.windll.user32.ShowWindow(hwnd, 3)  # SW_MAXIMIZE
-    except Exception:
-        pass
-
-
-def is_window_maximized(window) -> bool:
-    if sys.platform != "win32":
-        return False
-    try:
-        hwnd = _resolve_hwnd(window)
-        if hwnd:
-            import ctypes
-            return bool(ctypes.windll.user32.IsZoomed(hwnd))
-    except Exception:
-        pass
-    return False
-
-
-def toggle_maximize(window) -> bool:
-    if sys.platform != "win32":
-        if window:
-            window.maximize()
-        return True
-    try:
-        hwnd = _resolve_hwnd(window)
-        if not hwnd:
-            return False
-        import ctypes
-        if is_window_maximized(window):
-            ctypes.windll.user32.ShowWindow(hwnd, 9)  # SW_RESTORE
-            return False
-        else:
-            ensure_maximize_styles(hwnd)
-            ctypes.windll.user32.ShowWindow(hwnd, 3)  # SW_MAXIMIZE
-            return True
-    except Exception:
-        return False
-
-
-def minimize_window(window) -> bool:
-    if sys.platform == "win32":
-        try:
-            hwnd = _resolve_hwnd(window)
-            if hwnd:
-                import ctypes
-                ok = bool(ctypes.windll.user32.ShowWindow(hwnd, 6))  # SW_MINIMIZE
-                if ok:
-                    return True
-        except Exception:
-            pass
-    if window is not None:
-        try:
-            window.minimize()
-            return True
-        except Exception:
-            pass
-    return False
-
-
-def close_window(window):
-    try:
-        import threading
-        def _destroy():
-            try:
-                if window is not None:
-                    window.destroy()
-            except Exception:
-                pass
-        threading.Thread(target=_destroy, daemon=True).start()
-    except Exception:
-        pass
-    import os
-    os._exit(0)
-
+_resolve_hwnd = resolve_hwnd

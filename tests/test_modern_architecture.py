@@ -174,6 +174,53 @@ class TestLayer4Desktop(unittest.TestCase):
             self.assertIn("frac", polled)
             self.assertFalse(polled["busy"])
 
+    def test_wndproc_reinstall_protection(self):
+        from echo_desktop.win32_hook import (
+            callback_addr,
+            install_resize_hook,
+            resize_needs_reinstall,
+            resize_proc_is_ours,
+        )
+        from echo_desktop.win32_types import wh_rects_match
+
+        self.assertTrue(wh_rects_match((0, 0, 1920, 1080), (0, 0, 1920, 1080)))
+        self.assertTrue(wh_rects_match((0, 0, 1920, 1080), (1, 1, 1921, 1079), tol=2))
+        self.assertFalse(wh_rects_match((0, 0, 1920, 1080), (0, 0, 1920, 1000), tol=2))
+
+        class MockFacade:
+            def __init__(self):
+                self._proc = 10001
+                self.calls = 0
+
+            def make_callback(self, fn):
+                class DummyCb:
+                    address = 88888
+                return DummyCb()
+
+            def wrap_proc(self, addr):
+                return lambda *a: 0
+
+            def set_proc(self, hwnd, cb):
+                self.calls += 1
+                prev = self._proc
+                self._proc = cb.address
+                return prev
+
+            def get_proc(self, hwnd):
+                return self._proc
+
+        class MockWin:
+            native = type("Native", (), {"Handle": 77777})()
+
+        facade = MockFacade()
+        self.assertTrue(install_resize_hook(MockWin(), win32_facade=facade))
+        self.assertEqual(facade.calls, 1)
+
+        # Subsequent call must skip set_proc (no recursion)
+        self.assertTrue(install_resize_hook(MockWin(), win32_facade=facade))
+        self.assertEqual(facade.calls, 1)
+
+
 
 class TestFacadesBackwardCompatibility(unittest.TestCase):
     """Verify that root app.py and web_app.py expose all legacy functions."""

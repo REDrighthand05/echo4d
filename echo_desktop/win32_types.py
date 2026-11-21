@@ -152,3 +152,90 @@ def ensure_win32_argtypes(user32, wndproc_type, set_long, get_long=None):
         _resize_argtypes_set = True
     except Exception:
         pass
+
+
+def get_window_rect(hwnd: int) -> Optional[Tuple[int, int, int, int]]:
+    """Return window rect as (left, top, width, height) or None."""
+    if sys.platform != "win32" or not hwnd:
+        return None
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        rect = wintypes.RECT()
+        if not ctypes.windll.user32.GetWindowRect(hwnd, ctypes.byref(rect)):
+            return None
+        return (rect.left, rect.top, rect.right - rect.left, rect.bottom - rect.top)
+    except Exception:
+        return None
+
+
+def get_work_area_rect(hwnd: int) -> Optional[Tuple[int, int, int, int]]:
+    """Return work area rect of monitor containing hwnd as (left, top, width, height) or None."""
+    if sys.platform != "win32" or not hwnd:
+        return None
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        user32 = ctypes.windll.user32
+        hmon = user32.MonitorFromWindow(hwnd, 2)
+
+        class MONITORINFO(ctypes.Structure):
+            _fields_ = [
+                ("cbSize", wintypes.DWORD),
+                ("rcMonitor", wintypes.RECT),
+                ("rcWork", wintypes.RECT),
+                ("dwFlags", wintypes.DWORD),
+            ]
+
+        mi = MONITORINFO()
+        mi.cbSize = ctypes.sizeof(MONITORINFO)
+        if hmon and user32.GetMonitorInfoW(hmon, ctypes.byref(mi)):
+            w = mi.rcWork
+            return (w.left, w.top, w.right - w.left, w.bottom - w.top)
+        work = wintypes.RECT()
+        if user32.SystemParametersInfoW(0x0030, 0, ctypes.byref(work), 0):
+            return (work.left, work.top, work.right - work.left, work.bottom - work.top)
+        return None
+    except Exception:
+        return None
+
+
+def wh_rects_match(
+    a: Optional[Tuple[int, int, int, int]],
+    b: Optional[Tuple[int, int, int, int]],
+    tol: int = 2,
+) -> bool:
+    """True when two (left, top, width, height) rects agree within tol pixels."""
+    if a is None or b is None:
+        return False
+    return (
+        abs(a[0] - b[0]) <= tol
+        and abs(a[1] - b[1]) <= tol
+        and abs(a[2] - b[2]) <= tol
+        and abs(a[3] - b[3]) <= tol
+    )
+
+
+def resolve_hwnd(window) -> Optional[int]:
+    """Extract Win32 HWND from PyWebview window or fallback search."""
+    if sys.platform != "win32":
+        return None
+    hwnd = None
+    native = getattr(window, "native", None)
+    if native is not None:
+        try:
+            hwnd = int(native.Handle)
+        except Exception:
+            hwnd = None
+    if not hwnd:
+        try:
+            import ctypes
+
+            hwnd = ctypes.windll.user32.FindWindowW(None, "ECHO 回声") or None
+        except Exception:
+            hwnd = None
+    return hwnd
+
+
