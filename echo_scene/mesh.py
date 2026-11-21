@@ -201,6 +201,14 @@ def stage_mesh(job_dir) -> dict:
     else:
         try:
             info = _stage_mesh_impl(job_dir, o3d)
+            if info.get("ok"):
+                try:
+                    from .geometry import execute_structural_completion
+                    comp = execute_structural_completion(job_dir)
+                    if comp.get("ok"):
+                        info["structural_completion"] = comp.get("manifest")
+                except Exception:
+                    pass
         except Exception as exc:
             info = {"stage": "mesh", "ok": False, "reason": str(exc)}
     try:
