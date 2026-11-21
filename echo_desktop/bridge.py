@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from echo_app.settings import load_settings, save_settings
+from echo_app.update_source import get_source_manifest
 from echo_app.version import APP_VERSION
 from echo_desktop.bridge_helpers import (
     applog_write,
@@ -116,6 +117,7 @@ class Bridge:
             "frac": self.frac,
             "busy": self.busy,
             "resizeHook": resize_hook_status(),
+            "updateSource": get_source_manifest(),
             "log": list(self._all_log),
             "cliEvents": [],
         }
@@ -191,11 +193,11 @@ class Bridge:
 
     def start_scene(self):
         ok, err = self.job_manager.start_scene()
-        return {"ok": True} if ok else {"ok": False, "message": err}
+        return {"ok": ok, "message": err} if not ok else {"ok": True}
 
     def start_depth(self):
         ok, err = self.job_manager.start_depth()
-        return {"ok": True} if ok else {"ok": False, "message": err}
+        return {"ok": ok, "message": err} if not ok else {"ok": True}
 
     # --- Job Outputs & Explorer ---
     def _job_for(self, job_dir=None) -> Optional[Path]:
@@ -240,14 +242,9 @@ class Bridge:
         return dialog_export_batch(self._window, self.jobs_root, fmt=fmt)
 
     # --- Preview & Settings ---
-    def preview_drag(self, dx: float, dy: float):
-        return {"ok": True}
-
-    def preview_zoom(self, factor: float):
-        return {"ok": True}
-
-    def preview_reset(self):
-        return {"ok": True}
+    def preview_drag(self, dx: float, dy: float): return {"ok": True}
+    def preview_zoom(self, factor: float): return {"ok": True}
+    def preview_reset(self): return {"ok": True}
 
     def save_settings(self, data: Dict[str, Any]):
         try:
@@ -270,14 +267,24 @@ class Bridge:
             return str(self.jobs_root)
         return None
 
-    def check_update(self):
-        return {"ok": True}
+    def check_update(self): return {"ok": True}
+    def download_update(self): return {"ok": True}
 
     def manual_check_update(self):
-        return {"ok": True}
-
-    def download_update(self):
-        return {"ok": True}
+        def _check():
+            try:
+                from echo_app.updater import check_for_update_status
+                status, info = check_for_update_status(APP_VERSION)
+                if status == "update" and info:
+                    self._log(f"发现新版本：{info.version}")
+                elif status == "current":
+                    self._log(f"当前已是最新版本 v{APP_VERSION}。")
+                else:
+                    self._log("未检测到更新源响应或网络未连通。")
+            except Exception as e:
+                self._log(f"检查更新异常：{e}")
+        threading.Thread(target=_check, daemon=True).start()
+        return {"ok": True, "checking": True}
 
     # --- Window Controls ---
     def win_minimize(self):

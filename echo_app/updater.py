@@ -23,11 +23,18 @@ import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 
+from .update_source import (
+    get_latest_url,
+    get_relay_bases,
+    get_releases_url,
+    get_repo,
+    get_source_manifest,
+)
 from .version import is_newer, parse_version
 
-REPO = "REDrighthand05/echo4d"
-LATEST_URL = f"https://api.github.com/repos/{REPO}/releases/latest"
-RELEASES_URL = f"https://api.github.com/repos/{REPO}/releases?per_page=30"
+REPO = get_repo()
+LATEST_URL = get_latest_url()
+RELEASES_URL = get_releases_url()
 SETUP_ASSET = "EchoScene-Setup.exe"
 CHECK_TIMEOUT = 6.0          # seconds, per socket operation
 DOWNLOAD_TIMEOUT = 30.0      # seconds, per socket read
@@ -196,7 +203,7 @@ RELAY_BASE = "https://redrighthand05.github.io/echo4d-update"
 # CDN (its cache), so the desktop may see it a little late; the
 # 10-minute auto-check picks it up once it lands.
 JSDELIVR_BASE = "https://cdn.jsdelivr.net/gh/REDrighthand05/echo4d-update@main"
-RELAY_BASES = (JSDELIVR_BASE, RELAY_BASE)
+RELAY_BASES = get_relay_bases()
 _RELAY_BASE_USED = None
 
 
@@ -204,7 +211,8 @@ def relay_base():
     """The relay base that answered the last index fetch (so the
     check and the pack download walk the same working source), or
     the Pages base when nothing has answered yet."""
-    return _RELAY_BASE_USED or RELAY_BASE
+    bases = get_relay_bases()
+    return _RELAY_BASE_USED or (bases[0] if bases else RELAY_BASE)
 
 
 def fetch_relay_index():
@@ -217,7 +225,7 @@ def fetch_relay_index():
     source unreachable) is logged, by the caller."""
     global _RELAY_BASE_USED
     last_exc = None
-    for base in RELAY_BASES:
+    for base in get_relay_bases():
         req = urllib.request.Request(
             base + "/index.json",
             headers={"User-Agent": _USER_AGENT, "Accept": "application/json"})
@@ -334,7 +342,7 @@ def relay_chain(index, current_version, base=None):
                 latest, latest_key = str(entry["version"]), key
         if not is_newer("v" + latest, current_version):
             return (current_version, [])
-        setup_url = (f"https://github.com/{REPO}/releases/download/"
+        setup_url = (f"https://github.com/{get_repo()}/releases/download/"
                      f"v{latest}/{SETUP_ASSET}")
         hops = []
         current = current_version
@@ -349,10 +357,11 @@ def relay_chain(index, current_version, base=None):
         return None
 
 
-def _fetch_json(url=LATEST_URL, timeout=CHECK_TIMEOUT):
+def _fetch_json(url=None, timeout=CHECK_TIMEOUT):
+    fetch_url = url or get_latest_url()
     req = urllib.request.Request(
-        url, headers={"User-Agent": _USER_AGENT,
-                      "Accept": "application/vnd.github+json"})
+        fetch_url, headers={"User-Agent": _USER_AGENT,
+                            "Accept": "application/vnd.github+json"})
     with _open(req, timeout) as resp:
         return json.loads(resp.read().decode("utf-8"))
 
@@ -360,7 +369,7 @@ def _fetch_json(url=LATEST_URL, timeout=CHECK_TIMEOUT):
 def fetch_releases():
     """The recent-releases list (newest first). Raises on any
     failure -- callers decide what silence is worth."""
-    payload = _fetch_json(RELEASES_URL)
+    payload = _fetch_json(get_releases_url())
     if not isinstance(payload, list):
         raise ValueError("releases payload is not a list")
     return payload
