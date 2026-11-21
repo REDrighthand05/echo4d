@@ -9,6 +9,7 @@ from typing import Any, Dict, List, Optional
 from echo_app.settings import load_settings, save_settings
 from echo_app.version import APP_VERSION
 from echo_desktop.bridge_helpers import (
+    applog_write,
     appearance_from_js,
     appearance_to_js,
     dialog_export_batch,
@@ -71,6 +72,8 @@ class Bridge:
 
         self.update = None
         self._toolbox = None
+        self._log(f"启动：ECHO v{APP_VERSION}，进程 {os.getpid()}。")
+        self._log("ECHO 已就绪。")
 
     def _log(self, msg: str):
         with self._log_lock:
@@ -79,6 +82,7 @@ class Bridge:
             self._pending_log.append(line)
             if len(self._all_log) > 500:
                 self._all_log.pop(0)
+            applog_write(line)
 
     @property
     def busy(self) -> bool: return self.job_manager.busy
@@ -149,18 +153,11 @@ class Bridge:
 
     def _get_history(self) -> List[Dict[str, Any]]:
         def scan():
-            items = []
-            for j in list_previous_jobs(self.jobs_root):
-                items.append({
-                    "id": j.name,
-                    "name": job_display_name(j),
-                    "path": str(j),
-                    "mtime": job_mtime(j),
-                    "finished": job_finished(j),
-                    "scaleStatus": scale_status_line(j),
-                    "flags": job_file_flags(j),
-                })
-            return items
+            return [{
+                "id": j.name, "name": job_display_name(j), "path": str(j),
+                "mtime": job_mtime(j), "finished": job_finished(j),
+                "scaleStatus": scale_status_line(j), "flags": job_file_flags(j),
+            } for j in list_previous_jobs(self.jobs_root)]
         return self.history_cache.get_or_scan(scan)
 
     def _get_inbox(self) -> List[Dict[str, Any]]:

@@ -2,6 +2,7 @@
 
 import os
 import sys
+import threading
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional
 
@@ -129,4 +130,37 @@ def appearance_from_js(appearance, data: Dict[str, Any]):
     snake = {snake: data[camel] for camel, snake in _APPEARANCE_KEYS
              if isinstance(data, dict) and camel in data}
     return coerce_appearance(snake, base=appearance)
+
+
+_applog_lock = threading.Lock()
+
+
+def applog_write(line: str):
+    """Append one timestamped line to %APPDATA%/ECHO/app.log with 1MB rotation."""
+    try:
+        from echo_app.settings import settings_dir
+
+        path = settings_dir() / "app.log"
+        import time
+
+        stamp = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
+        text = f"{stamp} {line}\n"
+        with _applog_lock:
+            try:
+                path.parent.mkdir(parents=True, exist_ok=True)
+                if path.exists() and path.stat().st_size >= 1048576:
+                    for i in range(2, 0, -1):
+                        src = path if i == 1 else path.with_name(f"{path.name}.{i - 1}")
+                        dst = path.with_name(f"{path.name}.{i}")
+                        if src.exists():
+                            if dst.exists():
+                                dst.unlink()
+                            src.rename(dst)
+            except Exception:
+                pass
+            with open(path, "a", encoding="utf-8", errors="replace") as f:
+                f.write(text)
+    except Exception:
+        pass
+
 
