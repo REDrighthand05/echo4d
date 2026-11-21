@@ -1629,8 +1629,6 @@ function pumpCliToasts() {
 async function initBridge() {
   const snap = await bridge.get_snapshot();
   window.__echoVersion = snap.version;
-  const verBadge = $("app-ver");
-  if (verBadge) verBadge.textContent = `v${snap.version}`;
   $("settings-desc").textContent =
     `任务文件夹：${snap.jobsRoot} · 当前版本 v${snap.version}`;
   $("set-jobs").textContent = snap.jobsRoot;
@@ -1719,8 +1717,8 @@ setTimeout(applyCalmZones, 350);  // re-measure calm zones once text layout sett
 refresh();
 const DEFAULT_APP_VERSION = "0.6.71";
 window.__echoVersion = window.__echoVersion || DEFAULT_APP_VERSION;
-if ($("app-ver")) $("app-ver").textContent = `v${window.__echoVersion}`;
 if ($("set-version")) $("set-version").textContent = `当前版本 v${window.__echoVersion}`;
+if ($("settings-desc")) $("settings-desc").textContent = `任务文件夹：默认 · 当前版本 v${window.__echoVersion}`;
 
 log("ECHO 已就绪。");
 
